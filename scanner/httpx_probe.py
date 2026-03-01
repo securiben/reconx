@@ -10,7 +10,6 @@ Features:
   - CPE (Common Platform Enumeration)
   - Web probe (which protocol responded)
   - Extracted FQDNs from response body
-  - JARM TLS fingerprint
   - Server header
   - Content type, content length
   - Response time
@@ -56,7 +55,6 @@ class HttpxResult:
     cpe: Dict = field(default_factory=dict)
     webprobe: str = ""
     extracted_fqdns: List[str] = field(default_factory=list)
-    jarm: str = ""
     body_hash: str = ""
     response_time: str = ""
     method: str = "GET"
@@ -91,7 +89,6 @@ class HttpxResult:
             "cdn_name": self.cdn_name,
             "webprobe": self.webprobe,
             "extracted_fqdns": self.extracted_fqdns,
-            "jarm": self.jarm,
             "body_hash": self.body_hash,
             "response_time": self.response_time,
             "lines": self.lines,
@@ -151,9 +148,6 @@ class HttpxResult:
         fqdns = data.get("extracted_fqdn", data.get("extracted-fqdn", []))
         r.extracted_fqdns = fqdns if isinstance(fqdns, list) else []
 
-        # JARM
-        r.jarm = data.get("jarm", "")
-
         # Body hash
         bhash = data.get("body_sha256", data.get("hash", ""))
         if isinstance(bhash, dict):
@@ -194,7 +188,7 @@ class HttpxProbe:
 
     Runs httpx CLI against a list of subdomains and collects
     rich metadata including status codes, titles, technologies,
-    favicon hashes, CDN detection, JARM fingerprints, etc.
+    favicon hashes, CDN detection, etc.
     """
 
     HTTPX_FLAGS = [
@@ -210,7 +204,6 @@ class HttpxProbe:
         "-rt",          # response time
         "-lc",          # line count
         "-wc",          # word count
-        "-jarm",        # JARM TLS fingerprint
         "-efqdn",       # extract FQDNs from response
         "-json",        # JSON output (NDJSON)
         "-silent",      # quiet mode
@@ -300,7 +293,7 @@ class HttpxProbe:
                 errors="replace",
             )
             help_output = (help_proc.stdout + help_proc.stderr).lower()
-            if any(kw in help_output for kw in ["-silent", "-tech-detect", "-favicon", "-jarm"]):
+            if any(kw in help_output for kw in ["-silent", "-tech-detect", "-favicon"]):
                 return True
             return False
         except Exception:
@@ -455,7 +448,6 @@ class HttpxProbe:
                 sub.http_technologies = r.technologies
                 sub.http_cdn = r.cdn
                 sub.http_cdn_name = r.cdn_name
-                sub.http_jarm = r.jarm
                 sub.http_body_hash = r.body_hash
                 sub.http_response_time = r.response_time
                 sub.http_content_length = r.content_length
@@ -480,7 +472,6 @@ class HttpxProbe:
         status_dist = {}
         cdn_count = 0
         tech_count = 0
-        jarm_unique = set()
         server_dist = {}
         favicon_hashes = {}
 
@@ -498,10 +489,6 @@ class HttpxProbe:
             if r.technologies:
                 tech_count += 1
 
-            # JARM
-            if r.jarm and r.jarm != "00000000000000000000000000000000000000000000000000000000000000000":
-                jarm_unique.add(r.jarm)
-
             # Server header
             if r.server:
                 srv = r.server.split("/")[0].strip()
@@ -517,7 +504,6 @@ class HttpxProbe:
             "status_distribution": status_dist,
             "cdn_detected": cdn_count,
             "tech_detected": tech_count,
-            "unique_jarm_fingerprints": len(jarm_unique),
             "server_distribution": server_dist,
             "unique_favicon_hashes": len(favicon_hashes),
             "new_fqdns_discovered": len(self.new_fqdns),

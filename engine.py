@@ -206,7 +206,7 @@ class ReconEngine:
         if self.httpx_probe.available:
             print(
                 f"\033[36m[>]\033[0m httpx: probing with "
-                f"\033[96m-sc -title -td -favicon -cdn -jarm -server\033[0m ..."
+                f"\033[96m-sc -title -td -favicon -cdn -server\033[0m ..."
             )
             alive_hostnames = [s.hostname for s in subdomain_objects if s.is_alive]
             if not alive_hostnames:
@@ -243,13 +243,12 @@ class ReconEngine:
             )
             cdn_str = f"\033[95m{httpx_stats.get('cdn_detected', 0)} CDN\033[0m"
             tech_str = f"\033[96m{httpx_stats.get('tech_detected', 0)} tech\033[0m"
-            jarm_str = f"\033[94m{httpx_stats.get('unique_jarm_fingerprints', 0)} JARM\033[0m"
             favicon_str = f"\033[33m{httpx_stats.get('unique_favicon_hashes', 0)} favicons\033[0m"
 
             print(
                 f"\033[92m[+]\033[0m httpx: \033[92m{alive_count} alive\033[0m / "
                 f"{len(alive_hostnames)} probed | "
-                f"{status_str} | {cdn_str} | {tech_str} | {jarm_str} | {favicon_str} "
+                f"{status_str} | {cdn_str} | {tech_str} | {favicon_str} "
                 f"\033[90m({httpx_elapsed:.1f}s)\033[0m"
             )
             if new_from_httpx > 0:
@@ -343,7 +342,7 @@ class ReconEngine:
             # Build tags dynamically
             nuclei_tags = self.nuclei_scanner.build_tags(detected_techs)
             tag_extras = [t for t in nuclei_tags if t not in [
-                'vuln', 'cve', 'discovery', 'vkev', 'panel', 'xss', 'exposure', 'osint'
+                'vuln', 'cve', 'discovery', 'vkev', 'panel', 'xss', 'osint'
             ]]
             tags_display = ", ".join(nuclei_tags)
             print(f"\033[36m[>]\033[0m Nuclei: scanning {len(alive_subs)} alive hosts ...")

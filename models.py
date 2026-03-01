@@ -63,7 +63,6 @@ class Subdomain:
     http_technologies: List[str] = field(default_factory=list)
     http_cdn: bool = False
     http_cdn_name: str = ""
-    http_jarm: str = ""
     http_body_hash: str = ""
     http_response_time: str = ""
     http_content_length: int = 0
@@ -101,7 +100,6 @@ class Subdomain:
                 "http_technologies": self.http_technologies,
                 "http_cdn": self.http_cdn,
                 "http_cdn_name": self.http_cdn_name,
-                "http_jarm": self.http_jarm,
                 "http_body_hash": self.http_body_hash,
                 "http_response_time": self.http_response_time,
                 "http_content_length": self.http_content_length,

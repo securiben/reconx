@@ -40,7 +40,6 @@ class FileExporter:
         ├── httpx_technologies.txt   # Wappalyzer tech detection grouped
         ├── httpx_cdn.txt            # CDN-backed subdomains
         ├── httpx_favicon.txt        # Favicon hash → subdomain mapping
-        ├── httpx_jarm.txt           # JARM TLS fingerprints
         ├── httpx_servers.txt        # Server header distribution
         ├── httpx_titles.txt         # HTTP page titles
         ├── httpx_redirects.txt      # Redirecting subdomains + locations
@@ -463,7 +462,6 @@ class FileExporter:
           - httpx_technologies.txt  All detected technologies grouped
           - httpx_cdn.txt           CDN-backed subdomains
           - httpx_favicon.txt       Favicon hash → subdomain mapping
-          - httpx_jarm.txt          JARM TLS fingerprints
           - httpx_servers.txt       Server header summary
           - httpx_titles.txt        HTTP titles for all alive hosts
           - httpx_redirects.txt     Redirecting subdomains + locations
@@ -481,7 +479,7 @@ class FileExporter:
         filepath = os.path.join(outdir, "httpx_probe.txt")
         lines = [f"# ReconX - HTTPX Probe Results for {result.target_domain}"]
         lines.append(f"# {len(alive_subs)} alive hosts probed")
-        lines.append(f"# Probed with: httpx -sc -title -td -favicon -cdn -jarm -server -efqdn")
+        lines.append(f"# Probed with: httpx -sc -title -td -favicon -cdn -server -efqdn")
         lines.append("")
 
         for sub in sorted(alive_subs, key=lambda s: s.hostname):
@@ -492,7 +490,6 @@ class FileExporter:
             cdn_name = getattr(sub, 'http_cdn_name', '') or ''
             is_cdn = getattr(sub, 'http_cdn', False)
             techs = getattr(sub, 'http_technologies', []) or []
-            jarm = getattr(sub, 'http_jarm', '') or ''
             fav = getattr(sub, 'http_favicon_hash', '') or ''
             resp_time = getattr(sub, 'http_response_time', '') or ''
             location = getattr(sub, 'http_location', '') or ''
@@ -513,8 +510,6 @@ class FileExporter:
                 lines.append(f"  Tech:        {', '.join(techs)}")
             if fav and fav != '0':
                 lines.append(f"  Favicon:     {fav}")
-            if jarm and jarm != '0' * 62:
-                lines.append(f"  JARM:        {jarm}")
             if location:
                 lines.append(f"  Redirect:    {location}")
             if final_url and final_url != url:
@@ -599,31 +594,6 @@ class FileExporter:
                 except Exception:
                     pass
                 lines.append(f"[Favicon: {fhash}{known}] ({len(hosts)} hosts)")
-                for h in hosts:
-                    lines.append(f"  {h}")
-                lines.append("")
-            self._write(filepath, "\n".join(lines) + "\n")
-
-        # ── httpx_jarm.txt ── JARM TLS fingerprints ──────────────────────
-        jarm_map: Dict[str, List[str]] = {}
-        null_jarm = '0' * 62
-        for sub in alive_subs:
-            jarm = getattr(sub, 'http_jarm', '') or ''
-            if jarm and jarm != null_jarm and jarm != '':
-                if jarm not in jarm_map:
-                    jarm_map[jarm] = []
-                jarm_map[jarm].append(sub.hostname)
-
-        if jarm_map:
-            filepath = os.path.join(outdir, "httpx_jarm.txt")
-            lines = [f"# ReconX - JARM TLS Fingerprints for {result.target_domain}"]
-            lines.append(f"# {len(jarm_map)} unique JARM fingerprints")
-            lines.append(f"# JARM identifies TLS server implementations")
-            lines.append(f"# Matching fingerprints = same/similar TLS stack")
-            lines.append("")
-            for jarm in sorted(jarm_map.keys(), key=lambda x: -len(jarm_map[x])):
-                hosts = sorted(jarm_map[jarm])
-                lines.append(f"[JARM: {jarm}] ({len(hosts)} hosts)")
                 for h in hosts:
                     lines.append(f"  {h}")
                 lines.append("")

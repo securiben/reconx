@@ -295,7 +295,6 @@ class TerminalRenderer:
         total = stats.get("total_probed", 0)
         cdn_count = stats.get("cdn_detected", 0)
         tech_count = stats.get("tech_detected", 0)
-        jarm_count = stats.get("unique_jarm_fingerprints", 0)
         favicon_count = stats.get("unique_favicon_hashes", 0)
         new_fqdns = stats.get("new_fqdns_discovered", 0)
         status_dist = stats.get("status_distribution", {})
@@ -324,8 +323,6 @@ class TerminalRenderer:
             parts.append(f"{C.BRIGHT_MAGENTA}{cdn_count} CDN{C.RESET}")
         if tech_count > 0:
             parts.append(f"{C.BRIGHT_CYAN}{tech_count} tech{C.RESET}")
-        if jarm_count > 0:
-            parts.append(f"{C.BRIGHT_BLUE}{jarm_count} JARM{C.RESET}")
         if favicon_count > 0:
             parts.append(f"{C.YELLOW}{favicon_count} favicons{C.RESET}")
 
@@ -487,7 +484,7 @@ class TerminalRenderer:
 
         # Tags used (show tech-detected extras only)
         if tags_used:
-            base_tags = {"vuln", "cve", "discovery", "vkev", "panel", "xss", "exposure", "osint"}
+            base_tags = {"vuln", "cve", "discovery", "vkev", "panel", "xss", "osint"}
             extras = [t for t in tags_used if t not in base_tags]
             if extras:
                 self._box_line(

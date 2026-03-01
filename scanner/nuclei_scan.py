@@ -4,7 +4,7 @@ Uses ProjectDiscovery's nuclei CLI for automated vulnerability scanning
 on discovered alive subdomains.
 
 Dynamic tag selection based on detected technologies:
-  - Base tags always: vuln, cve, discovery, vkev, panel, xss, exposure, osint
+  - Base tags always: vuln, cve, discovery, vkev, panel, xss, osint
   - WordPress detected → adds: wordpress, wp-plugin
   - Laravel detected  → adds: laravel
   - Spring Boot       → adds: spring
@@ -48,7 +48,7 @@ NUCLEI_SEVERITY_COLORS = {
 
 BASE_TAGS = [
     "vuln", "cve", "vkev", "panel",
-    "xss", "exposure", "osint",
+    "xss", "osint",
 ]
 
 # Detected tech name (lowercase substring) → extra nuclei tags to add
@@ -344,13 +344,12 @@ class NucleiScanner:
                 "-l", input_file,
                 "-tags", tags_str,
                 "-je", output_file,       # JSON export to file (separate from stdout)
-                "-rl", "15",              # Rate limit: 15 req/s
-                "-c", "8",                # Concurrency: 8 templates
+                "-rl", "30",              # Rate limit: 30 req/s
+                "-c", "10",                # Concurrency: 10 templates
                 "-bs", "15",              # Bulk size: 15 hosts
                 "-timeout", "10",         # 10s timeout per request
                 "-retries", "2",          # Retry failed requests twice
                 "-silent",                # Suppress banner/verbose output
-                "-stats",                 # Show scan statistics on stderr
                 "-no-color",              # Clean output
             ]
 

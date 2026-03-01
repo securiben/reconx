@@ -20,7 +20,7 @@ A high-performance CLI reconnaissance tool that aggregates subdomain data from *
 | Category | Details |
 |----------|---------|
 | **Multi-Source Enumeration** | 11 data sources — Atlas (crt.sh), Sphinx (Certspotter), Oracle (AlienVault OTX), Radar (HackerTarget), Torrent (Wayback Machine), Venom (VT + ThreatMiner + Anubis + RapidDNS), Sonar (DNS brute-force), Shodan, Censys, SecurityTrails, URLScan.io |
-| **HTTPX HTTP Probing** | ProjectDiscovery httpx integration — status codes, titles, technologies (Wappalyzer), favicon hashes, CDN detection, JARM TLS fingerprints, server headers, FQDNs from response bodies |
+| **HTTPX HTTP Probing** | ProjectDiscovery httpx integration — status codes, titles, technologies (Wappalyzer), favicon hashes, CDN detection, server headers, FQDNs from response bodies |
 | **Nuclei Vulnerability Scanning** | ProjectDiscovery nuclei integration — automated vuln scanning with dynamic tag selection based on detected tech stack (WordPress → `wordpress,wp-plugin`, Laravel → `laravel`, Spring → `spring,springboot`, etc.) |
 | **Infrastructure Classification** | Cloudflare, AWS, Azure, Akamai detection via CNAME patterns, IP ranges, and httpx CDN/server data |
 | **Certificate Transparency** | CT log triage with age classification — stale (1–2yr), aged (2yr+), no date |
@@ -136,7 +136,6 @@ Each scan creates a domain-specific folder with categorized output files:
 ├── httpx_technologies.txt     # Wappalyzer tech detection
 ├── httpx_cdn.txt              # CDN-backed subdomains
 ├── httpx_favicon.txt          # Favicon hash mapping
-├── httpx_jarm.txt             # JARM TLS fingerprints
 ├── httpx_servers.txt          # Server header distribution
 ├── httpx_titles.txt           # HTTP page titles
 ├── httpx_redirects.txt        # Redirect chains
@@ -195,7 +194,7 @@ The engine executes an 11-phase pipeline:
 | 2 | **Dedup** | Normalize, deduplicate, and aggregate all discovered subdomains |
 | 3 | **CT Logs** | Query crt.sh for certificate transparency entries + age triage |
 | 4 | **Infrastructure** | DNS CNAME/A resolution → cloud provider classification |
-| 5 | **HTTPX Probe** | HTTP probing via ProjectDiscovery httpx (status, title, tech, CDN, JARM, favicon) |
+| 5 | **HTTPX Probe** | HTTP probing via ProjectDiscovery httpx (status, title, tech, CDN, favicon) |
 | 5b | **Infra Reconcile** | Update infrastructure stats from httpx CDN/server data |
 | 6 | **Collapse** | Group repetitive subdomains into wildcard patterns |
 | 7 | **Takeover** | Check for subdomain takeover vulnerabilities (11+ providers) |
@@ -250,7 +249,7 @@ Nuclei tags are **dynamically selected** based on technologies detected by httpx
 
 **Base tags** (always included):
 ```
-vuln, cve, discovery, vkev, panel, xss, exposure, osint
+vuln, cve, discovery, vkev, panel, xss, osint
 ```
 
 **Conditional tags** (added when tech is detected):
@@ -279,7 +278,7 @@ vuln, cve, discovery, vkev, panel, xss, exposure, osint
 
 If httpx detects WordPress and Nginx technologies on alive subdomains:
 ```
-Tags: vuln, cve, discovery, vkev, panel, xss, exposure, osint, wordpress, wp-plugin, nginx
+Tags: vuln, cve, discovery, vkev, panel, xss, osint, wordpress, wp-plugin, nginx
 ```
 
 If no specific tech is detected, only base tags are used — keeping scan time efficient.
