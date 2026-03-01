@@ -42,7 +42,7 @@ A high-performance CLI reconnaissance tool that aggregates subdomain data from *
 ### Install
 
 ```bash
-git clone https://github.com/your-username/reconx.git
+git clone https://github.com/securiben/reconx.git
 cd reconx
 
 # Install Python dependencies
