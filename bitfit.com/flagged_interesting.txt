@@ -1,0 +1,58 @@
+# ReconX - Flagged Interesting Subdomains for bitfit.com
+# 18 interesting subdomain(s)
+# These match patterns: admin, api, dev, staging, vpn, etc.
+
+api-assets.bitfit.com  [ALIVE]  52.13.48.219  [Other]
+  Reason: Matches pattern: api
+
+api-stage.bitfit.com  [ALIVE]  50.112.117.150  [Other]
+  Reason: Matches pattern: api
+
+api-turbo.bitfit.com  [ALIVE]  50.112.244.79  [Other]
+  Reason: Matches pattern: api
+
+api.bitfit.com  [ALIVE]  34.216.164.6  [Other]
+  Reason: Matches pattern: api
+
+assets.bitfit.com  [ALIVE]  52.13.48.219  [Other]
+  Reason: Matches pattern: assets
+
+cpanel.bitfit.com  [ALIVE]  173.254.29.42  [Other]
+  Reason: Matches pattern: panel
+
+dev.bitfit.com  [dead]  no IP  [CT-only]
+  Reason: Matches pattern: dev
+
+ftp.bitfit.com  [ALIVE]  173.254.29.42  [Other]  CNAME: bitfit.com
+  Reason: Matches pattern: ftp
+
+jenkins.bitfit.com  [ALIVE]  50.112.244.79  [Other]
+  Reason: Matches pattern: jenkins
+
+login.bitfit.com  [dead]  no IP  [CT-only]
+  Reason: Matches pattern: login
+
+mail.bitfit.com  [ALIVE]  142.250.4.121  [Other]  CNAME: ghs.googlehosted.com
+  Reason: Matches pattern: mail
+
+mobile-assets.bitfit.com  [ALIVE]  52.13.48.219  [Other]
+  Reason: Matches pattern: assets
+
+mobile-stage.bitfit.com  [ALIVE]  50.112.117.150  [Other]
+  Reason: Matches pattern: stage
+
+scool-api-dev.bitfit.com  [ALIVE]  50.112.244.79  [Other]
+  Reason: Matches pattern: api
+
+sftp.bitfit.com  [ALIVE]  45.55.65.105  [Other]
+  Reason: Matches pattern: sftp
+
+stage.bitfit.com  [ALIVE]  50.112.117.150  [Other]
+  Reason: Matches pattern: stage
+
+staging.bitfit.com  [dead]  no IP  [CT-only]
+  Reason: Matches pattern: staging
+
+webmail.bitfit.com  [ALIVE]  173.254.29.42  [Other]
+  Reason: Matches pattern: webmail
+

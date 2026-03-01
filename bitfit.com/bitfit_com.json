@@ -1,0 +1,836 @@
+{
+  "meta": {
+    "tool": "ReconX",
+    "version": "1.0.0",
+    "scan_date": "2026-03-01T08:02:21.900841Z",
+    "target": "bitfit.com",
+    "scan_time_seconds": 2202.45
+  },
+  "summary": {
+    "total_unique_subdomains": 45,
+    "infrastructure": {
+      "aws": 0,
+      "azure": 0,
+      "cloudflare": 0,
+      "akamai": 0,
+      "other": 36,
+      "ct_only": 9
+    },
+    "ct_triage": {
+      "stale_1_2yr": 136,
+      "aged_2yr_plus": 691,
+      "no_date": 0
+    },
+    "collapsed": {
+      "total_entries": 42,
+      "pattern_groups": 1,
+      "threshold": 5
+    },
+    "takeover": {
+      "vulnerable": 0,
+      "dangling_cnames": 1,
+      "not_vulnerable": 0,
+      "primary_provider": "Microsoft Azure"
+    },
+    "flagged_interesting": 18,
+    "databases": {
+      "takeover_services": 34,
+      "tech_signatures": 15
+    }
+  },
+  "takeover_results": [
+    {
+      "subdomain": "blog.bitfit.com",
+      "status": "dangling",
+      "provider": "Tumblr",
+      "cname": "domains.tumblr.com",
+      "evidence": "CNAME points to domains.tumblr.com",
+      "match_type": "CNAME-Match"
+    }
+  ],
+  "tech_matches": [
+    {
+      "subdomain": "jenkins.bitfit.com",
+      "tech_name": "Nginx",
+      "severity": "low",
+      "evidence": "Matched 'nginx' in response body",
+      "match_location": "Header",
+      "description": "Web server – check version disclosure, misconfigurations"
+    }
+  ],
+  "sources": {
+    "radar": {
+      "name": "Radar",
+      "count": 14
+    },
+    "shodan": {
+      "name": "Shodan",
+      "count": 20
+    },
+    "vt_siblings": {
+      "name": "VirusTotal",
+      "count": 25
+    },
+    "urlscan": {
+      "name": "URLScan",
+      "count": 3
+    },
+    "torrent": {
+      "name": "Torrent",
+      "count": 15
+    },
+    "oracle": {
+      "name": "Oracle",
+      "count": 5
+    },
+    "censys": {
+      "name": "Censys",
+      "count": 18
+    },
+    "sphinx": {
+      "name": "Sphinx",
+      "count": 10
+    },
+    "sectrails": {
+      "name": "SecTrails",
+      "count": 40
+    },
+    "atlas": {
+      "name": "Atlas",
+      "count": 18
+    },
+    "venom": {
+      "name": "Venom",
+      "count": 25
+    },
+    "sonar": {
+      "name": "Sonar",
+      "count": 32
+    },
+    "crt.sh": {
+      "name": "crt.sh",
+      "count": 18
+    }
+  },
+  "subdomains": [
+    {
+      "hostname": "_dmarc.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "api-assets.bitfit.com",
+      "ip_addresses": [
+        "52.13.48.219"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: api"
+    },
+    {
+      "hostname": "api-stage.bitfit.com",
+      "ip_addresses": [
+        "50.112.117.150"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: api"
+    },
+    {
+      "hostname": "api-turbo.bitfit.com",
+      "ip_addresses": [
+        "50.112.244.79"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: api"
+    },
+    {
+      "hostname": "api.bitfit.com",
+      "ip_addresses": [
+        "34.216.164.6"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: api"
+    },
+    {
+      "hostname": "app.bitfit.com",
+      "ip_addresses": [
+        "34.216.164.6"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "apps.bitfit.com",
+      "ip_addresses": [
+        "34.216.164.6"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "apps1.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "assets.bitfit.com",
+      "ip_addresses": [
+        "52.13.48.219"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: assets"
+    },
+    {
+      "hostname": "autoconfig.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "autodiscover.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "blog.bitfit.com",
+      "ip_addresses": [
+        "74.114.154.18",
+        "74.114.154.22"
+      ],
+      "cnames": [
+        "domains.tumblr.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "calendar.bitfit.com",
+      "ip_addresses": [
+        "142.250.4.121"
+      ],
+      "cnames": [
+        "ghs.googlehosted.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "cpanel.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: panel"
+    },
+    {
+      "hostname": "cpcalendars.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "cpcontacts.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "cts.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "dev.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: dev"
+    },
+    {
+      "hostname": "docs.bitfit.com",
+      "ip_addresses": [
+        "142.250.4.121"
+      ],
+      "cnames": [
+        "ghs.googlehosted.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "ftp.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [
+        "bitfit.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: ftp"
+    },
+    {
+      "hostname": "jenkins.bitfit.com",
+      "ip_addresses": [
+        "50.112.244.79"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: jenkins"
+    },
+    {
+      "hostname": "login.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: login"
+    },
+    {
+      "hostname": "m.bitfit.com",
+      "ip_addresses": [
+        "34.216.164.6"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "mail.bitfit.com",
+      "ip_addresses": [
+        "142.250.4.121"
+      ],
+      "cnames": [
+        "ghs.googlehosted.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: mail"
+    },
+    {
+      "hostname": "mobile-assets.bitfit.com",
+      "ip_addresses": [
+        "52.13.48.219"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: assets"
+    },
+    {
+      "hostname": "mobile-stage.bitfit.com",
+      "ip_addresses": [
+        "50.112.117.150"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: stage"
+    },
+    {
+      "hostname": "mobile.bitfit.com",
+      "ip_addresses": [
+        "34.216.164.6"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "mon.bitfit.com",
+      "ip_addresses": [
+        "54.203.127.119"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "scool-api-dev.bitfit.com",
+      "ip_addresses": [
+        "50.112.244.79"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: api"
+    },
+    {
+      "hostname": "sentry.bitfit.com",
+      "ip_addresses": [
+        "54.203.127.119"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "sftp.bitfit.com",
+      "ip_addresses": [
+        "45.55.65.105"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: sftp"
+    },
+    {
+      "hostname": "sites.bitfit.com",
+      "ip_addresses": [
+        "74.125.24.121"
+      ],
+      "cnames": [
+        "ghs.googlehosted.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "stage.bitfit.com",
+      "ip_addresses": [
+        "50.112.117.150"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: stage"
+    },
+    {
+      "hostname": "staging.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: staging"
+    },
+    {
+      "hostname": "support.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "turbo.bitfit.com",
+      "ip_addresses": [
+        "50.112.244.79"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "video.bitfit.com",
+      "ip_addresses": [
+        "142.250.4.121"
+      ],
+      "cnames": [
+        "ghs.googlehosted.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "web.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "webdisk.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "webmail.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": true,
+      "interesting_reason": "Matches pattern: webmail"
+    },
+    {
+      "hostname": "whm.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "www.apps.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "www.bitfit.com",
+      "ip_addresses": [
+        "173.254.29.42"
+      ],
+      "cnames": [
+        "bitfit.com"
+      ],
+      "provider": "Other",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": true,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    },
+    {
+      "hostname": "www.web.bitfit.com",
+      "ip_addresses": [],
+      "cnames": [],
+      "provider": "CT-only",
+      "source": "",
+      "first_seen": null,
+      "last_seen": null,
+      "is_alive": false,
+      "http_status": null,
+      "technologies": [],
+      "interesting": false,
+      "interesting_reason": ""
+    }
+  ]
+}

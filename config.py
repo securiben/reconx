@@ -91,6 +91,13 @@ class ReconConfig:
     verbose: bool = False
     demo_mode: bool = False  # Use simulated data for demo
 
+    # ── Direct target mode (IP / CIDR / file-of-IPs) ──────────────────────
+    # When input_mode is "direct", subdomain enum is skipped entirely;
+    # the engine jumps straight to nuclei + nmap on direct_targets.
+    input_mode: str = "domain"            # "domain" | "direct"
+    direct_targets: List[str] = field(default_factory=list)  # IPs / CIDRs
+    input_label: str = ""                 # Display label (e.g. "10.10.0.0/24")
+
     # Source configs - Real free APIs, no keys required (except optional VirusTotal)
     sources: Dict[str, SourceConfig] = field(default_factory=lambda: {
         "atlas": SourceConfig(

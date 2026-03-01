@@ -102,6 +102,10 @@ class ReconEngine:
         if self.config.demo_mode:
             return self._run_demo()
 
+        # ── Direct mode: IP / CIDR / file-of-IPs → skip enum ──────────────
+        if self.config.input_mode == "direct":
+            return self._run_direct(start_time)
+
         # ── Phase 1: Fetch subdomains from all sources concurrently ────────
         all_subdomains_by_source: Dict[str, List[str]] = {}
 
@@ -516,6 +520,134 @@ class ReconEngine:
         self.result.scan_time = time.time() - start_time
 
         # ── Phase 11: Render & Export ──────────────────────────────────────
+        self._output()
+
+        return self.result
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Direct-target mode — IP / CIDR / file of IPs
+    # Skips all subdomain enumeration and goes straight to nuclei + nmap.
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _run_direct(self, start_time: float) -> ScanResult:
+        """
+        Execute a direct scan on IP addresses / CIDR ranges.
+        Skips subdomain enum, CT logs, takeover, tech profiler, httpx, etc.
+        Only runs nuclei + nmap against the provided targets.
+        """
+        targets = list(set(self.config.direct_targets))  # deduplicate
+        label = self.config.input_label or self.config.target_domain
+
+        self.result.target_domain = label
+        self.result.total_unique = len(targets)
+
+        print(
+            f"\033[1;97m[»]\033[0m Direct mode: \033[1;96m{len(targets)}\033[0m "
+            f"target(s) from \033[96m{label}\033[0m"
+        )
+        print(
+            f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
+            f"jumping to nuclei & nmap\n"
+        )
+
+        # ── Nuclei vulnerability scanning ──────────────────────────────────
+        if self.nuclei_scanner.available:
+            nuclei_tags = self.nuclei_scanner.build_tags(set())  # base tags only
+            tags_display = ", ".join(nuclei_tags)
+            print(f"\033[36m[>]\033[0m Nuclei: scanning {len(targets)} target(s) ...")
+            print(f"\033[36m[>]\033[0m Nuclei: tags = \033[96m{tags_display}\033[0m")
+
+            nuclei_results = self.nuclei_scanner.scan(targets, set())
+            nuclei_stats = self.nuclei_scanner.stats
+
+            self.result.nuclei_results = nuclei_results
+            self.result.nuclei_stats = nuclei_stats.to_dict()
+            self.result.nuclei_available = True
+
+            # Print nuclei summary
+            sev_parts = []
+            if nuclei_stats.critical > 0:
+                sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
+            if nuclei_stats.high > 0:
+                sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
+            if nuclei_stats.medium > 0:
+                sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
+            if nuclei_stats.low > 0:
+                sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
+            if nuclei_stats.info > 0:
+                sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
+
+            if nuclei_results:
+                sev_str = " | ".join(sev_parts)
+                print(
+                    f"\033[92m[+]\033[0m Nuclei: \033[92m{nuclei_stats.total_findings} findings\033[0m "
+                    f"({sev_str}) "
+                    f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m\n"
+                )
+            else:
+                print(
+                    f"\033[92m[+]\033[0m Nuclei: \033[92m0 findings\033[0m "
+                    f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m\n"
+                )
+        else:
+            print(
+                f"\033[93m[!]\033[0m ProjectDiscovery nuclei not found – skipping vulnerability scan"
+            )
+            print(
+                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
+            )
+
+        # ── Nmap port & service scanning ───────────────────────────────────
+        if self.nmap_scanner.available:
+            all_ips = set(targets)
+
+            if all_ips:
+                nmap_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(nmap_output_dir, exist_ok=True)
+                nmap_results = self.nmap_scanner.scan(all_ips, output_dir=nmap_output_dir)
+                nmap_stats = self.nmap_scanner.stats
+
+                self.result.nmap_results = nmap_results
+                self.result.nmap_stats = nmap_stats.to_dict()
+                self.result.nmap_available = True
+
+                if nmap_stats.hosts_up > 0:
+                    svc_str = ", ".join(
+                        f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
+                        for s in nmap_stats.top_services[:5]
+                    )
+                    port_str = ", ".join(
+                        f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                        for p in nmap_stats.top_ports[:5]
+                    )
+                    print(
+                        f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
+                        f"{nmap_stats.total_ips_scanned} scanned | "
+                        f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
+                        f"{nmap_stats.unique_services} services "
+                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    if svc_str:
+                        print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
+                    if port_str:
+                        print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
+                    print()
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
+                        f"{nmap_stats.total_ips_scanned} scanned "
+                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+        else:
+            print(
+                f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
+            )
+            print(
+                f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
+            )
+
+        # ── Statistics & Output ────────────────────────────────────────────
+        self.result.scan_time = time.time() - start_time
         self._output()
 
         return self.result

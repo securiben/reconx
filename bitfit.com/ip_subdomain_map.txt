@@ -1,0 +1,62 @@
+# ReconX - IP to Subdomain Mapping for bitfit.com
+# Total: 11 unique IPs
+
+142.250.4.121
+  └─ calendar.bitfit.com
+  └─ docs.bitfit.com
+  └─ mail.bitfit.com
+  └─ video.bitfit.com
+
+173.254.29.42
+  └─ autoconfig.bitfit.com
+  └─ autodiscover.bitfit.com
+  └─ bitfit.com
+  └─ cpanel.bitfit.com
+  └─ cpcalendars.bitfit.com
+  └─ cpcontacts.bitfit.com
+  └─ ftp.bitfit.com
+  └─ web.bitfit.com
+  └─ webdisk.bitfit.com
+  └─ webmail.bitfit.com
+  └─ whm.bitfit.com
+  └─ www.bitfit.com
+
+34.216.164.6
+  └─ api.bitfit.com
+  └─ app.bitfit.com
+  └─ apps.bitfit.com
+  └─ m.bitfit.com
+  └─ mobile.bitfit.com
+
+45.55.65.105
+  └─ sftp.bitfit.com
+
+50.112.117.150
+  └─ api-stage.bitfit.com
+  └─ mobile-stage.bitfit.com
+  └─ stage.bitfit.com
+
+50.112.244.79
+  └─ api-turbo.bitfit.com
+  └─ jenkins.bitfit.com
+  └─ scool-api-dev.bitfit.com
+  └─ turbo.bitfit.com
+
+52.13.48.219
+  └─ api-assets.bitfit.com
+  └─ assets.bitfit.com
+  └─ mobile-assets.bitfit.com
+
+54.203.127.119
+  └─ mon.bitfit.com
+  └─ sentry.bitfit.com
+
+74.114.154.18
+  └─ blog.bitfit.com
+
+74.114.154.22
+  └─ blog.bitfit.com
+
+74.125.24.121
+  └─ sites.bitfit.com
+

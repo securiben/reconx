@@ -3,13 +3,15 @@
 ReconX - Automated Reconnaissance & Intelligence Gathering Tool
 
 Usage:
-    python main.py <domain> [options]
+    python main.py <target> [options]
 
 Examples:
-    python main.py example.com
+    python main.py example.com              # Domain → full recon pipeline
+    python main.py targets.txt              # File of targets (IPs/domains)
+    python main.py 10.10.0.5                # Single IP → nuclei + nmap
+    python main.py 10.10.0.0/24             # CIDR range → nuclei + nmap
     python main.py example.com --demo
     python main.py example.com -o results.json
-    python main.py example.com --no-redact --verbose
 """
 
 import sys
@@ -22,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from reconx.config import ReconConfig
 from reconx.engine import ReconEngine
+from reconx.utils import resolve_targets
 
 
 # ─── Banner ───────────────────────────────────────────────────────────────────
@@ -53,12 +56,16 @@ def print_banner():
     ))
 
 
-def print_scan_start(domain: str, demo: bool):
+def print_scan_start(label: str, demo: bool, direct: bool = False):
     """Print scan initialization info."""
     mode = "\033[93m[DEMO MODE]\033[0m " if demo else ""
-    print(f"\033[1;97m[»]\033[0m {mode}Target: \033[1;96m{domain}\033[0m")
-    print(f"\033[1;97m[»]\033[0m Initializing sources & scanners...")
-    print(f"\033[1;97m[»]\033[0m Launching concurrent enumeration...\n")
+    print(f"\033[1;97m[»]\033[0m {mode}Target: \033[1;96m{label}\033[0m")
+    if direct:
+        print(f"\033[1;97m[»]\033[0m Mode: \033[93mDirect scan\033[0m (IP/CIDR — skipping subdomain enumeration)")
+        print(f"\033[1;97m[»]\033[0m Initializing nuclei & nmap ...\n")
+    else:
+        print(f"\033[1;97m[»]\033[0m Initializing sources & scanners...")
+        print(f"\033[1;97m[»]\033[0m Launching concurrent enumeration...\n")
 
 
 # ─── CLI Argument Parser ─────────────────────────────────────────────────────
@@ -73,8 +80,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "domain",
-        help="Target domain to scan (e.g., example.com)",
+        "target",
+        help="Target: domain, IP address, CIDR range, or file of targets",
     )
 
     parser.add_argument(
@@ -153,19 +160,27 @@ def main():
     if not args.no_banner:
         print_banner()
 
+    # ── Detect input type ──────────────────────────────────────────────
+    label, targets, is_direct = resolve_targets(args.target)
+
     # Build configuration
     config = ReconConfig(
-        target_domain=args.domain,
+        target_domain=args.target if not is_direct else label,
         output_file=args.output,
         demo_mode=args.demo,
         verbose=args.verbose,
     )
+    if is_direct:
+        config.input_mode = "direct"
+        config.direct_targets = targets
+        config.input_label = label
+
     config.scanner.concurrency = args.concurrency
     config.scanner.timeout = args.timeout
     config.scanner.collapse_threshold = args.collapse_threshold
 
     # Print scan start info
-    print_scan_start(args.domain, args.demo)
+    print_scan_start(label, args.demo, direct=is_direct)
 
     # Create and run engine
     engine = ReconEngine(config)

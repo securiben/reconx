@@ -4,11 +4,13 @@ DNS resolution, HTTP probing, pattern matching, etc.
 """
 
 import re
+import os
+import ipaddress
 import socket
 import hashlib
 import random
 import string
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -308,3 +310,113 @@ def generate_demo_hash() -> str:
     return hashlib.md5(
         "".join(random.choices(string.ascii_lowercase, k=16)).encode()
     ).hexdigest()[:12]
+
+
+# ─── Input Type Detection ─────────────────────────────────────────────────────
+
+def is_ip_address(value: str) -> bool:
+    """Check if value is a single IPv4 or IPv6 address."""
+    try:
+        ipaddress.ip_address(value.strip())
+        return True
+    except ValueError:
+        return False
+
+
+def is_cidr(value: str) -> bool:
+    """Check if value is a CIDR notation (e.g., 10.10.0.0/24)."""
+    try:
+        net = ipaddress.ip_network(value.strip(), strict=False)
+        return "/" in value and net.num_addresses > 1
+    except ValueError:
+        return False
+
+
+def expand_cidr(cidr: str) -> List[str]:
+    """Expand a CIDR notation into individual host IP strings."""
+    try:
+        net = ipaddress.ip_network(cidr.strip(), strict=False)
+        return [str(ip) for ip in net.hosts()]
+    except ValueError:
+        return []
+
+
+def is_target_file(value: str) -> bool:
+    """Check if value is a path to an existing file."""
+    return os.path.isfile(value)
+
+
+def parse_target_file(filepath: str) -> List[str]:
+    """
+    Read a targets file. Each line is a target (IP, CIDR, or domain).
+    Blank lines and lines starting with # are ignored.
+    """
+    targets = []
+    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            targets.append(line)
+    return targets
+
+
+def detect_input_type(value: str) -> str:
+    """
+    Detect the type of CLI input.
+
+    Returns one of:
+        'ip'     – single IP address
+        'cidr'   – CIDR range
+        'file'   – path to a targets file
+        'domain' – domain name (default)
+    """
+    if is_cidr(value):
+        return "cidr"
+    if is_ip_address(value):
+        return "ip"
+    if is_target_file(value):
+        return "file"
+    return "domain"
+
+
+def resolve_targets(value: str) -> Tuple[str, List[str], bool]:
+    """
+    Resolve a CLI argument into a list of targets and a mode flag.
+
+    Returns:
+        (label, targets_list, is_direct_mode)
+        - label: display label for terminal output
+        - targets_list: list of IP addresses / hostnames
+        - is_direct_mode: True when subdomain enum should be skipped
+    """
+    input_type = detect_input_type(value)
+
+    if input_type == "ip":
+        return value, [value.strip()], True
+
+    if input_type == "cidr":
+        ips = expand_cidr(value)
+        return value, ips, True
+
+    if input_type == "file":
+        raw_targets = parse_target_file(value)
+        # Separate into IPs/CIDRs and domains
+        all_targets: List[str] = []
+        has_domain = False
+        for t in raw_targets:
+            if is_cidr(t):
+                all_targets.extend(expand_cidr(t))
+            elif is_ip_address(t):
+                all_targets.append(t.strip())
+            else:
+                # It's a domain or hostname
+                all_targets.append(t.strip())
+                has_domain = True
+        label = os.path.basename(value)
+        # If file contains ANY domain names, run full pipeline
+        # If file is all IPs/CIDRs, direct mode
+        return label, all_targets, not has_domain
+
+    # Default: domain
+    return value, [], False

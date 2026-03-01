@@ -1,0 +1,9 @@
+# ReconX - Dangling CNAME Records for bitfit.com
+# 1 dangling CNAME(s) detected
+# These may be potential takeover candidates
+
+[DANGLING] blog.bitfit.com
+  CNAME:      domains.tumblr.com
+  Provider:   Tumblr
+  Evidence:   CNAME points to domains.tumblr.com
+

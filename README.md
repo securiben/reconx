@@ -13,7 +13,7 @@
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-A high-performance CLI reconnaissance tool that aggregates subdomain data from **12 sources**, performs **recursive subdomain enumeration** via VirusTotal domain_siblings, HTTP probing via [ProjectDiscovery httpx](https://github.com/projectdiscovery/httpx), runs automated vulnerability scanning with [ProjectDiscovery nuclei](https://github.com/projectdiscovery/nuclei), classifies cloud infrastructure, detects subdomain takeover vulnerabilities, and profiles technology stacks — all presented in a rich, color-coded terminal output with per-domain file exports.
+A high-performance CLI reconnaissance tool that accepts **domains, IP addresses, CIDR ranges, or target files** as input. For domains it aggregates subdomain data from **12 sources**, performs **recursive subdomain enumeration** via VirusTotal domain_siblings, HTTP probing via [ProjectDiscovery httpx](https://github.com/projectdiscovery/httpx), runs automated vulnerability scanning with [ProjectDiscovery nuclei](https://github.com/projectdiscovery/nuclei), and port scanning with [Nmap](https://nmap.org). For IP/CIDR targets it **skips enumeration entirely** and jumps straight to nuclei + nmap. All results are presented in rich, color-coded terminal output with per-domain file exports.
 
 ## Features
 
@@ -24,6 +24,7 @@ A high-performance CLI reconnaissance tool that aggregates subdomain data from *
 | **HTTPX HTTP Probing** | ProjectDiscovery httpx integration — status codes, titles, technologies (Wappalyzer), favicon hashes, CDN detection, server headers, FQDNs from response bodies |
 | **Nuclei Vulnerability Scanning** | ProjectDiscovery nuclei integration — automated vuln scanning with dynamic tag selection based on detected tech stack (WordPress → `wordpress,wp-plugin`, Laravel → `laravel`, Spring → `spring,springboot`, etc.) |
 | **Nmap Port Scanning** | Nmap integration — `-sCV --top-ports 1000 -T3` service/version detection on all discovered IP addresses with `.nmap`, `.xml`, `.gnmap` output |
+| **Multi-Target Input** | Accepts domain names, single IPs (`10.10.0.5`), CIDR ranges (`10.10.0.0/24`), or target files (`targets.txt`) — IPs/CIDRs skip enumeration and go straight to nuclei + nmap |
 | **Infrastructure Classification** | Cloudflare, AWS, Azure, Akamai detection via CNAME patterns, IP ranges, and httpx CDN/server data |
 | **Certificate Transparency** | CT log triage with age classification — stale (1–2yr), aged (2yr+), no date |
 | **Subdomain Takeover** | 11+ provider fingerprints (Azure, AWS S3, GitHub Pages, Heroku, Shopify, Fastly, etc.) |
@@ -87,8 +88,17 @@ Get free API keys from:
 ### Run
 
 ```bash
-# Real scan
+# Domain → full recon pipeline (enum → httpx → nuclei → nmap)
 python main.py target.com
+
+# Single IP → direct scan (nuclei + nmap only, skips enumeration)
+python main.py 10.10.0.5
+
+# CIDR range → direct scan on all hosts in range
+python main.py 10.10.0.0/24
+
+# Target file → reads IPs/domains from file (one per line)
+python main.py targets.txt
 
 # Demo mode (simulated data, no API keys needed)
 python main.py example.com --demo
@@ -104,7 +114,7 @@ python main.py target.com -c 100 -t 15
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `domain` | Target domain to scan | Required |
+| `target` | Target: domain, IP address, CIDR range, or file of targets | Required |
 | `-o, --output` | Output JSON filename | `<domain>/<domain>.json` |
 | `--demo` | Run with simulated data | `false` |
 | `--no-redact` | Show full subdomain names | `false` |
@@ -164,8 +174,8 @@ reconx/
 └── recon/
     ├── config.py                # Configuration, .env loader, source definitions
     ├── models.py                # Data models (Subdomain, TechMatch, CTEntry, etc.)
-    ├── utils.py                 # DNS resolution, IP classification, pattern matching
-    ├── engine.py                # 12-phase pipeline orchestrator
+    ├── utils.py                 # DNS resolution, IP classification, pattern matching, input detection
+    ├── engine.py                # 12-phase pipeline orchestrator + direct-target mode
     ├── sources/                 # 12 data source modules
     │   ├── base.py              # Abstract base class
     │   ├── atlas.py             # crt.sh Certificate Transparency
@@ -196,7 +206,9 @@ reconx/
 
 ## Pipeline Phases
 
-The engine executes a 12-phase pipeline:
+### Domain Mode
+
+When the input is a domain name, the engine executes a 12-phase pipeline:
 
 | Phase | Name | Description |
 |-------|------|-------------|
@@ -214,6 +226,16 @@ The engine executes a 12-phase pipeline:
 | 9b | **Nmap** | Port & service scanning on all discovered IP addresses (-sCV --top-ports 1000) |
 | 10 | **Statistics** | Compute final stats (timing, counts, DB stats) |
 | 11 | **Output** | Terminal rendering + JSON export + per-domain file export |
+
+### Direct Mode (IP / CIDR / File of IPs)
+
+When the input is an IP address, CIDR range, or a file containing only IPs/CIDRs, all subdomain enumeration phases are **skipped**. The engine runs only:
+
+| Phase | Name | Description |
+|-------|------|-------------|
+| 1 | **Nuclei** | Automated vulnerability scanning on all targets with base tags + severity filter (`low,medium,high,critical`) |
+| 2 | **Nmap** | Port & service scanning on all target IPs (`-sCV --top-ports 1000`) |
+| 3 | **Output** | Terminal rendering + JSON export + per-target file export |
 
 ## Subdomain Takeover Detection
 
@@ -259,9 +281,11 @@ ReconX integrates [ProjectDiscovery nuclei](https://github.com/projectdiscovery/
 
 Nuclei tags are **dynamically selected** based on technologies detected by httpx (Wappalyzer) and the built-in tech profiler. This ensures relevant templates are used without wasting time on irrelevant checks.
 
+**Severity filter**: `-s low,medium,high,critical` (info findings are excluded).
+
 **Base tags** (always included):
 ```
-vuln, cve, discovery, vkev, panel, xss
+vuln, cve, vkev, panel, xss
 ```
 
 **Conditional tags** (added when tech is detected):
