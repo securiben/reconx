@@ -18,10 +18,10 @@ import argparse
 import time
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from recon.config import ReconConfig
-from recon.engine import ReconEngine
+from reconx.config import ReconConfig
+from reconx.engine import ReconEngine
 
 
 # ─── Banner ───────────────────────────────────────────────────────────────────
