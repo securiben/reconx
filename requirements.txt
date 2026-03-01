@@ -1,0 +1,7 @@
+# ReconX Dependencies
+# Core - no external dependencies required for demo mode
+# Install these for full functionality:
+
+requests>=2.31.0
+dnspython>=2.4.0
+urllib3>=2.0.0
