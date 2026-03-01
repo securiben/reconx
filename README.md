@@ -13,15 +13,17 @@
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-A high-performance CLI reconnaissance tool that aggregates subdomain data from **11 sources**, performs HTTP probing via [ProjectDiscovery httpx](https://github.com/projectdiscovery/httpx), runs automated vulnerability scanning with [ProjectDiscovery nuclei](https://github.com/projectdiscovery/nuclei), classifies cloud infrastructure, detects subdomain takeover vulnerabilities, and profiles technology stacks — all presented in a rich, color-coded terminal output with per-domain file exports.
+A high-performance CLI reconnaissance tool that aggregates subdomain data from **12 sources**, performs **recursive subdomain enumeration** via VirusTotal domain_siblings, HTTP probing via [ProjectDiscovery httpx](https://github.com/projectdiscovery/httpx), runs automated vulnerability scanning with [ProjectDiscovery nuclei](https://github.com/projectdiscovery/nuclei), classifies cloud infrastructure, detects subdomain takeover vulnerabilities, and profiles technology stacks — all presented in a rich, color-coded terminal output with per-domain file exports.
 
 ## Features
 
 | Category | Details |
 |----------|---------|
-| **Multi-Source Enumeration** | 11 data sources — Atlas (crt.sh), Sphinx (Certspotter), Oracle (AlienVault OTX), Radar (HackerTarget), Torrent (Wayback Machine), Venom (VT + ThreatMiner + Anubis + RapidDNS), Sonar (DNS brute-force), Shodan, Censys, SecurityTrails, URLScan.io |
+| **Multi-Source Enumeration** | 12 data sources — Atlas (crt.sh), Sphinx (Certspotter), Oracle (AlienVault OTX), Radar (HackerTarget), Torrent (Wayback Machine), Venom (VT + ThreatMiner + Anubis + RapidDNS), VirusTotal (VT domain siblings), Sonar (DNS brute-force), Shodan, Censys, SecurityTrails, URLScan.io |
+| **Recursive Enumeration** | VirusTotal v2 domain_siblings recursive discovery — queries each discovered subdomain to find sibling domains, expanding coverage beyond initial enumeration |
 | **HTTPX HTTP Probing** | ProjectDiscovery httpx integration — status codes, titles, technologies (Wappalyzer), favicon hashes, CDN detection, server headers, FQDNs from response bodies |
 | **Nuclei Vulnerability Scanning** | ProjectDiscovery nuclei integration — automated vuln scanning with dynamic tag selection based on detected tech stack (WordPress → `wordpress,wp-plugin`, Laravel → `laravel`, Spring → `spring,springboot`, etc.) |
+| **Nmap Port Scanning** | Nmap integration — `-sCV --top-ports 1000 -T3` service/version detection on all discovered IP addresses with `.nmap`, `.xml`, `.gnmap` output |
 | **Infrastructure Classification** | Cloudflare, AWS, Azure, Akamai detection via CNAME patterns, IP ranges, and httpx CDN/server data |
 | **Certificate Transparency** | CT log triage with age classification — stale (1–2yr), aged (2yr+), no date |
 | **Subdomain Takeover** | 11+ provider fingerprints (Azure, AWS S3, GitHub Pages, Heroku, Shopify, Fastly, etc.) |
@@ -75,6 +77,7 @@ Get free API keys from:
 | Service | Free Tier | URL |
 |---------|-----------|-----|
 | VirusTotal | 500 req/day | https://www.virustotal.com/gui/my-apikey |
+| VirusTotal (domain_siblings) | Same key as above | https://www.virustotal.com/gui/my-apikey |
 | Shodan | 100 req/month | https://account.shodan.io/ |
 | Censys | 250 req/month | https://search.censys.io/account/api |
 | SecurityTrails | 50 req/month | https://securitytrails.com/corp/api |
@@ -143,6 +146,11 @@ Each scan creates a domain-specific folder with categorized output files:
 ├── nuclei_critical.txt        # Critical severity findings only
 ├── nuclei_high.txt            # High severity findings only
 └── nuclei_summary.json        # Nuclei scan statistics + findings
+├── nmap_scan.nmap             # Nmap normal output
+├── nmap_scan.xml              # Nmap XML output
+├── nmap_scan.gnmap            # Nmap greppable output
+├── nmap_summary.txt           # Nmap human-readable summary
+└── nmap_summary.json          # Nmap structured JSON results
 ```
 
 ## Architecture
@@ -157,8 +165,8 @@ reconx/
     ├── config.py                # Configuration, .env loader, source definitions
     ├── models.py                # Data models (Subdomain, TechMatch, CTEntry, etc.)
     ├── utils.py                 # DNS resolution, IP classification, pattern matching
-    ├── engine.py                # 11-phase pipeline orchestrator
-    ├── sources/                 # 11 data source modules
+    ├── engine.py                # 12-phase pipeline orchestrator
+    ├── sources/                 # 12 data source modules
     │   ├── base.py              # Abstract base class
     │   ├── atlas.py             # crt.sh Certificate Transparency
     │   ├── sphinx.py            # Certspotter CT logs
@@ -166,6 +174,7 @@ reconx/
     │   ├── radar.py             # HackerTarget hostsearch
     │   ├── torrent.py           # Wayback Machine CDX index
     │   ├── venom.py             # VT + Anubis + ThreatMiner + RapidDNS
+    │   ├── vt_siblings.py       # VT v2 domain_siblings (recursive)
     │   ├── sonar.py             # DNS brute-force (wordlist)
     │   ├── shodan_source.py     # Shodan DNS + SSL cert search
     │   ├── censys_source.py     # Censys certificate + host search
@@ -177,7 +186,8 @@ reconx/
     │   ├── takeover.py          # Subdomain takeover detection
     │   ├── tech_profiler.py     # Technology stack profiling (15+ signatures)
     │   ├── httpx_probe.py       # ProjectDiscovery httpx CLI wrapper
-    │   └── nuclei_scan.py       # ProjectDiscovery nuclei CLI wrapper (dynamic tags)
+    │   ├── nuclei_scan.py       # ProjectDiscovery nuclei CLI wrapper (dynamic tags)
+    │   └── nmap_scan.py         # Nmap port & service scanner wrapper
     └── output/                  # Output rendering
         ├── terminal.py          # ANSI terminal renderer (box-drawn)
         ├── json_export.py       # Structured JSON export
@@ -186,12 +196,13 @@ reconx/
 
 ## Pipeline Phases
 
-The engine executes an 11-phase pipeline:
+The engine executes a 12-phase pipeline:
 
 | Phase | Name | Description |
 |-------|------|-------------|
-| 1 | **Sources** | Concurrent subdomain enumeration from all 11 sources |
+| 1 | **Sources** | Concurrent subdomain enumeration from all 12 sources |
 | 2 | **Dedup** | Normalize, deduplicate, and aggregate all discovered subdomains |
+| 2b | **Recursive** | VT domain_siblings recursive enumeration on all discovered subdomains |
 | 3 | **CT Logs** | Query crt.sh for certificate transparency entries + age triage |
 | 4 | **Infrastructure** | DNS CNAME/A resolution → cloud provider classification |
 | 5 | **HTTPX Probe** | HTTP probing via ProjectDiscovery httpx (status, title, tech, CDN, favicon) |
@@ -200,6 +211,7 @@ The engine executes an 11-phase pipeline:
 | 7 | **Takeover** | Check for subdomain takeover vulnerabilities (11+ providers) |
 | 8 | **Tech Profile** | Technology stack detection on alive subdomains (15+ signatures) |
 | 9 | **Nuclei** | Automated vulnerability scanning with dynamic tags based on detected tech |
+| 9b | **Nmap** | Port & service scanning on all discovered IP addresses (-sCV --top-ports 1000) |
 | 10 | **Statistics** | Compute final stats (timing, counts, DB stats) |
 | 11 | **Output** | Terminal rendering + JSON export + per-domain file export |
 
@@ -249,7 +261,7 @@ Nuclei tags are **dynamically selected** based on technologies detected by httpx
 
 **Base tags** (always included):
 ```
-vuln, cve, discovery, vkev, panel, xss, osint
+vuln, cve, discovery, vkev, panel, xss
 ```
 
 **Conditional tags** (added when tech is detected):
@@ -278,7 +290,7 @@ vuln, cve, discovery, vkev, panel, xss, osint
 
 If httpx detects WordPress and Nginx technologies on alive subdomains:
 ```
-Tags: vuln, cve, discovery, vkev, panel, xss, osint, wordpress, wp-plugin, nginx
+Tags: vuln, cve, discovery, vkev, panel, xss, wordpress, wp-plugin, nginx
 ```
 
 If no specific tech is detected, only base tags are used — keeping scan time efficient.

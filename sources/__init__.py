@@ -14,6 +14,7 @@ from .shodan_source import ShodanSource
 from .censys_source import CensysSource
 from .sectrails_source import SecurityTrailsSource
 from .urlscan_source import URLScanSource
+from .vt_siblings import VTSiblingsSource
 
 __all__ = [
     "AtlasSource",
@@ -27,4 +28,5 @@ __all__ = [
     "CensysSource",
     "SecurityTrailsSource",
     "URLScanSource",
+    "VTSiblingsSource",
 ]

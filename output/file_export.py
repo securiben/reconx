@@ -76,6 +76,7 @@ class FileExporter:
         self._export_sources(domain_dir, result)
         self._export_httpx(domain_dir, result)
         self._export_nuclei(domain_dir, result)
+        self._export_nmap(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -773,3 +774,77 @@ class FileExporter:
             ],
         }
         self._write(filepath, json.dumps(summary, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_nmap(self, outdir: str, result: ScanResult):
+        """
+        Export nmap scan results as summary text file.
+        The raw nmap output files (.nmap, .xml, .gnmap) are already
+        written directly by the nmap scanner to the output directory.
+        This method creates an additional human-readable summary.
+        """
+        nmap_stats = getattr(result, 'nmap_stats', {})
+        nmap_results = getattr(result, 'nmap_results', {})
+        if not getattr(result, 'nmap_available', False) or not nmap_results:
+            return
+
+        domain = result.target_domain
+
+        # ── nmap_summary.txt ── Human-readable summary ────────────────
+        filepath = os.path.join(outdir, "nmap_summary.txt")
+        lines = [f"# ReconX - Nmap Port Scan Summary for {domain}"]
+        lines.append(f"# Command: nmap -iL ip_addresses.txt -sCV --top-ports 1000 -T3 -oA nmap_scan")
+        lines.append(f"# Hosts scanned: {nmap_stats.get('total_ips_scanned', 0)}")
+        lines.append(f"# Hosts up: {nmap_stats.get('hosts_up', 0)}")
+        lines.append(f"# Total open ports: {nmap_stats.get('total_open_ports', 0)}")
+        lines.append(f"# Unique services: {nmap_stats.get('unique_services', 0)}")
+        lines.append(f"# Scan time: {nmap_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        # Top services
+        top_services = nmap_stats.get("top_services", [])
+        if top_services:
+            lines.append("── Top Services ──")
+            for s in top_services:
+                lines.append(f"  {s['service']:<20} {s['count']} host(s)")
+            lines.append("")
+
+        # Top ports
+        top_ports = nmap_stats.get("top_ports", [])
+        if top_ports:
+            lines.append("── Top Ports ──")
+            for p in top_ports:
+                lines.append(f"  {p['port']:<8} {p['count']} host(s)")
+            lines.append("")
+
+        # Per-host results
+        lines.append("── Per-Host Results ──")
+        for ip in sorted(nmap_results.keys()):
+            host = nmap_results[ip]
+            hostname_str = f" ({host.hostname})" if hasattr(host, 'hostname') and host.hostname else ""
+            ports = host.ports if hasattr(host, 'ports') else []
+            lines.append(f"{'─'*60}")
+            lines.append(f"  Host: {ip}{hostname_str}")
+            lines.append(f"  Open ports: {len(ports)}")
+            if ports:
+                for p in sorted(ports, key=lambda x: x.port if hasattr(x, 'port') else 0):
+                    port_num = p.port if hasattr(p, 'port') else p.get('port', 0)
+                    proto = p.protocol if hasattr(p, 'protocol') else p.get('protocol', 'tcp')
+                    service = p.service if hasattr(p, 'service') else p.get('service', '')
+                    version = p.version if hasattr(p, 'version') else p.get('version', '')
+                    ver_str = f" ({version})" if version else ""
+                    lines.append(f"    {port_num}/{proto:<5} {service}{ver_str}")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── nmap_summary.json ── Structured JSON ──────────────────────
+        filepath_json = os.path.join(outdir, "nmap_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": nmap_stats,
+            "hosts": {
+                ip: h.to_dict() if hasattr(h, 'to_dict') else h
+                for ip, h in nmap_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

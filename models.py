@@ -329,6 +329,11 @@ class ScanResult:
     nuclei_stats: Dict = field(default_factory=dict)
     nuclei_available: bool = False
 
+    # Nmap port scanner
+    nmap_results: Dict = field(default_factory=dict)
+    nmap_stats: Dict = field(default_factory=dict)
+    nmap_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -369,5 +374,13 @@ class ScanResult:
             d["nuclei"] = {
                 "stats": self.nuclei_stats,
                 "findings": [r.to_dict() if hasattr(r, 'to_dict') else r for r in self.nuclei_results],
+            }
+        if self.nmap_results:
+            d["nmap"] = {
+                "stats": self.nmap_stats,
+                "hosts": {
+                    ip: h.to_dict() if hasattr(h, 'to_dict') else h
+                    for ip, h in self.nmap_results.items()
+                },
             }
         return d

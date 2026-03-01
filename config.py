@@ -9,20 +9,26 @@ from typing import Dict, List, Optional
 
 
 def _load_dotenv():
-    """Load .env file from project root if it exists."""
-    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
-    if os.path.exists(env_path):
-        with open(env_path, "r") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" in line:
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    value = value.strip()
-                    if value and key:
-                        os.environ.setdefault(key, value)
+    """Load .env file from project root or package directory."""
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(pkg_dir, "..", ".env"),   # project root (recon/.env)
+        os.path.join(pkg_dir, ".env"),          # package dir  (reconx/.env)
+    ]
+    for env_path in candidates:
+        if os.path.exists(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, _, value = line.partition("=")
+                        key = key.strip()
+                        value = value.strip()
+                        if value and key:
+                            os.environ.setdefault(key, value)
+            break  # use the first .env found
 
 
 # Load .env on import
@@ -137,6 +143,12 @@ class ReconConfig:
             name="URLScan",
             description="querying URLScan.io web intelligence",
             api_key=os.getenv("URLSCAN_API_KEY"),
+        ),
+        "vt_siblings": SourceConfig(
+            name="VirusTotal",
+            description="querying VirusTotal domain siblings (recursive)",
+            api_key=os.getenv("VT_DOMAIN_API_KEY") or os.getenv("VT_API_KEY"),
+            timeout=30,
         ),
     })
 

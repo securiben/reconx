@@ -21,12 +21,13 @@ from .sources import (
     AtlasSource, SphinxSource, OracleSource,
     RadarSource, TorrentSource, VenomSource, SonarSource,
     ShodanSource, CensysSource, SecurityTrailsSource, URLScanSource,
+    VTSiblingsSource,
 )
 from .sources.base import BaseSource
 from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
-    NucleiScanner,
+    NucleiScanner, NmapScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -67,6 +68,7 @@ class ReconEngine:
         self.tech_profiler = TechProfiler(config.scanner)
         self.httpx_probe = HttpxProbe(config.scanner)
         self.nuclei_scanner = NucleiScanner(config.scanner)
+        self.nmap_scanner = NmapScanner(config.scanner)
 
     def _init_sources(self):
         """Initialize all data source modules."""
@@ -82,6 +84,7 @@ class ReconEngine:
             "censys": CensysSource,
             "sectrails": SecurityTrailsSource,
             "urlscan": URLScanSource,
+            "vt_siblings": VTSiblingsSource,
         }
 
         for key, cls in source_classes.items():
@@ -150,6 +153,54 @@ class ReconEngine:
                 count=len(subs),
                 subdomains=subs,
             )
+
+        # ── Phase 2b: Recursive enumeration via VT domain_siblings ────────
+        vt_siblings_source = self.sources.get("vt_siblings")
+        if (vt_siblings_source
+                and isinstance(vt_siblings_source, VTSiblingsSource)
+                and vt_siblings_source.config.api_key):
+            print(
+                f"\n\033[36m[>]\033[0m VirusTotal: recursive domain siblings enumeration "
+                f"on \033[96m{len(unique_hostnames)}\033[0m subdomains ..."
+            )
+            import time as _time
+            recursive_start = _time.time()
+            new_subs = vt_siblings_source.fetch_recursive(
+                domain=domain,
+                hostnames=unique_hostnames,
+                max_depth=2,
+                max_queries=100,
+            )
+            recursive_elapsed = _time.time() - recursive_start
+
+            # Merge newly discovered subdomains
+            recursive_new = 0
+            for sub in new_subs:
+                normalized = sub.lower().strip()
+                if normalized not in unique_hostnames:
+                    unique_hostnames.add(normalized)
+                    recursive_new += 1
+
+            # Update source stats
+            existing_vt_count = self.result.source_stats.get("vt_siblings", SourceStats(name="VirusTotal")).count
+            self.result.source_stats["vt_siblings"] = SourceStats(
+                name="VirusTotal",
+                count=existing_vt_count + len(new_subs),
+                subdomains=new_subs,
+            )
+
+            if recursive_new > 0:
+                print(
+                    f"\033[92m[+]\033[0m VirusTotal: \033[92m{recursive_new} new\033[0m "
+                    f"subdomains from recursive siblings "
+                    f"\033[90m({recursive_elapsed:.1f}s)\033[0m"
+                )
+            else:
+                print(
+                    f"\033[92m[+]\033[0m VirusTotal: \033[37m0 new\033[0m "
+                    f"subdomains from recursive siblings "
+                    f"\033[90m({recursive_elapsed:.1f}s)\033[0m"
+                )
 
         # ── Phase 3: CT Log triage (before dedup so CT subs are included) ──
         ct_entries, ct_subs = self.ct_scanner.scan(domain)
@@ -342,7 +393,7 @@ class ReconEngine:
             # Build tags dynamically
             nuclei_tags = self.nuclei_scanner.build_tags(detected_techs)
             tag_extras = [t for t in nuclei_tags if t not in [
-                'vuln', 'cve', 'discovery', 'vkev', 'panel', 'xss', 'osint'
+                'vuln', 'cve', 'discovery', 'vkev', 'panel', 'xss'
             ]]
             tags_display = ", ".join(nuclei_tags)
             print(f"\033[36m[>]\033[0m Nuclei: scanning {len(alive_subs)} alive hosts ...")
@@ -395,6 +446,65 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Or download: https://github.com/projectdiscovery/nuclei/releases\033[0m\n"
+            )
+
+        # ── Phase 9b: Nmap port & service scanning ──────────────────────────
+        if self.nmap_scanner.available:
+            # Collect all unique IP addresses from resolved subdomains
+            all_ips = set()
+            for sub in subdomain_objects:
+                for ip in sub.ip_addresses:
+                    all_ips.add(ip)
+
+            if all_ips:
+                # Run nmap with output directed to the domain results folder
+                nmap_output_dir = os.path.join(".", domain)
+                os.makedirs(nmap_output_dir, exist_ok=True)
+                nmap_results = self.nmap_scanner.scan(all_ips, output_dir=nmap_output_dir)
+                nmap_stats = self.nmap_scanner.stats
+
+                self.result.nmap_results = nmap_results
+                self.result.nmap_stats = nmap_stats.to_dict()
+                self.result.nmap_available = True
+
+                # Print nmap summary
+                if nmap_stats.hosts_up > 0:
+                    svc_str = ", ".join(
+                        f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
+                        for s in nmap_stats.top_services[:5]
+                    )
+                    port_str = ", ".join(
+                        f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                        for p in nmap_stats.top_ports[:5]
+                    )
+                    print(
+                        f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
+                        f"{nmap_stats.total_ips_scanned} scanned | "
+                        f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
+                        f"{nmap_stats.unique_services} services "
+                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    if svc_str:
+                        print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
+                    if port_str:
+                        print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
+                    print()
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
+                        f"{nmap_stats.total_ips_scanned} scanned "
+                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+            else:
+                print(
+                    f"\033[93m[!]\033[0m nmap: no IP addresses resolved – skipping port scan\n"
+                )
+        else:
+            print(
+                f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
+            )
+            print(
+                f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
 
         # ── Phase 10: Statistics ───────────────────────────────────────────

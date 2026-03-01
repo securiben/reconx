@@ -10,6 +10,7 @@ from .takeover import TakeoverScanner
 from .tech_profiler import TechProfiler
 from .httpx_probe import HttpxProbe
 from .nuclei_scan import NucleiScanner
+from .nmap_scan import NmapScanner
 
 __all__ = [
     "InfrastructureScanner",
@@ -18,4 +19,5 @@ __all__ = [
     "TechProfiler",
     "HttpxProbe",
     "NucleiScanner",
+    "NmapScanner",
 ]

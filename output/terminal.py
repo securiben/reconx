@@ -484,7 +484,7 @@ class TerminalRenderer:
 
         # Tags used (show tech-detected extras only)
         if tags_used:
-            base_tags = {"vuln", "cve", "discovery", "vkev", "panel", "xss", "osint"}
+            base_tags = {"vuln", "cve", "discovery", "vkev", "panel", "xss"}
             extras = [t for t in tags_used if t not in base_tags]
             if extras:
                 self._box_line(
@@ -523,6 +523,52 @@ class TerminalRenderer:
                 self._box_line(
                     f"    {C.DIM}... and {remaining} more finding(s){C.RESET}"
                 )
+
+    def _render_nmap(self, result: ScanResult):
+        """Render the Nmap port scan summary line."""
+        nmap_stats = getattr(result, 'nmap_stats', {})
+        nmap_available = getattr(result, 'nmap_available', False)
+
+        if not nmap_available or not nmap_stats:
+            return
+
+        hosts_up = nmap_stats.get("hosts_up", 0)
+        total_scanned = nmap_stats.get("total_ips_scanned", 0)
+        open_ports = nmap_stats.get("total_open_ports", 0)
+        unique_services = nmap_stats.get("unique_services", 0)
+        scan_time = nmap_stats.get("scan_time", 0.0)
+        top_ports = nmap_stats.get("top_ports", [])
+        top_services = nmap_stats.get("top_services", [])
+
+        # Main nmap line
+        parts = [
+            f"{C.BRIGHT_GREEN}{hosts_up}{C.RESET}{C.WHITE}/{total_scanned} hosts up{C.RESET}",
+            f"{C.BRIGHT_GREEN}{open_ports}{C.RESET}{C.WHITE} open ports{C.RESET}",
+            f"{C.BRIGHT_CYAN}{unique_services}{C.RESET}{C.WHITE} services{C.RESET}",
+        ]
+
+        content = (
+            f"{C.LABEL}Nmap:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Top services
+        if top_services:
+            svc_parts = [
+                f"{C.DIM}{s['service']}{C.RESET}({C.WHITE}{s['count']}{C.RESET})"
+                for s in top_services[:5]
+            ]
+            self._box_line(f"    {C.DIM}Services:{C.RESET} {', '.join(svc_parts)}")
+
+        # Top ports
+        if top_ports:
+            port_parts = [
+                f"{C.BRIGHT_YELLOW}{p['port']}{C.RESET}({C.WHITE}{p['count']}{C.RESET})"
+                for p in top_ports[:8]
+            ]
+            self._box_line(f"    {C.DIM}Top ports:{C.RESET} {', '.join(port_parts)}")
 
     def _render_stats(self, result: ScanResult):
         """Render the Time/Total/DB stats line."""
@@ -583,6 +629,9 @@ class TerminalRenderer:
 
         # Nuclei
         self._render_nuclei(result)
+
+        # Nmap
+        self._render_nmap(result)
 
         # Stats
         self._render_stats(result)
