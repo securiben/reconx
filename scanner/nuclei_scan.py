@@ -336,14 +336,14 @@ class NucleiScanner:
 
             tags_str = ",".join(tags)
 
-            # Build nuclei command — minimal flags matching proven working usage:
-            #   nuclei -l targets.txt -tags <tags>
-            # Only add -jsonl export and -stats for progress visibility.
+            # Build nuclei command — run ALL templates, filtered only by severity.
+            # Using -tags is too restrictive and misses most findings.
+            # This matches the proven working CLI usage:
+            #   cat alive.txt | nuclei -s low,medium,high,critical
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-tags", tags_str,
-                "-s", "low,medium,high,critical",  # Severity filter
+                "-s", "low,medium,high,critical",  # Severity filter only, no tag restriction
                 "-je", output_file,       # JSON export to file (separate from stdout)
                 "-silent",                # Suppress banner/verbose output
                 "-no-color",              # Clean output
