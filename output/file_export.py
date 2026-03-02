@@ -77,6 +77,7 @@ class FileExporter:
         self._export_httpx(domain_dir, result)
         self._export_nuclei(domain_dir, result)
         self._export_nmap(domain_dir, result)
+        self._export_cme(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -845,6 +846,93 @@ class FileExporter:
             "hosts": {
                 ip: h.to_dict() if hasattr(h, 'to_dict') else h
                 for ip, h in nmap_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_cme(self, outdir: str, result: ScanResult):
+        """
+        Export CrackMapExec scan results.
+        Creates per-protocol target files and a summary.
+        """
+        cme_stats = getattr(result, 'cme_stats', {})
+        cme_results = getattr(result, 'cme_results', {})
+        if not getattr(result, 'cme_available', False) or not cme_results:
+            return
+
+        domain = result.target_domain
+
+        # ── cme_summary.txt ── Human-readable summary ─────────────────
+        filepath = os.path.join(outdir, "cme_summary.txt")
+        lines = [f"# ReconX - CrackMapExec Protocol Enumeration for {domain}"]
+        lines.append(f"# Protocols scanned: {cme_stats.get('protocols_scanned', 0)}")
+        lines.append(f"# Total hosts discovered: {cme_stats.get('total_hosts_discovered', 0)}")
+        lines.append(f"# Scan time: {cme_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        protocol_summary = cme_stats.get('protocol_summary', {})
+        if protocol_summary:
+            lines.append("── Protocol Summary ──")
+            for proto, count in sorted(protocol_summary.items()):
+                lines.append(f"  {proto:<12} {count} host(s)")
+            lines.append("")
+
+        # Per-protocol results
+        for proto in ["smb", "ssh", "rdp", "winrm", "mssql", "ldap", "wmi", "vnc", "ftp"]:
+            proto_result = cme_results.get(proto)
+            if not proto_result:
+                continue
+
+            host_results = []
+            if hasattr(proto_result, 'host_results'):
+                host_results = proto_result.host_results
+            elif isinstance(proto_result, dict):
+                host_results = proto_result.get('host_results', [])
+
+            if not host_results:
+                continue
+
+            lines.append(f"── {proto.upper()} ──")
+            for h in host_results:
+                ip = h.ip if hasattr(h, 'ip') else h.get('ip', '')
+                hostname = h.hostname if hasattr(h, 'hostname') else h.get('hostname', '')
+                port_num = h.port if hasattr(h, 'port') else h.get('port', 0)
+                os_info = h.os_info if hasattr(h, 'os_info') else h.get('os_info', '')
+                signing = h.signing if hasattr(h, 'signing') else h.get('signing', '')
+                domain_name = h.domain if hasattr(h, 'domain') else h.get('domain', '')
+
+                parts = [f"  {ip}:{port_num}"]
+                if hostname:
+                    parts.append(f"({hostname})")
+                if os_info:
+                    parts.append(f"[{os_info}]")
+                if signing:
+                    parts.append(f"signing:{signing}")
+                if domain_name:
+                    parts.append(f"domain:{domain_name}")
+                lines.append(" ".join(parts))
+            lines.append("")
+
+            # Write per-protocol target file: cme_<protocol>_targets.txt
+            targets_file = os.path.join(outdir, f"cme_{proto}_targets.txt")
+            target_lines = []
+            for h in host_results:
+                ip = h.ip if hasattr(h, 'ip') else h.get('ip', '')
+                if ip:
+                    target_lines.append(ip)
+            if target_lines:
+                self._write(targets_file, "\n".join(sorted(set(target_lines))) + "\n")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── cme_summary.json ── Structured JSON ───────────────────────
+        filepath_json = os.path.join(outdir, "cme_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": cme_stats,
+            "protocols": {
+                proto: r.to_dict() if hasattr(r, 'to_dict') else r
+                for proto, r in cme_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

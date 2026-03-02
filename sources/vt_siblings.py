@@ -1,17 +1,18 @@
 """
-VirusTotal Domain Siblings - Recursive subdomain discovery.
-Uses VT v2 API domain/report endpoint to extract domain_siblings
-from each discovered subdomain, enabling recursive enumeration.
+VirusTotal Recursive Subdomain Discovery for ReconX.
+Uses VT v3 API /domains/{domain}/subdomains endpoint for reliable
+subdomain enumeration with pagination support.
 
-API: https://virustotal.com/vtapi/v2/domain/report?apikey=<KEY>&domain=<DOMAIN>
-Field: domain_siblings → list of sibling domains
+API: https://www.virustotal.com/api/v3/domains/{domain}/subdomains
+Auth: x-apikey header
 
-Requires: VT_DOMAIN_API_KEY in .env
+Requires: VT_DOMAIN_API_KEY or VT_API_KEY in .env
   Get free key at: https://www.virustotal.com/gui/my-apikey
 """
 
 import time
 import random
+import sys
 from typing import List, Set
 from .base import BaseSource
 
@@ -24,30 +25,36 @@ except ImportError:
 
 class VTSiblingsSource(BaseSource):
     """
-    VirusTotal domain_siblings source.
-    Queries VT v2 domain/report for each subdomain to extract
-    sibling domains, enabling recursive subdomain discovery.
+    VirusTotal subdomain enumeration source (v3 API).
+    Queries VT v3 /domains/{domain}/subdomains with pagination
+    for the root domain, then recursively discovers deeper
+    subdomains from newly found hosts.
     """
-    SOURCE_DESC = "querying VirusTotal domain siblings (recursive)"
+    SOURCE_DESC = "querying VirusTotal subdomains (recursive)"
 
-    VT_V2_URL = "https://virustotal.com/vtapi/v2/domain/report"
+    VT_V3_BASE = "https://www.virustotal.com/api/v3"
 
     def fetch(self, domain: str) -> List[str]:
-        """Fetch domain_siblings for the root domain."""
+        """Fetch subdomains for the root domain via VT v3."""
         if not HAS_REQUESTS or not self.config.api_key:
             return []
-        return self._fetch_siblings(domain, domain)
+        return self._fetch_subdomains_v3(domain, domain)
 
     def fetch_recursive(self, domain: str, hostnames: Set[str],
-                        max_depth: int = 2, max_queries: int = 100) -> List[str]:
+                        max_depth: int = 2, max_queries: int = 20) -> List[str]:
         """
-        Recursively fetch domain_siblings for all known subdomains.
+        Recursively discover subdomains using VT v3 API.
+
+        Strategy:
+        - Depth 0: Query root domain's /subdomains endpoint (paginated)
+        - Depth 1+: Query newly discovered multi-level subs for deeper subs
+        - Only queries domains NOT already queried in Phase 1
 
         Args:
             domain: Root target domain (e.g., example.com).
-            hostnames: Set of already-known subdomain hostnames to recurse on.
+            hostnames: Set of already-known subdomain hostnames.
             max_depth: Maximum recursion depth (default: 2).
-            max_queries: Maximum total API queries to make (default: 100).
+            max_queries: Maximum total API queries (default: 20).
 
         Returns:
             List of newly discovered subdomains.
@@ -59,10 +66,21 @@ class VTSiblingsSource(BaseSource):
         queried: Set[str] = set()
         query_count = 0
 
-        # Start with all known hostnames as seeds
-        current_batch = set(hostnames)
-        # Always include the root domain
+        # Phase 1 already queried the root domain via fetch(),
+        # so start recursive with the root domain to get paginated results
+        # (Phase 1 in venom.py may have limited pages)
+        current_batch: Set[str] = set()
         current_batch.add(domain)
+
+        # Also add known subdomains that have further sub-levels
+        # e.g., if we know "dev.example.com", querying its /subdomains
+        # might reveal "api.dev.example.com"
+        for h in hostnames:
+            h = h.lower().strip()
+            # Only recurse on hosts that are direct subs (have potential for deeper subs)
+            parts = h.replace(f".{domain}", "").split(".")
+            if len(parts) >= 1 and h.endswith(f".{domain}"):
+                current_batch.add(h)
 
         for depth in range(max_depth):
             next_batch: Set[str] = set()
@@ -76,15 +94,13 @@ class VTSiblingsSource(BaseSource):
                 queried.add(hostname)
                 query_count += 1
 
-                siblings = self._fetch_siblings(hostname, domain)
-                for sib in siblings:
-                    if sib not in all_discovered and sib not in hostnames:
-                        all_discovered.add(sib)
-                        next_batch.add(sib)
+                subs = self._fetch_subdomains_v3(hostname, domain)
+                for sub in subs:
+                    if sub not in all_discovered and sub not in hostnames:
+                        all_discovered.add(sub)
+                        next_batch.add(sub)
 
                 # VT free tier: 4 req/min → sleep ~16s between requests
-                # VT premium: higher limits → shorter sleep
-                # Use a conservative 16s for free tier safety
                 if query_count < max_queries and len(current_batch) > 1:
                     time.sleep(16)
 
@@ -95,50 +111,63 @@ class VTSiblingsSource(BaseSource):
 
         return list(all_discovered)
 
-    def _fetch_siblings(self, target: str, root_domain: str) -> List[str]:
+    def _fetch_subdomains_v3(self, target: str, root_domain: str,
+                             max_pages: int = 10) -> List[str]:
         """
-        Query VT v2 domain/report for a single target and extract
-        domain_siblings that belong to the root domain.
+        Query VT v3 /domains/{target}/subdomains with pagination.
+
+        Returns subdomains that belong to the root domain.
         """
-        subdomains = []
-        try:
-            params = {
-                "apikey": self.config.api_key,
-                "domain": target,
-            }
-            resp = requests.get(
-                self.VT_V2_URL,
-                params=params,
-                timeout=self.config.timeout,
-                headers={"User-Agent": "ReconX/1.0"},
-            )
+        subdomains: List[str] = []
+        headers = {
+            "x-apikey": self.config.api_key,
+            "User-Agent": "ReconX/1.0",
+        }
+        cursor = ""
 
-            if resp.status_code == 200:
-                data = resp.json()
-                # Extract domain_siblings
-                siblings = data.get("domain_siblings", [])
-                for sib in siblings:
-                    name = str(sib).strip().lower()
-                    if name and (name.endswith(f".{root_domain}") or name == root_domain):
-                        subdomains.append(name)
+        for page in range(max_pages):
+            try:
+                url = f"{self.VT_V3_BASE}/domains/{target}/subdomains"
+                params = {"limit": 40}
+                if cursor:
+                    params["cursor"] = cursor
 
-                # Also extract subdomains field if present
-                subs = data.get("subdomains", [])
-                for sub in subs:
-                    name = str(sub).strip().lower()
-                    if not name.endswith(f".{root_domain}"):
-                        name = f"{name}.{root_domain}"
-                    subdomains.append(name)
+                resp = requests.get(
+                    url,
+                    headers=headers,
+                    params=params,
+                    timeout=self.config.timeout,
+                )
 
-            elif resp.status_code == 204:
-                # Rate limited — VT returns 204 when quota exceeded
-                pass
-            elif resp.status_code == 403:
-                # Invalid API key
-                pass
+                if resp.status_code == 200:
+                    data = resp.json()
+                    items = data.get("data", [])
 
-        except Exception:
-            pass
+                    for item in items:
+                        name = item.get("id", "").strip().lower()
+                        if name and (name.endswith(f".{root_domain}") or name == root_domain):
+                            subdomains.append(name)
+
+                    # Pagination
+                    cursor = data.get("meta", {}).get("cursor", "")
+                    if not cursor or not items:
+                        break
+
+                    # Respect rate limits between pages
+                    time.sleep(0.3)
+
+                elif resp.status_code == 429:
+                    # Rate limited — wait and stop paginating
+                    time.sleep(15)
+                    break
+                elif resp.status_code == 403:
+                    # Invalid API key
+                    break
+                else:
+                    break
+
+            except Exception:
+                break
 
         return subdomains
 

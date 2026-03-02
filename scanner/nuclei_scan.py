@@ -343,7 +343,8 @@ class NucleiScanner:
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-s", "low,medium,high,critical",  # Severity filter only, no tag restriction
+                "-tags", " vuln, cve, vkev, panel, xss",
+                # "-s", "low,medium,high,critical",  # Severity filter only, no tag restriction
                 "-je", output_file,       # JSON export to file (separate from stdout)
                 "-silent",                # Suppress banner/verbose output
                 "-no-color",              # Clean output

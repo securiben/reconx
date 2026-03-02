@@ -334,6 +334,11 @@ class ScanResult:
     nmap_stats: Dict = field(default_factory=dict)
     nmap_available: bool = False
 
+    # CrackMapExec protocol enumeration
+    cme_results: Dict = field(default_factory=dict)
+    cme_stats: Dict = field(default_factory=dict)
+    cme_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -381,6 +386,14 @@ class ScanResult:
                 "hosts": {
                     ip: h.to_dict() if hasattr(h, 'to_dict') else h
                     for ip, h in self.nmap_results.items()
+                },
+            }
+        if self.cme_results:
+            d["cme"] = {
+                "stats": self.cme_stats,
+                "protocols": {
+                    proto: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for proto, r in self.cme_results.items()
                 },
             }
         return d

@@ -570,6 +570,83 @@ class TerminalRenderer:
             ]
             self._box_line(f"    {C.DIM}Top ports:{C.RESET} {', '.join(port_parts)}")
 
+    def _render_cme(self, result: ScanResult):
+        """Render the CrackMapExec protocol enumeration summary."""
+        cme_stats = getattr(result, 'cme_stats', {})
+        cme_available = getattr(result, 'cme_available', False)
+        cme_results = getattr(result, 'cme_results', {})
+
+        if not cme_available or not cme_stats:
+            return
+
+        protocols_scanned = cme_stats.get("protocols_scanned", 0)
+        total_hosts = cme_stats.get("total_hosts_discovered", 0)
+        protocol_summary = cme_stats.get("protocol_summary", {})
+        scan_time = cme_stats.get("scan_time", 0.0)
+
+        if protocols_scanned == 0:
+            return
+
+        # Protocol colors for summary box
+        proto_color_map = {
+            "smb": C.BRIGHT_BLUE,
+            "ssh": C.BRIGHT_GREEN,
+            "rdp": C.BRIGHT_YELLOW,
+            "mssql": C.BRIGHT_RED,
+            "ldap": C.BRIGHT_CYAN,
+            "winrm": C.BRIGHT_MAGENTA,
+            "wmi": C.YELLOW,
+            "vnc": C.MAGENTA,
+            "ftp": C.CYAN,
+        }
+
+        # Main CME line
+        parts = [
+            f"{C.BRIGHT_GREEN}{protocols_scanned}{C.RESET}{C.WHITE} protocols{C.RESET}",
+            f"{C.BRIGHT_GREEN}{total_hosts}{C.RESET}{C.WHITE} hosts responded{C.RESET}",
+        ]
+        content = (
+            f"{C.LABEL}CME:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Protocol breakdown
+        if protocol_summary:
+            proto_parts = []
+            for proto in ["smb", "ssh", "rdp", "winrm", "mssql", "ldap", "wmi", "vnc", "ftp"]:
+                count = protocol_summary.get(proto, 0)
+                if count > 0:
+                    color = proto_color_map.get(proto, C.WHITE)
+                    proto_parts.append(
+                        f"{color}{proto}{C.RESET}({C.WHITE}{count}{C.RESET})"
+                    )
+            if proto_parts:
+                self._box_line(f"    {C.DIM}Protocols:{C.RESET} {', '.join(proto_parts)}")
+
+        # Highlight SMB signing disabled
+        if cme_results:
+            smb_result = cme_results.get("smb")
+            if smb_result:
+                # Count hosts with signing not required
+                nosign_count = 0
+                if hasattr(smb_result, 'host_results'):
+                    nosign_count = sum(
+                        1 for h in smb_result.host_results
+                        if h.signing == "not required"
+                    )
+                elif isinstance(smb_result, dict):
+                    for h in smb_result.get('host_results', []):
+                        if isinstance(h, dict) and h.get('signing') == 'not required':
+                            nosign_count += 1
+
+                if nosign_count > 0:
+                    self._box_line(
+                        f"    {C.VULN}!! {nosign_count} host(s) SMB signing disabled{C.RESET} "
+                        f"{C.DIM}(relay targets){C.RESET}"
+                    )
+
     def _render_stats(self, result: ScanResult):
         """Render the Time/Total/DB stats line."""
         parts = [
@@ -632,6 +709,9 @@ class TerminalRenderer:
 
         # Nmap
         self._render_nmap(result)
+
+        # CrackMapExec
+        self._render_cme(result)
 
         # Stats
         self._render_stats(result)

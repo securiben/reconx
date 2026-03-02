@@ -27,7 +27,7 @@ from .sources.base import BaseSource
 from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
-    NucleiScanner, NmapScanner,
+    NucleiScanner, NmapScanner, CMEScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -69,6 +69,7 @@ class ReconEngine:
         self.httpx_probe = HttpxProbe(config.scanner)
         self.nuclei_scanner = NucleiScanner(config.scanner)
         self.nmap_scanner = NmapScanner(config.scanner)
+        self.cme_scanner = CMEScanner(config.scanner)
 
     def _init_sources(self):
         """Initialize all data source modules."""
@@ -158,14 +159,14 @@ class ReconEngine:
                 subdomains=subs,
             )
 
-        # ── Phase 2b: Recursive enumeration via VT domain_siblings ────────
+        # ── Phase 2b: Recursive enumeration via VT v3 subdomains ─────────
         vt_siblings_source = self.sources.get("vt_siblings")
         if (vt_siblings_source
                 and isinstance(vt_siblings_source, VTSiblingsSource)
                 and vt_siblings_source.config.api_key):
             print(
-                f"\n\033[36m[>]\033[0m VirusTotal: recursive domain siblings enumeration "
-                f"on \033[96m{len(unique_hostnames)}\033[0m subdomains ..."
+                f"\n\033[36m[>]\033[0m VirusTotal: recursive subdomain enumeration "
+                f"on \033[96m{len(unique_hostnames)}\033[0m known hosts (VT v3 API) ..."
             )
             import time as _time
             recursive_start = _time.time()
@@ -173,7 +174,7 @@ class ReconEngine:
                 domain=domain,
                 hostnames=unique_hostnames,
                 max_depth=2,
-                max_queries=100,
+                max_queries=20,
             )
             recursive_elapsed = _time.time() - recursive_start
 
@@ -196,13 +197,13 @@ class ReconEngine:
             if recursive_new > 0:
                 print(
                     f"\033[92m[+]\033[0m VirusTotal: \033[92m{recursive_new} new\033[0m "
-                    f"subdomains from recursive siblings "
+                    f"subdomains from recursive VT v3 "
                     f"\033[90m({recursive_elapsed:.1f}s)\033[0m"
                 )
             else:
                 print(
                     f"\033[92m[+]\033[0m VirusTotal: \033[37m0 new\033[0m "
-                    f"subdomains from recursive siblings "
+                    f"subdomains from recursive VT v3 "
                     f"\033[90m({recursive_elapsed:.1f}s)\033[0m"
                 )
 
@@ -511,6 +512,60 @@ class ReconEngine:
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
 
+        # ── Phase 9c: CrackMapExec protocol enumeration ─────────────────────
+        if self.cme_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            print(
+                f"\033[36m[>]\033[0m CME: grouping hosts by protocol from nmap results ..."
+            )
+            cme_output_dir = os.path.join(".", domain)
+            os.makedirs(cme_output_dir, exist_ok=True)
+
+            cme_results = self.cme_scanner.scan(
+                self.result.nmap_results,
+                output_dir=cme_output_dir,
+            )
+            cme_stats = self.cme_scanner.stats
+
+            self.result.cme_results = cme_results
+            self.result.cme_stats = cme_stats.to_dict()
+            self.result.cme_available = True
+
+            # Print CME summary
+            if cme_stats.protocols_scanned > 0:
+                proto_parts = []
+                for proto, count in sorted(cme_stats.protocol_summary.items()):
+                    proto_parts.append(
+                        f"\033[96m{proto}\033[0m(\033[92m{count}\033[0m)"
+                    )
+                proto_str = ", ".join(proto_parts)
+                print(
+                    f"\033[92m[+]\033[0m CME: \033[92m{cme_stats.protocols_scanned} protocols\033[0m "
+                    f"scanned | {cme_stats.total_hosts_discovered} hosts responded "
+                    f"\033[90m({cme_stats.scan_time:.1f}s)\033[0m"
+                )
+                if proto_parts:
+                    print(f"\033[92m[+]\033[0m CME: {proto_str}")
+
+                # Highlight SMB signing disabled (important for pentesting)
+                smb_nosign = self.cme_scanner.get_smb_signing_disabled()
+                if smb_nosign:
+                    print(
+                        f"\033[91m[!]\033[0m CME: \033[91m{len(smb_nosign)} hosts "
+                        f"with SMB signing disabled\033[0m (relay targets)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
+                )
+        elif not self.cme_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m crackmapexec/nxc not found – skipping protocol enumeration"
+            )
+            print(
+                f"\033[90m    Install: pip install crackmapexec | or: https://github.com/byt3bl33d3r/CrackMapExec\033[0m\n"
+            )
+
         # ── Phase 10: Statistics ───────────────────────────────────────────
         self.result.flagged_interesting = sum(
             1 for s in subdomain_objects if s.interesting
@@ -644,6 +699,56 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
+            )
+
+        # ── CrackMapExec protocol enumeration (direct mode) ────────────────
+        if self.cme_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            print(
+                f"\033[36m[>]\033[0m CME: grouping hosts by protocol from nmap results ..."
+            )
+            cme_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(cme_output_dir, exist_ok=True)
+
+            cme_results = self.cme_scanner.scan(
+                self.result.nmap_results,
+                output_dir=cme_output_dir,
+            )
+            cme_stats = self.cme_scanner.stats
+
+            self.result.cme_results = cme_results
+            self.result.cme_stats = cme_stats.to_dict()
+            self.result.cme_available = True
+
+            if cme_stats.protocols_scanned > 0:
+                proto_parts = []
+                for proto, count in sorted(cme_stats.protocol_summary.items()):
+                    proto_parts.append(f"\033[96m{proto}\033[0m(\033[92m{count}\033[0m)")
+                proto_str = ", ".join(proto_parts)
+                print(
+                    f"\033[92m[+]\033[0m CME: \033[92m{cme_stats.protocols_scanned} protocols\033[0m "
+                    f"scanned | {cme_stats.total_hosts_discovered} hosts responded "
+                    f"\033[90m({cme_stats.scan_time:.1f}s)\033[0m"
+                )
+                if proto_parts:
+                    print(f"\033[92m[+]\033[0m CME: {proto_str}")
+
+                smb_nosign = self.cme_scanner.get_smb_signing_disabled()
+                if smb_nosign:
+                    print(
+                        f"\033[91m[!]\033[0m CME: \033[91m{len(smb_nosign)} hosts "
+                        f"with SMB signing disabled\033[0m (relay targets)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
+                )
+        elif not self.cme_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m crackmapexec/nxc not found – skipping protocol enumeration"
+            )
+            print(
+                f"\033[90m    Install: pip install crackmapexec | or: https://github.com/byt3bl33d3r/CrackMapExec\033[0m\n"
             )
 
         # ── Statistics & Output ────────────────────────────────────────────
