@@ -45,7 +45,7 @@ class OracleSource(BaseSource):
             elif resp.status_code == 429:
                 # Rate limited, try URL list endpoint as fallback
                 import time
-                time.sleep(2)
+                time.sleep(0.5)
                 url2 = f"https://otx.alienvault.com/api/v1/indicators/domain/{domain}/url_list"
                 resp2 = requests.get(url2, timeout=self.config.timeout, headers=headers)
                 if resp2.status_code == 200:

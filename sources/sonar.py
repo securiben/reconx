@@ -63,7 +63,7 @@ class SonarSource(BaseSource):
         """Try to resolve a hostname, return it if successful."""
         from ..utils import resolve_a
         try:
-            ips = resolve_a(hostname, timeout=3)
+            ips = resolve_a(hostname, timeout=2)
             if ips:
                 return hostname
         except Exception:

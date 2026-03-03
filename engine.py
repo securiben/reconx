@@ -27,7 +27,7 @@ from .sources.base import BaseSource
 from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
-    NucleiScanner, NmapScanner, CMEScanner,
+    NucleiScanner, NmapScanner, Enum4linuxScanner, CMEScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -69,6 +69,7 @@ class ReconEngine:
         self.httpx_probe = HttpxProbe(config.scanner)
         self.nuclei_scanner = NucleiScanner(config.scanner)
         self.nmap_scanner = NmapScanner(config.scanner)
+        self.enum4linux_scanner = Enum4linuxScanner(config.scanner)
         self.cme_scanner = CMEScanner(config.scanner)
 
     def _init_sources(self):
@@ -158,54 +159,6 @@ class ReconEngine:
                 count=len(subs),
                 subdomains=subs,
             )
-
-        # ── Phase 2b: Recursive enumeration via VT v3 subdomains ─────────
-        vt_siblings_source = self.sources.get("vt_siblings")
-        if (vt_siblings_source
-                and isinstance(vt_siblings_source, VTSiblingsSource)
-                and vt_siblings_source.config.api_key):
-            print(
-                f"\n\033[36m[>]\033[0m VirusTotal: recursive subdomain enumeration "
-                f"on \033[96m{len(unique_hostnames)}\033[0m known hosts (VT v3 API) ..."
-            )
-            import time as _time
-            recursive_start = _time.time()
-            new_subs = vt_siblings_source.fetch_recursive(
-                domain=domain,
-                hostnames=unique_hostnames,
-                max_depth=2,
-                max_queries=20,
-            )
-            recursive_elapsed = _time.time() - recursive_start
-
-            # Merge newly discovered subdomains
-            recursive_new = 0
-            for sub in new_subs:
-                normalized = sub.lower().strip()
-                if normalized not in unique_hostnames:
-                    unique_hostnames.add(normalized)
-                    recursive_new += 1
-
-            # Update source stats
-            existing_vt_count = self.result.source_stats.get("vt_siblings", SourceStats(name="VirusTotal")).count
-            self.result.source_stats["vt_siblings"] = SourceStats(
-                name="VirusTotal",
-                count=existing_vt_count + len(new_subs),
-                subdomains=new_subs,
-            )
-
-            if recursive_new > 0:
-                print(
-                    f"\033[92m[+]\033[0m VirusTotal: \033[92m{recursive_new} new\033[0m "
-                    f"subdomains from recursive VT v3 "
-                    f"\033[90m({recursive_elapsed:.1f}s)\033[0m"
-                )
-            else:
-                print(
-                    f"\033[92m[+]\033[0m VirusTotal: \033[37m0 new\033[0m "
-                    f"subdomains from recursive VT v3 "
-                    f"\033[90m({recursive_elapsed:.1f}s)\033[0m"
-                )
 
         # ── Phase 3: CT Log triage (before dedup so CT subs are included) ──
         ct_entries, ct_subs = self.ct_scanner.scan(domain)
@@ -512,6 +465,67 @@ class ReconEngine:
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
 
+        # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
+        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            # Collect all IPs from nmap results
+            enum_ips = set(self.result.nmap_results.keys())
+            if enum_ips:
+                enum_output_dir = os.path.join(".", domain)
+                os.makedirs(enum_output_dir, exist_ok=True)
+
+                enum_results = self.enum4linux_scanner.scan(
+                    enum_ips,
+                    output_dir=enum_output_dir,
+                )
+                enum_stats = self.enum4linux_scanner.stats
+
+                self.result.enum4linux_results = enum_results
+                self.result.enum4linux_stats = enum_stats.to_dict()
+                self.result.enum4linux_available = True
+
+                # Print enum4linux summary
+                if enum_stats.hosts_responded > 0:
+                    parts = [
+                        f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
+                        f"{enum_stats.total_ips_scanned} scanned"
+                    ]
+                    if enum_stats.total_shares > 0:
+                        parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
+                    if enum_stats.total_users > 0:
+                        parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
+                    if enum_stats.total_groups > 0:
+                        parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
+                    if enum_stats.null_sessions > 0:
+                        parts.append(
+                            f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
+                        )
+                    print(
+                        f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
+                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
+                    )
+
+                    # Highlight null sessions (critical finding)
+                    null_hosts = self.enum4linux_scanner.get_null_session_hosts()
+                    if null_hosts:
+                        print(
+                            f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
+                            f"allow null sessions\033[0m (anonymous access)"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
+                        f"{enum_stats.total_ips_scanned} scanned "
+                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+        elif not self.enum4linux_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m enum4linux not found – skipping SMB/Windows enumeration"
+            )
+            print(
+                f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
+            )
+
         # ── Phase 9c: CrackMapExec protocol enumeration ─────────────────────
         if self.cme_scanner.available and self.result.nmap_available and self.result.nmap_results:
             print(
@@ -699,6 +713,64 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
+            )
+
+        # ── Enum4linux SMB/Windows enumeration (direct mode) ───────────────
+        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            enum_ips = set(self.result.nmap_results.keys())
+            if enum_ips:
+                enum_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(enum_output_dir, exist_ok=True)
+
+                enum_results = self.enum4linux_scanner.scan(
+                    enum_ips,
+                    output_dir=enum_output_dir,
+                )
+                enum_stats = self.enum4linux_scanner.stats
+
+                self.result.enum4linux_results = enum_results
+                self.result.enum4linux_stats = enum_stats.to_dict()
+                self.result.enum4linux_available = True
+
+                if enum_stats.hosts_responded > 0:
+                    parts = [
+                        f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
+                        f"{enum_stats.total_ips_scanned} scanned"
+                    ]
+                    if enum_stats.total_shares > 0:
+                        parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
+                    if enum_stats.total_users > 0:
+                        parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
+                    if enum_stats.total_groups > 0:
+                        parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
+                    if enum_stats.null_sessions > 0:
+                        parts.append(
+                            f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
+                        )
+                    print(
+                        f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
+                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
+                    )
+
+                    null_hosts = self.enum4linux_scanner.get_null_session_hosts()
+                    if null_hosts:
+                        print(
+                            f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
+                            f"allow null sessions\033[0m (anonymous access)"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
+                        f"{enum_stats.total_ips_scanned} scanned "
+                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+        elif not self.enum4linux_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m enum4linux not found – skipping SMB/Windows enumeration"
+            )
+            print(
+                f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
             )
 
         # ── CrackMapExec protocol enumeration (direct mode) ────────────────

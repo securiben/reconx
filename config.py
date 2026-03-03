@@ -43,7 +43,7 @@ class SourceConfig:
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     description: str = ""
-    timeout: int = 60
+    timeout: int = 15
     max_retries: int = 3
     rate_limit: float = 1.0  # requests per second
 
@@ -79,7 +79,7 @@ class ScannerConfig:
     stale_days: int = 365       # 1 year
     aged_days: int = 730        # 2 years
     concurrency: int = 50       # max concurrent workers
-    timeout: int = 10           # per-request timeout in seconds
+    timeout: int = 8            # per-request timeout in seconds (fast default)
 
 
 @dataclass
@@ -153,9 +153,9 @@ class ReconConfig:
         ),
         "vt_siblings": SourceConfig(
             name="VirusTotal",
-            description="querying VirusTotal domain siblings (recursive)",
+            description="querying VirusTotal domain subdomains (v3 API)",
             api_key=os.getenv("VT_DOMAIN_API_KEY") or os.getenv("VT_API_KEY"),
-            timeout=30,
+            timeout=15,
         ),
     })
 

@@ -11,6 +11,7 @@ from .tech_profiler import TechProfiler
 from .httpx_probe import HttpxProbe
 from .nuclei_scan import NucleiScanner
 from .nmap_scan import NmapScanner
+from .enum4linux_scan import Enum4linuxScanner
 from .cme_scan import CMEScanner
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "HttpxProbe",
     "NucleiScanner",
     "NmapScanner",
+    "Enum4linuxScanner",
     "CMEScanner",
 ]

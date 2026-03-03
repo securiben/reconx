@@ -77,6 +77,7 @@ class FileExporter:
         self._export_httpx(domain_dir, result)
         self._export_nuclei(domain_dir, result)
         self._export_nmap(domain_dir, result)
+        self._export_enum4linux(domain_dir, result)
         self._export_cme(domain_dir, result)
 
         return os.path.abspath(domain_dir)
@@ -846,6 +847,168 @@ class FileExporter:
             "hosts": {
                 ip: h.to_dict() if hasattr(h, 'to_dict') else h
                 for ip, h in nmap_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_enum4linux(self, outdir: str, result: ScanResult):
+        """
+        Export enum4linux scan results.
+        Creates a human-readable summary and a structured JSON file.
+        Raw per-host output files are already written by the scanner.
+        """
+        enum_stats = getattr(result, 'enum4linux_stats', {})
+        enum_results = getattr(result, 'enum4linux_results', {})
+        if not getattr(result, 'enum4linux_available', False) or not enum_results:
+            return
+
+        domain = result.target_domain
+
+        # ── enum4linux_summary.txt ── Human-readable summary ──────────
+        filepath = os.path.join(outdir, "enum4linux_summary.txt")
+        lines = [f"# ReconX - Enum4linux SMB/Windows Enumeration for {domain}"]
+        lines.append(f"# Command: enum4linux -a <ip>")
+        lines.append(f"# Hosts scanned: {enum_stats.get('total_ips_scanned', 0)}")
+        lines.append(f"# Hosts responded: {enum_stats.get('hosts_responded', 0)}")
+        lines.append(f"# Null sessions: {enum_stats.get('null_sessions', 0)}")
+        lines.append(f"# Total shares: {enum_stats.get('total_shares', 0)}")
+        lines.append(f"# Total users: {enum_stats.get('total_users', 0)}")
+        lines.append(f"# Total groups: {enum_stats.get('total_groups', 0)}")
+        lines.append(f"# Scan time: {enum_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        # Per-host results
+        for ip in sorted(enum_results.keys()):
+            host = enum_results[ip]
+            success = host.success if hasattr(host, 'success') else host.get('success', False)
+            if not success:
+                continue
+
+            lines.append(f"{'─'*60}")
+            lines.append(f"  Host: {ip}")
+
+            workgroup = host.workgroup if hasattr(host, 'workgroup') else host.get('workgroup', '')
+            domain_name = host.domain if hasattr(host, 'domain') else host.get('domain', '')
+            os_info = host.os_info if hasattr(host, 'os_info') else host.get('os_info', '')
+            null_session = host.null_session if hasattr(host, 'null_session') else host.get('null_session', False)
+
+            if workgroup:
+                lines.append(f"  Workgroup: {workgroup}")
+            if domain_name:
+                lines.append(f"  Domain: {domain_name}")
+            if os_info:
+                lines.append(f"  OS: {os_info}")
+            if null_session:
+                lines.append(f"  ⚠ NULL SESSION ALLOWED")
+
+            # Shares
+            shares = host.shares if hasattr(host, 'shares') else host.get('shares', [])
+            if shares:
+                lines.append(f"  Shares ({len(shares)}):")
+                for s in shares:
+                    name = s.name if hasattr(s, 'name') else s.get('name', '')
+                    stype = s.share_type if hasattr(s, 'share_type') else s.get('type', '')
+                    comment = s.comment if hasattr(s, 'comment') else s.get('comment', '')
+                    access = s.access if hasattr(s, 'access') else s.get('access', '')
+                    parts = [f"    {name}"]
+                    if stype:
+                        parts.append(f"[{stype}]")
+                    if access:
+                        parts.append(f"({access})")
+                    if comment:
+                        parts.append(f"- {comment}")
+                    lines.append(" ".join(parts))
+
+            # Users
+            users = host.users if hasattr(host, 'users') else host.get('users', [])
+            if users:
+                lines.append(f"  Users ({len(users)}):")
+                for u in users:
+                    username = u.username if hasattr(u, 'username') else u.get('username', '')
+                    rid = u.rid if hasattr(u, 'rid') else u.get('rid', '')
+                    rid_str = f" (RID: {rid})" if rid else ""
+                    lines.append(f"    {username}{rid_str}")
+
+            # Groups
+            groups = host.groups if hasattr(host, 'groups') else host.get('groups', [])
+            if groups:
+                lines.append(f"  Groups ({len(groups)}):")
+                for g in groups:
+                    name = g.name if hasattr(g, 'name') else g.get('name', '')
+                    rid = g.rid if hasattr(g, 'rid') else g.get('rid', '')
+                    rid_str = f" (RID: {rid})" if rid else ""
+                    lines.append(f"    {name}{rid_str}")
+
+            # Password policy
+            policy = host.password_policy if hasattr(host, 'password_policy') else host.get('password_policy', {})
+            if policy:
+                lines.append(f"  Password Policy:")
+                for key, value in policy.items():
+                    lines.append(f"    {key}: {value}")
+
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── enum4linux_users.txt ── All discovered usernames ──────────
+        all_users = set()
+        for ip, host in enum_results.items():
+            users = host.users if hasattr(host, 'users') else host.get('users', [])
+            for u in users:
+                username = u.username if hasattr(u, 'username') else u.get('username', '')
+                if username:
+                    all_users.add(username)
+            rid_users = host.rid_cycling_users if hasattr(host, 'rid_cycling_users') else host.get('rid_cycling_users', [])
+            for u in rid_users:
+                if u:
+                    all_users.add(u)
+
+        if all_users:
+            filepath_users = os.path.join(outdir, "enum4linux_users.txt")
+            user_lines = [f"# ReconX - Enum4linux Discovered Users for {domain}"]
+            user_lines.append(f"# Total: {len(all_users)} unique users")
+            user_lines.append("")
+            user_lines.extend(sorted(all_users))
+            self._write(filepath_users, "\n".join(user_lines) + "\n")
+
+        # ── enum4linux_shares.txt ── All discovered shares ────────────
+        all_shares_info = []
+        for ip, host in enum_results.items():
+            shares = host.shares if hasattr(host, 'shares') else host.get('shares', [])
+            for s in shares:
+                name = s.name if hasattr(s, 'name') else s.get('name', '')
+                if name:
+                    all_shares_info.append(f"{ip}  {name}")
+
+        if all_shares_info:
+            filepath_shares = os.path.join(outdir, "enum4linux_shares.txt")
+            share_lines = [f"# ReconX - Enum4linux Discovered Shares for {domain}"]
+            share_lines.append(f"# Format: IP  ShareName")
+            share_lines.append("")
+            share_lines.extend(sorted(all_shares_info))
+            self._write(filepath_shares, "\n".join(share_lines) + "\n")
+
+        # ── enum4linux_null_sessions.txt ── Hosts with null sessions ──
+        null_hosts = [
+            ip for ip, h in enum_results.items()
+            if (h.null_session if hasattr(h, 'null_session') else h.get('null_session', False))
+        ]
+        if null_hosts:
+            filepath_null = os.path.join(outdir, "enum4linux_null_sessions.txt")
+            null_lines = [f"# ReconX - Enum4linux Null Session Hosts for {domain}"]
+            null_lines.append(f"# ⚠ {len(null_hosts)} host(s) allow anonymous/null sessions")
+            null_lines.append("")
+            null_lines.extend(sorted(null_hosts))
+            self._write(filepath_null, "\n".join(null_lines) + "\n")
+
+        # ── enum4linux_summary.json ── Structured JSON ────────────────
+        filepath_json = os.path.join(outdir, "enum4linux_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": enum_stats,
+            "hosts": {
+                ip: h.to_dict() if hasattr(h, 'to_dict') else h
+                for ip, h in enum_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

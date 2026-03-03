@@ -50,7 +50,7 @@ class VenomSource(BaseSource):
         if self.config.api_key:
             try:
                 cursor = ""
-                for _ in range(5):  # up to 5 pages
+                for _ in range(3):  # up to 3 pages (fast)
                     vt_url = f"https://www.virustotal.com/api/v3/domains/{domain}/subdomains"
                     headers = {"x-apikey": self.config.api_key, "User-Agent": "ReconX/1.0"}
                     params = {"limit": 40}
@@ -68,10 +68,9 @@ class VenomSource(BaseSource):
                         cursor = data.get("meta", {}).get("cursor", "")
                         if not cursor or not items:
                             break
-                        time.sleep(0.3)  # Respect VT rate limits
+                        time.sleep(0.1)  # Brief VT rate limit pause
                     elif resp.status_code == 429:
-                        # Rate limited, wait and retry once
-                        time.sleep(15)
+                        # Rate limited, skip remaining pages
                         break
                     else:
                         break

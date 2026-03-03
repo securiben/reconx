@@ -334,6 +334,11 @@ class ScanResult:
     nmap_stats: Dict = field(default_factory=dict)
     nmap_available: bool = False
 
+    # Enum4linux SMB enumeration
+    enum4linux_results: Dict = field(default_factory=dict)
+    enum4linux_stats: Dict = field(default_factory=dict)
+    enum4linux_available: bool = False
+
     # CrackMapExec protocol enumeration
     cme_results: Dict = field(default_factory=dict)
     cme_stats: Dict = field(default_factory=dict)
@@ -386,6 +391,14 @@ class ScanResult:
                 "hosts": {
                     ip: h.to_dict() if hasattr(h, 'to_dict') else h
                     for ip, h in self.nmap_results.items()
+                },
+            }
+        if self.enum4linux_results:
+            d["enum4linux"] = {
+                "stats": self.enum4linux_stats,
+                "hosts": {
+                    ip: h.to_dict() if hasattr(h, 'to_dict') else h
+                    for ip, h in self.enum4linux_results.items()
                 },
             }
         if self.cme_results:

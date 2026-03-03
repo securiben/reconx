@@ -570,6 +570,93 @@ class TerminalRenderer:
             ]
             self._box_line(f"    {C.DIM}Top ports:{C.RESET} {', '.join(port_parts)}")
 
+    def _render_enum4linux(self, result: ScanResult):
+        """Render the Enum4linux SMB/Windows enumeration summary."""
+        enum_stats = getattr(result, 'enum4linux_stats', {})
+        enum_available = getattr(result, 'enum4linux_available', False)
+        enum_results = getattr(result, 'enum4linux_results', {})
+
+        if not enum_available or not enum_stats:
+            return
+
+        hosts_responded = enum_stats.get("hosts_responded", 0)
+        total_scanned = enum_stats.get("total_ips_scanned", 0)
+        total_shares = enum_stats.get("total_shares", 0)
+        total_users = enum_stats.get("total_users", 0)
+        total_groups = enum_stats.get("total_groups", 0)
+        null_sessions = enum_stats.get("null_sessions", 0)
+        hosts_with_shares = enum_stats.get("hosts_with_shares", 0)
+        hosts_with_users = enum_stats.get("hosts_with_users", 0)
+        scan_time = enum_stats.get("scan_time", 0.0)
+
+        if hosts_responded == 0:
+            return
+
+        # Main enum4linux line
+        parts = [
+            f"{C.BRIGHT_GREEN}{hosts_responded}{C.RESET}{C.WHITE}/{total_scanned} hosts{C.RESET}",
+        ]
+        if total_shares > 0:
+            parts.append(f"{C.BRIGHT_CYAN}{total_shares}{C.RESET}{C.WHITE} shares{C.RESET}")
+        if total_users > 0:
+            parts.append(f"{C.BRIGHT_CYAN}{total_users}{C.RESET}{C.WHITE} users{C.RESET}")
+        if total_groups > 0:
+            parts.append(f"{C.BRIGHT_CYAN}{total_groups}{C.RESET}{C.WHITE} groups{C.RESET}")
+
+        content = (
+            f"{C.LABEL}Enum4linux:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Null session warning (critical finding)
+        if null_sessions > 0:
+            self._box_line(
+                f"    {C.VULN}!! {null_sessions} host(s) allow null sessions{C.RESET} "
+                f"{C.DIM}(anonymous access){C.RESET}"
+            )
+
+        # Show discovered shares summary
+        if enum_results and total_shares > 0:
+            share_names = []
+            for ip, host_result in enum_results.items():
+                shares = []
+                if hasattr(host_result, 'shares'):
+                    shares = host_result.shares
+                elif isinstance(host_result, dict):
+                    shares = host_result.get('shares', [])
+                for s in shares:
+                    name = s.name if hasattr(s, 'name') else s.get('name', '')
+                    if name and name not in share_names:
+                        share_names.append(name)
+            if share_names:
+                shares_display = ", ".join(
+                    f"{C.DIM}{name}{C.RESET}" for name in share_names[:10]
+                )
+                extra = f" {C.DIM}(+{len(share_names) - 10} more){C.RESET}" if len(share_names) > 10 else ""
+                self._box_line(f"    {C.DIM}Shares:{C.RESET} {shares_display}{extra}")
+
+        # Show discovered users summary
+        if enum_results and total_users > 0:
+            all_usernames = []
+            for ip, host_result in enum_results.items():
+                users = []
+                if hasattr(host_result, 'users'):
+                    users = host_result.users
+                elif isinstance(host_result, dict):
+                    users = host_result.get('users', [])
+                for u in users:
+                    username = u.username if hasattr(u, 'username') else u.get('username', '')
+                    if username and username not in all_usernames:
+                        all_usernames.append(username)
+            if all_usernames:
+                users_display = ", ".join(
+                    f"{C.BRIGHT_YELLOW}{name}{C.RESET}" for name in all_usernames[:8]
+                )
+                extra = f" {C.DIM}(+{len(all_usernames) - 8} more){C.RESET}" if len(all_usernames) > 8 else ""
+                self._box_line(f"    {C.DIM}Users:{C.RESET} {users_display}{extra}")
+
     def _render_cme(self, result: ScanResult):
         """Render the CrackMapExec protocol enumeration summary."""
         cme_stats = getattr(result, 'cme_stats', {})
@@ -709,6 +796,9 @@ class TerminalRenderer:
 
         # Nmap
         self._render_nmap(result)
+
+        # Enum4linux
+        self._render_enum4linux(result)
 
         # CrackMapExec
         self._render_cme(result)

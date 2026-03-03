@@ -31,7 +31,7 @@ class AtlasSource(BaseSource):
         try:
             url = f"https://crt.sh/?q=%.{domain}&output=json"
             resp = requests.get(
-                url, timeout=max(self.config.timeout, 60),
+                url, timeout=max(self.config.timeout, 20),
                 headers={"User-Agent": "ReconX/1.0"},
             )
             if resp.status_code == 200:
