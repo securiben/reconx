@@ -127,13 +127,12 @@ class NmapScanner:
 
     def scan(self, ip_addresses: Set[str], output_dir: str = "") -> Dict[str, NmapHostResult]:
         """
-        Run nmap against a set of discovered IP addresses.
+        Run nmap against a set of IP addresses with -Pn (skip host discovery).
 
-        Strategy:
-          1. ICMP ping sweep to classify hosts as up/down.
-          2. Hosts that respond to ping → scan normally.
-          3. Hosts that don't respond → scan with -Pn (skip host discovery).
-          This avoids long timeouts on hosts with ICMP disabled.
+        Always uses -Pn because many hosts block ICMP, which causes nmap
+        to waste time or skip them entirely. This is standard pentest practice.
+
+        Command: nmap -iL <file> -Pn -sCV --top-ports 1000 -T3 -oA <prefix>
 
         Args:
             ip_addresses: Set of IP addresses to scan.
@@ -152,65 +151,29 @@ class NmapScanner:
         scan_start = time.time()
         self.stats.total_ips_scanned = len(ip_addresses)
 
-        # ── Phase 1: ICMP ping sweep ────────────────────────────────────
-        icmp_up, icmp_down = self._ping_sweep(ip_addresses)
-
-        print(
-            f"\033[36m[>]\033[0m nmap: ping sweep → "
-            f"\033[92m{len(icmp_up)} up\033[0m / "
-            f"\033[91m{len(icmp_down)} down (ICMP blocked)\033[0m"
-        )
-        if icmp_up:
-            print(
-                f"\033[92m[+]\033[0m nmap: ICMP up → "
-                f"\033[96m{', '.join(sorted(icmp_up))}\033[0m"
-            )
-        if icmp_down:
-            print(
-                f"\033[93m[!]\033[0m nmap: ICMP down → "
-                f"\033[96m{', '.join(sorted(icmp_down))}\033[0m"
-                f" \033[90m(skipped — ICMP not responding)\033[0m"
-            )
-
-        # ── Phase 2: Full scan (only ICMP-up hosts) ─────────────────────
         # Prepare temp dir
         tmpdir = tempfile.mkdtemp(prefix="reconx_nmap_")
 
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
-        try:
-            # Scan ICMP-up hosts normally
-            if icmp_up:
-                output_prefix_up = os.path.join(
-                    output_dir or tmpdir, "nmap_scan"
-                )
-                self._run_nmap_scan(
-                    icmp_up, output_prefix_up, tmpdir,
-                    extra_flags=[], label="ICMP-up hosts",
-                )
+        output_prefix = os.path.join(output_dir or tmpdir, "nmap_scan")
 
-            # NOTE: ICMP-down hosts are skipped (disabled).
-            # To re-enable, uncomment the block below to scan with -Pn:
-            # if icmp_down:
-            #     output_prefix_down = os.path.join(
-            #         output_dir or tmpdir, "nmap_scan_pn"
-            #     )
-            #     self._run_nmap_scan(
-            #         icmp_down, output_prefix_down, tmpdir,
-            #         extra_flags=["-Pn"], label="ICMP-down hosts (-Pn)",
-            #     )
+        try:
+            self._run_nmap_scan(
+                ip_addresses, output_prefix, tmpdir,
+                extra_flags=["-Pn"], label="IPs",
+            )
 
             # Copy output files to output_dir if needed
             if output_dir and output_dir != tmpdir:
-                for prefix_name in ["nmap_scan", "nmap_scan_pn"]:
-                    for ext in [".nmap", ".xml", ".gnmap"]:
-                        src = os.path.join(tmpdir, prefix_name + ext)
-                        if os.path.isfile(src):
-                            dst = os.path.join(output_dir, prefix_name + ext)
-                            if os.path.abspath(src) != os.path.abspath(dst):
-                                import shutil as _shutil
-                                _shutil.copy2(src, dst)
+                for ext in [".nmap", ".xml", ".gnmap"]:
+                    src = os.path.join(tmpdir, "nmap_scan" + ext)
+                    if os.path.isfile(src):
+                        dst = os.path.join(output_dir, "nmap_scan" + ext)
+                        if os.path.abspath(src) != os.path.abspath(dst):
+                            import shutil as _shutil
+                            _shutil.copy2(src, dst)
 
         except FileNotFoundError:
             self.available = False
@@ -231,76 +194,6 @@ class NmapScanner:
         self._compute_stats(scan_elapsed)
 
         return self.results
-
-    def _ping_sweep(self, ip_addresses: Set[str]) -> tuple:
-        """
-        Run nmap ICMP ping sweep (-sn) to classify hosts as up/down.
-
-        Returns:
-            (icmp_up: Set[str], icmp_down: Set[str])
-        """
-        icmp_up: Set[str] = set()
-        icmp_down: Set[str] = set()
-
-        tmpdir = tempfile.mkdtemp(prefix="reconx_ping_")
-        input_file = os.path.join(tmpdir, "ping_targets.txt")
-        gnmap_file = os.path.join(tmpdir, "ping_sweep.gnmap")
-
-        try:
-            with open(input_file, "w", encoding="utf-8") as f:
-                for ip in sorted(ip_addresses):
-                    f.write(ip + "\n")
-
-            print(
-                f"\033[36m[>]\033[0m nmap: pinging "
-                f"\033[96m{len(ip_addresses)}\033[0m IPs (ICMP sweep) ..."
-            )
-
-            cmd = [
-                self.nmap_path,
-                "-sn",           # Ping scan only (no port scan)
-                "-PE",           # ICMP echo request
-                "-iL", input_file,
-                "-oG", gnmap_file,
-            ]
-
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                encoding="utf-8",
-                errors="replace",
-            )
-
-            # Parse gnmap output for up hosts
-            if os.path.isfile(gnmap_file):
-                with open(gnmap_file, "r", encoding="utf-8", errors="replace") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("Host:") and "Status: Up" in line:
-                            # "Host: 1.2.3.4 () Status: Up"
-                            parts = line.split()
-                            if len(parts) >= 2:
-                                icmp_up.add(parts[1])
-
-            icmp_down = ip_addresses - icmp_up
-
-        except subprocess.TimeoutExpired:
-            # If ping times out, treat all as down (use -Pn for all)
-            icmp_down = set(ip_addresses)
-        except Exception:
-            # On error, treat all as down (safe fallback)
-            icmp_down = set(ip_addresses)
-        finally:
-            try:
-                for f in os.listdir(tmpdir):
-                    os.remove(os.path.join(tmpdir, f))
-                os.rmdir(tmpdir)
-            except Exception:
-                pass
-
-        return icmp_up, icmp_down
 
     def _run_nmap_scan(
         self,

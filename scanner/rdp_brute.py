@@ -408,10 +408,9 @@ class RDPBruteScanner:
             self.nxc_path,
             "rdp",
             ip,
-            "--port", str(port),
             "-u", username,
             "-p", pass_file,
-            "--continue-on-success",  # Don't stop after first valid cred
+            "--continue-on-success",
         ]
 
         try:
