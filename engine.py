@@ -31,7 +31,7 @@ from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
-    MSFSMBBruteScanner,
+    MSFSMBBruteScanner, RDPBruteScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -76,6 +76,7 @@ class ReconEngine:
         self.enum4linux_scanner = Enum4linuxScanner(config.scanner)
         self.cme_scanner = CMEScanner(config.scanner)
         self.msf_scanner = MSFSMBBruteScanner(config.scanner)
+        self.rdp_scanner = RDPBruteScanner(config.scanner)
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -172,6 +173,67 @@ class ReconEngine:
         for key, cls in source_classes.items():
             if key in self.config.sources and self.config.sources[key].enabled:
                 self.sources[key] = cls(self.config.sources[key])
+
+    # ─── Incremental save helpers ──────────────────────────────────────────
+
+    def _ensure_output_dir(self) -> str:
+        """Create and return the domain output directory path."""
+        domain = self.result.target_domain
+        domain_dir = os.path.join(self.file_exporter.base_dir, domain)
+        os.makedirs(domain_dir, exist_ok=True)
+        return domain_dir
+
+    def _save_phase(self, phase: str):
+        """
+        Incrementally save results for a specific phase to disk.
+        Called right after each scan phase completes so files are
+        available immediately (live results).
+        """
+        try:
+            d = self._ensure_output_dir()
+            fe = self.file_exporter
+            r = self.result
+
+            if phase == "subdomains":
+                fe._export_all_subdomains(d, r)
+                fe._export_sources(d, r)
+            elif phase == "ct":
+                fe._export_ct_entries(d, r)
+            elif phase == "infrastructure":
+                fe._export_infrastructure(d, r)
+                fe._export_ip_addresses(d, r)
+            elif phase == "httpx":
+                fe._export_httpx(d, r)
+                fe._export_alive_subdomains(d, r)
+            elif phase == "nuclei":
+                fe._export_nuclei(d, r)
+            elif phase == "takeover":
+                fe._export_takeover(d, r)
+                fe._export_dangling(d, r)
+            elif phase == "tech":
+                fe._export_tech(d, r)
+            elif phase == "flagged":
+                fe._export_flagged(d, r)
+            elif phase == "collapsed":
+                fe._export_collapsed(d, r)
+            elif phase == "nmap":
+                fe._export_nmap(d, r)
+            elif phase == "enum4linux":
+                fe._export_enum4linux(d, r)
+            elif phase == "cme":
+                fe._export_cme(d, r)
+            elif phase == "msf":
+                fe._export_msf(d, r)
+            elif phase == "rdp":
+                fe._export_rdp(d, r)
+            elif phase == "summary":
+                fe._export_summary(d, r)
+
+            print(
+                f"\033[38;5;75m    \U0001f4be {phase} → saved to {d}/\033[0m"
+            )
+        except Exception:
+            pass  # Don't let a save failure crash the pipeline
 
     def run(self) -> ScanResult:
         """
@@ -278,8 +340,13 @@ class ReconEngine:
         self.result.subdomains = subdomain_objects
         self.result.total_unique = len(unique_hostnames)
 
+        # Live save: subdomains + CT
+        self._save_phase("subdomains")
+        self._save_phase("ct")
+
         # ── Phase 4: Infrastructure classification ─────────────────────────
         self.result.infra = self.infra_scanner.scan(subdomain_objects)
+        self._save_phase("infrastructure")
 
         # ── Phase 5: HTTPX Probe ──────────────────────────────────────────
         httpx_start = time.time()
@@ -358,6 +425,7 @@ class ReconEngine:
         # Store httpx stats on result for rendering
         self.result.httpx_stats = getattr(self.httpx_probe, 'get_stats', lambda: {})() if self.httpx_probe.available else {}
         self.result.httpx_available = self.httpx_probe.available
+        self._save_phase("httpx")
 
         # ── Phase 5b: Reconcile infra stats with httpx CDN/server data ────
         if self.httpx_probe.available:
@@ -412,6 +480,7 @@ class ReconEngine:
                             f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
                         )
                     print()
+                    self._save_phase("nuclei")
                 else:
                     print(
                         f"\033[93m[!]\033[0m nuclei: skipped by user\n"
@@ -434,6 +503,7 @@ class ReconEngine:
             pattern_groups=pattern_groups,
             threshold=self.config.scanner.collapse_threshold,
         )
+        self._save_phase("collapsed")
 
         # ── Phase 7: Subdomain takeover check ─────────────────────────────
         takeover_results = self.takeover_scanner.scan(subdomain_objects)
@@ -458,6 +528,8 @@ class ReconEngine:
             if provider_counts:
                 self.result.takeover_provider = provider_counts.most_common(1)[0][0]
 
+        self._save_phase("takeover")
+
         # ── Phase 8: Tech stack profiling ──────────────────────────────────
         beacon_start = time.time()
         # Only profile alive subdomains (avoids false positives on dead hosts)
@@ -474,6 +546,8 @@ class ReconEngine:
             f"\033[92m[+]\033[0m TechScan: \033[92m{body_count} tech matches\033[0m "
             f"\033[90m({beacon_elapsed:.1f}s)\033[0m\n"
         )
+        self._save_phase("tech")
+        self._save_phase("flagged")
 
         # ── Phase 9: Nmap port & service scanning ──────────────────────────
         if self.nmap_scanner.available:
@@ -498,6 +572,7 @@ class ReconEngine:
                     self.result.nmap_results = nmap_results
                     self.result.nmap_stats = nmap_stats.to_dict()
                     self.result.nmap_available = True
+                    self._save_phase("nmap")
 
                     # Print nmap summary
                     if nmap_stats.hosts_up > 0:
@@ -543,6 +618,70 @@ class ReconEngine:
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
 
+        # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
+        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            rdp_output_dir = os.path.join(".", domain)
+            os.makedirs(rdp_output_dir, exist_ok=True)
+
+            rdp_results = self._safe_scan(
+                "rdp-brute", self.rdp_scanner.scan,
+                self.result.nmap_results, output_dir=rdp_output_dir,
+            )
+
+            if rdp_results is not None:
+                rdp_stats = self.rdp_scanner.stats
+
+                self.result.rdp_results = rdp_results
+                self.result.rdp_stats = rdp_stats.to_dict()
+                self.result.rdp_available = True
+                self._save_phase("rdp")
+
+                if rdp_stats.credentials_found > 0:
+                    pwn_str = ""
+                    if rdp_stats.pwned_count > 0:
+                        pwn_str = (
+                            f" | \033[1;91m{rdp_stats.pwned_count} Pwn3d!\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m rdp-brute: "
+                        f"\033[1;92m{rdp_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{rdp_stats.hosts_tested} hosts tested | "
+                        f"{rdp_stats.total_users_tested} users tested"
+                        f"{pwn_str} "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m rdp-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{rdp_stats.hosts_tested}/{rdp_stats.total_rdp_hosts} hosts tested "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if rdp_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m rdp-brute: "
+                        f"{rdp_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
+                )
+        elif (not self.rdp_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            # Check if there are any RDP hosts to notify user
+            rdp_check = self.rdp_scanner._get_rdp_hosts(self.result.nmap_results) if hasattr(self.rdp_scanner, '_get_rdp_hosts') else {}
+            if rdp_check:
+                print(
+                    f"\033[93m[!]\033[0m netexec not found – skipping RDP brute-force "
+                    f"({len(rdp_check)} RDP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: pip install netexec\033[0m\n"
+                )
+
         # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
         if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
             # Collect all IPs from nmap results
@@ -562,6 +701,7 @@ class ReconEngine:
                     self.result.enum4linux_results = enum_results
                     self.result.enum4linux_stats = enum_stats.to_dict()
                     self.result.enum4linux_available = True
+                    self._save_phase("enum4linux")
 
                     # Print enum4linux summary
                     if enum_stats.hosts_responded > 0:
@@ -631,6 +771,7 @@ class ReconEngine:
                     self.result.msf_results = msf_results
                     self.result.msf_stats = msf_stats.to_dict()
                     self.result.msf_available = True
+                    self._save_phase("msf")
 
                     # Print MSF summary
                     if msf_stats.credentials_found > 0:
@@ -697,6 +838,7 @@ class ReconEngine:
                 self.result.cme_results = cme_results
                 self.result.cme_stats = cme_stats.to_dict()
                 self.result.cme_available = True
+                self._save_phase("cme")
 
                 # Print CME summary
                 if cme_stats.protocols_scanned > 0:
@@ -795,6 +937,7 @@ class ReconEngine:
                     self.result.nmap_results = nmap_results
                     self.result.nmap_stats = nmap_stats.to_dict()
                     self.result.nmap_available = True
+                    self._save_phase("nmap")
 
                     if nmap_stats.hosts_up > 0:
                         svc_str = ", ".join(
@@ -835,6 +978,69 @@ class ReconEngine:
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
 
+        # ── RDP brute-force (direct mode) ──────────────────────────────────
+        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            rdp_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(rdp_output_dir, exist_ok=True)
+
+            rdp_results = self._safe_scan(
+                "rdp-brute", self.rdp_scanner.scan,
+                self.result.nmap_results, output_dir=rdp_output_dir,
+            )
+
+            if rdp_results is not None:
+                rdp_stats = self.rdp_scanner.stats
+
+                self.result.rdp_results = rdp_results
+                self.result.rdp_stats = rdp_stats.to_dict()
+                self.result.rdp_available = True
+                self._save_phase("rdp")
+
+                if rdp_stats.credentials_found > 0:
+                    pwn_str = ""
+                    if rdp_stats.pwned_count > 0:
+                        pwn_str = (
+                            f" | \033[1;91m{rdp_stats.pwned_count} Pwn3d!\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m rdp-brute: "
+                        f"\033[1;92m{rdp_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{rdp_stats.hosts_tested} hosts tested | "
+                        f"{rdp_stats.total_users_tested} users tested"
+                        f"{pwn_str} "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m rdp-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{rdp_stats.hosts_tested}/{rdp_stats.total_rdp_hosts} hosts tested "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if rdp_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m rdp-brute: "
+                        f"{rdp_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
+                )
+        elif (not self.rdp_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            rdp_check = self.rdp_scanner._get_rdp_hosts(self.result.nmap_results) if hasattr(self.rdp_scanner, '_get_rdp_hosts') else {}
+            if rdp_check:
+                print(
+                    f"\033[93m[!]\033[0m netexec not found – skipping RDP brute-force "
+                    f"({len(rdp_check)} RDP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: pip install netexec\033[0m\n"
+                )
+
         # ── Enum4linux SMB/Windows enumeration (direct mode) ───────────────
         if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
             enum_ips = set(self.result.nmap_results.keys())
@@ -853,6 +1059,7 @@ class ReconEngine:
                     self.result.enum4linux_results = enum_results
                     self.result.enum4linux_stats = enum_stats.to_dict()
                     self.result.enum4linux_available = True
+                    self._save_phase("enum4linux")
 
                     if enum_stats.hosts_responded > 0:
                         parts = [
@@ -983,6 +1190,7 @@ class ReconEngine:
                 self.result.cme_results = cme_results
                 self.result.cme_stats = cme_stats.to_dict()
                 self.result.cme_available = True
+                self._save_phase("cme")
 
                 if cme_stats.protocols_scanned > 0:
                     proto_parts = []

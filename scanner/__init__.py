@@ -14,6 +14,7 @@ from .nuclei_scan import NucleiScanner
 from .enum4linux_scan import Enum4linuxScanner
 from .cme_scan import CMEScanner
 from .msf_smb_brute import MSFSMBBruteScanner
+from .rdp_brute import RDPBruteScanner
 
 __all__ = [
     "InfrastructureScanner",
@@ -26,4 +27,5 @@ __all__ = [
     "Enum4linuxScanner",
     "CMEScanner",
     "MSFSMBBruteScanner",
+    "RDPBruteScanner",
 ]

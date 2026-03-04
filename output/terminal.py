@@ -800,6 +800,73 @@ class TerminalRenderer:
                         f"    {C.VULN}!! {ip} {domain_str}{user}:{pwd}{C.RESET}"
                     )
 
+    def _render_rdp(self, result: ScanResult):
+        """Render RDP brute-force results summary."""
+        rdp_stats = getattr(result, 'rdp_stats', {})
+        rdp_available = getattr(result, 'rdp_available', False)
+        rdp_results = getattr(result, 'rdp_results', {})
+
+        if not rdp_available or not rdp_stats:
+            return
+
+        total_hosts = rdp_stats.get("total_rdp_hosts", 0)
+        hosts_tested = rdp_stats.get("hosts_tested", 0)
+        hosts_skipped = rdp_stats.get("hosts_skipped", 0)
+        total_users = rdp_stats.get("total_users_tested", 0)
+        creds_found = rdp_stats.get("credentials_found", 0)
+        pwned_count = rdp_stats.get("pwned_count", 0)
+        scan_time = rdp_stats.get("scan_time", 0.0)
+
+        if total_hosts == 0:
+            return
+
+        # Main RDP line
+        parts = [
+            f"{C.BRIGHT_GREEN}{hosts_tested}{C.RESET}{C.WHITE}/{total_hosts} RDP hosts tested{C.RESET}",
+            f"{C.BRIGHT_GREEN}{total_users}{C.RESET}{C.WHITE} users tested{C.RESET}",
+        ]
+        if creds_found > 0:
+            parts.append(
+                f"{C.VULN}{creds_found} credentials found{C.RESET}"
+            )
+            if pwned_count > 0:
+                parts.append(
+                    f"\033[1;91m{pwned_count} Pwn3d!\033[0m"
+                )
+        else:
+            parts.append(
+                f"{C.DIM}0 credentials{C.RESET}"
+            )
+        if hosts_skipped > 0:
+            parts.append(
+                f"{C.BRIGHT_YELLOW}{hosts_skipped} skipped{C.RESET}"
+            )
+        content = (
+            f"{C.LABEL}RDP-Brute:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Show found credentials
+        if creds_found > 0 and rdp_results:
+            for ip, host_result in rdp_results.items():
+                creds = []
+                if hasattr(host_result, 'credentials'):
+                    creds = host_result.credentials
+                elif isinstance(host_result, dict):
+                    creds = host_result.get('credentials', [])
+                for cred in creds:
+                    user = cred.username if hasattr(cred, 'username') else cred.get('username', '')
+                    pwd = cred.password if hasattr(cred, 'password') else cred.get('password', '')
+                    domain = cred.domain if hasattr(cred, 'domain') else cred.get('domain', '')
+                    pwned = cred.pwned if hasattr(cred, 'pwned') else cred.get('pwned', False)
+                    domain_str = f"{domain}\\" if domain else ""
+                    pwn_str = " (Pwn3d!)" if pwned else ""
+                    self._box_line(
+                        f"    {C.VULN}!! {ip} {domain_str}{user}:{pwd}{pwn_str}{C.RESET}"
+                    )
+
     def _render_stats(self, result: ScanResult):
         """Render the Time/Total/DB stats line."""
         parts = [
@@ -871,6 +938,9 @@ class TerminalRenderer:
 
         # MSF SMB Brute-force
         self._render_msf(result)
+
+        # RDP Brute-force
+        self._render_rdp(result)
 
         # Stats
         self._render_stats(result)

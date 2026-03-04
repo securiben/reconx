@@ -349,6 +349,11 @@ class ScanResult:
     msf_stats: Dict = field(default_factory=dict)
     msf_available: bool = False
 
+    # RDP brute-force (netexec)
+    rdp_results: Dict = field(default_factory=dict)
+    rdp_stats: Dict = field(default_factory=dict)
+    rdp_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -423,6 +428,14 @@ class ScanResult:
                 "hosts": {
                     ip: r.to_dict() if hasattr(r, 'to_dict') else r
                     for ip, r in self.msf_results.items()
+                },
+            }
+        if self.rdp_results:
+            d["rdp_brute"] = {
+                "stats": self.rdp_stats,
+                "hosts": {
+                    ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for ip, r in self.rdp_results.items()
                 },
             }
         return d

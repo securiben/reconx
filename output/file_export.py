@@ -77,6 +77,7 @@ class FileExporter:
         self._export_enum4linux(domain_dir, result)
         self._export_cme(domain_dir, result)
         self._export_msf(domain_dir, result)
+        self._export_rdp(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -1102,6 +1103,80 @@ class FileExporter:
             "hosts": {
                 ip: r.to_dict() if hasattr(r, 'to_dict') else r
                 for ip, r in msf_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_rdp(self, outdir: str, result: ScanResult):
+        """
+        Export RDP brute-force results.
+        Creates credentials file and structured JSON summary.
+        """
+        rdp_stats = getattr(result, 'rdp_stats', {})
+        rdp_results = getattr(result, 'rdp_results', {})
+        if not getattr(result, 'rdp_available', False) or not rdp_results:
+            return
+
+        domain = result.target_domain
+
+        # ── rdp_credentials.txt ── Human-readable credential list ─────
+        filepath = os.path.join(outdir, "rdp_credentials.txt")
+        lines = [f"# ReconX - RDP Brute-force Results for {domain}"]
+        lines.append(f"# Hosts tested: {rdp_stats.get('hosts_tested', 0)}/{rdp_stats.get('total_rdp_hosts', 0)}")
+        lines.append(f"# Hosts skipped: {rdp_stats.get('hosts_skipped', 0)}")
+        lines.append(f"# Total users tested: {rdp_stats.get('total_users_tested', 0)}")
+        lines.append(f"# Credentials found: {rdp_stats.get('credentials_found', 0)}")
+        lines.append(f"# Pwn3d: {rdp_stats.get('pwned_count', 0)}")
+        lines.append(f"# Scan time: {rdp_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for ip in sorted(rdp_results.keys()):
+            host_result = rdp_results[ip]
+            creds = []
+            if hasattr(host_result, 'credentials'):
+                creds = host_result.credentials
+            elif isinstance(host_result, dict):
+                creds = host_result.get('credentials', [])
+
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 3389)
+            hostname = host_result.hostname if hasattr(host_result, 'hostname') else host_result.get('hostname', '')
+            os_info = host_result.os_info if hasattr(host_result, 'os_info') else host_result.get('os_info', '')
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+            users_tested = host_result.users_tested if hasattr(host_result, 'users_tested') else host_result.get('users_tested', [])
+
+            lines.append(f"── {ip}:{port} ──")
+            if hostname:
+                lines.append(f"  Hostname: {hostname}")
+            if os_info:
+                lines.append(f"  OS: {os_info}")
+            lines.append(f"  Users tested: {', '.join(users_tested) if isinstance(users_tested, list) else users_tested}")
+            if skipped:
+                lines.append(f"  SKIPPED: {skip_reason}")
+
+            if creds:
+                for cred in creds:
+                    user = cred.username if hasattr(cred, 'username') else cred.get('username', '')
+                    pwd = cred.password if hasattr(cred, 'password') else cred.get('password', '')
+                    cred_domain = cred.domain if hasattr(cred, 'domain') else cred.get('domain', '')
+                    pwned = cred.pwned if hasattr(cred, 'pwned') else cred.get('pwned', False)
+                    domain_str = f"{cred_domain}\\" if cred_domain else ""
+                    pwn_str = " (Pwn3d!)" if pwned else ""
+                    lines.append(f"  [+] {domain_str}{user}:{pwd}{pwn_str}")
+            else:
+                lines.append("  No valid credentials found")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── rdp_brute_summary.json ── Structured JSON ─────────────────
+        filepath_json = os.path.join(outdir, "rdp_brute_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": rdp_stats,
+            "hosts": {
+                ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                for ip, r in rdp_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
