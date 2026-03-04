@@ -167,11 +167,12 @@ class NmapScanner:
             )
         if icmp_down:
             print(
-                f"\033[93m[!]\033[0m nmap: ICMP down (will use -Pn) → "
+                f"\033[93m[!]\033[0m nmap: ICMP down → "
                 f"\033[96m{', '.join(sorted(icmp_down))}\033[0m"
+                f" \033[90m(skipped — ICMP not responding)\033[0m"
             )
 
-        # ── Phase 2: Full scan ──────────────────────────────────────────
+        # ── Phase 2: Full scan (only ICMP-up hosts) ─────────────────────
         # Prepare temp dir
         tmpdir = tempfile.mkdtemp(prefix="reconx_nmap_")
 
@@ -189,15 +190,16 @@ class NmapScanner:
                     extra_flags=[], label="ICMP-up hosts",
                 )
 
-            # Scan ICMP-down hosts with -Pn
-            if icmp_down:
-                output_prefix_down = os.path.join(
-                    output_dir or tmpdir, "nmap_scan_pn"
-                )
-                self._run_nmap_scan(
-                    icmp_down, output_prefix_down, tmpdir,
-                    extra_flags=["-Pn"], label="ICMP-down hosts (-Pn)",
-                )
+            # NOTE: ICMP-down hosts are skipped (disabled).
+            # To re-enable, uncomment the block below to scan with -Pn:
+            # if icmp_down:
+            #     output_prefix_down = os.path.join(
+            #         output_dir or tmpdir, "nmap_scan_pn"
+            #     )
+            #     self._run_nmap_scan(
+            #         icmp_down, output_prefix_down, tmpdir,
+            #         extra_flags=["-Pn"], label="ICMP-down hosts (-Pn)",
+            #     )
 
             # Copy output files to output_dir if needed
             if output_dir and output_dir != tmpdir:

@@ -916,7 +916,7 @@ class ReconEngine:
         )
         print(
             f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
-            f"jumping to nmap, RDP-brute, enum4linux, MSF-brute & CME\n"
+            f"jumping to nmap, RDP-brute, enum4linux, MSF-brute, CME & Nuclei\n"
         )
 
         # ── Nmap port & service scanning ───────────────────────────────────
@@ -1226,6 +1226,64 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: pip install crackmapexec | or: https://github.com/byt3bl33d3r/CrackMapExec\033[0m\n"
+            )
+
+        # ── Nuclei vulnerability scanning (direct mode) ──────────────────
+        if self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            # Use IPs from nmap results as nuclei targets
+            nuclei_targets = sorted(self.result.nmap_results.keys())
+            if nuclei_targets:
+                nuclei_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(nuclei_output_dir, exist_ok=True)
+
+                nuclei_results = self._safe_scan(
+                    "nuclei", self.nuclei_scanner.scan,
+                    nuclei_targets, output_dir=nuclei_output_dir,
+                )
+
+                if nuclei_results is not None:
+                    nuclei_stats = self.nuclei_scanner.stats
+
+                    self.result.nuclei_results = nuclei_results
+                    self.result.nuclei_stats = nuclei_stats.to_dict()
+                    self.result.nuclei_available = True
+                    self._save_phase("nuclei")
+
+                    total = nuclei_stats.total_findings
+                    if total > 0:
+                        sev_parts = []
+                        if nuclei_stats.critical > 0:
+                            sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
+                        if nuclei_stats.high > 0:
+                            sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
+                        if nuclei_stats.medium > 0:
+                            sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
+                        if nuclei_stats.low > 0:
+                            sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
+                        if nuclei_stats.info > 0:
+                            sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
+                            f"{' | '.join(sev_parts)} "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m "
+                            f"on {nuclei_stats.hosts_scanned} hosts "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m nuclei: skipped by user\n"
+                    )
+        elif not self.nuclei_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
+            )
+            print(
+                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
             )
 
         # ── Statistics & Output ────────────────────────────────────────────

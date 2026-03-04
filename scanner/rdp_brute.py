@@ -411,7 +411,7 @@ class RDPBruteScanner:
             "--port", str(port),
             "-u", username,
             "-p", pass_file,
-            "--no-bruteforce",  # Test each password, stop on success is default
+            "--continue-on-success",  # Don't stop after first valid cred
         ]
 
         try:

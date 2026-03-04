@@ -62,7 +62,7 @@ def print_scan_start(label: str, demo: bool, direct: bool = False):
     print(f"\033[1;97m[»]\033[0m {mode}Target: \033[1;96m{label}\033[0m")
     if direct:
         print(f"\033[1;97m[»]\033[0m Mode: \033[93mDirect scan\033[0m (IP/CIDR — skipping subdomain enumeration)")
-        print(f"\033[1;97m[»]\033[0m Initializing nmap, RDP-brute, enum4linux, MSF-brute & CME ...\n")
+        print(f"\033[1;97m[»]\033[0m Initializing nmap, RDP-brute, enum4linux, MSF-brute, CME & Nuclei ...\n")
     else:
         print(f"\033[1;97m[»]\033[0m Initializing sources & scanners...")
         print(f"\033[1;97m[»]\033[0m Launching concurrent enumeration...\n")
