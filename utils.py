@@ -414,6 +414,11 @@ def resolve_targets(value: str) -> Tuple[str, List[str], bool]:
                 all_targets.append(t.strip())
                 has_domain = True
         label = os.path.basename(value)
+        # Strip file extension so the output directory doesn't collide
+        # with the input file (e.g. "issa1.txt" → "issa1")
+        label_root, label_ext = os.path.splitext(label)
+        if label_ext:
+            label = label_root
         # If file contains ANY domain names, run full pipeline
         # If file is all IPs/CIDRs, direct mode
         return label, all_targets, not has_domain

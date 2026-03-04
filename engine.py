@@ -916,7 +916,7 @@ class ReconEngine:
         )
         print(
             f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
-            f"jumping to nmap, CME & enum4linux\n"
+            f"jumping to nmap, RDP-brute, enum4linux, MSF-brute & CME\n"
         )
 
         # ── Nmap port & service scanning ───────────────────────────────────
