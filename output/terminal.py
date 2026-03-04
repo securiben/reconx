@@ -305,17 +305,31 @@ class TerminalRenderer:
             f"{C.BRIGHT_GREEN}{alive}{C.RESET}{C.WHITE}/{total} alive{C.RESET}",
         ]
 
-        # Status distribution
+        # Status distribution — individual codes (200, 301, 403, ...)
+        status_codes = stats.get("status_codes", {})
         status_parts = []
-        for code_range in sorted(status_dist.keys()):
-            cnt = status_dist[code_range]
-            color = (
-                C.BRIGHT_GREEN if code_range == "2xx"
-                else C.BRIGHT_YELLOW if code_range == "3xx"
-                else C.BRIGHT_RED if code_range in ("4xx", "5xx")
-                else C.WHITE
-            )
-            status_parts.append(f"{color}{cnt} {code_range}{C.RESET}")
+        if status_codes:
+            for sc in sorted(status_codes.keys()):
+                cnt = status_codes[sc]
+                sc_class = sc // 100
+                color = (
+                    C.BRIGHT_GREEN if sc_class == 2
+                    else C.BRIGHT_YELLOW if sc_class == 3
+                    else C.BRIGHT_RED if sc_class in (4, 5)
+                    else C.WHITE
+                )
+                status_parts.append(f"{color}{cnt}\u00d7{sc}{C.RESET}")
+        else:
+            # Fallback to range-based distribution
+            for code_range in sorted(status_dist.keys()):
+                cnt = status_dist[code_range]
+                color = (
+                    C.BRIGHT_GREEN if code_range == "2xx"
+                    else C.BRIGHT_YELLOW if code_range == "3xx"
+                    else C.BRIGHT_RED if code_range in ("4xx", "5xx")
+                    else C.WHITE
+                )
+                status_parts.append(f"{color}{cnt} {code_range}{C.RESET}")
         if status_parts:
             parts.append(" ".join(status_parts))
 
@@ -436,6 +450,81 @@ class TerminalRenderer:
                 )
 
                 self._box_line(line)
+
+    def _render_nuclei(self, result: ScanResult):
+        """Render the Nuclei vulnerability scan summary."""
+        nuclei_stats = getattr(result, 'nuclei_stats', {})
+        nuclei_available = getattr(result, 'nuclei_available', False)
+        nuclei_results = getattr(result, 'nuclei_results', [])
+
+        if not nuclei_available or not nuclei_stats:
+            return
+
+        total = nuclei_stats.get("total_findings", 0)
+        critical = nuclei_stats.get("critical", 0)
+        high = nuclei_stats.get("high", 0)
+        medium = nuclei_stats.get("medium", 0)
+        low = nuclei_stats.get("low", 0)
+        hosts_scanned = nuclei_stats.get("hosts_scanned", 0)
+        scan_time = nuclei_stats.get("scan_time", 0.0)
+
+        if total == 0 and hosts_scanned == 0:
+            return
+
+        # Severity color map
+        sev_color = {
+            "critical": C.VULN,
+            "high": C.BRIGHT_RED,
+            "medium": C.BRIGHT_YELLOW,
+            "low": C.BRIGHT_CYAN,
+        }
+
+        # Main nuclei line
+        parts = [
+            f"{C.BRIGHT_GREEN}{total}{C.RESET}{C.WHITE} finding(s){C.RESET}",
+            f"{C.WHITE}{hosts_scanned} hosts scanned{C.RESET}",
+        ]
+        content = (
+            f"{C.LABEL}Nuclei:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Severity breakdown
+        sev_parts = []
+        if critical > 0:
+            sev_parts.append(f"{sev_color['critical']}{critical} critical{C.RESET}")
+        if high > 0:
+            sev_parts.append(f"{sev_color['high']}{high} high{C.RESET}")
+        if medium > 0:
+            sev_parts.append(f"{sev_color['medium']}{medium} medium{C.RESET}")
+        if low > 0:
+            sev_parts.append(f"{sev_color['low']}{low} low{C.RESET}")
+        if sev_parts:
+            self._box_line(f"    {C.DIM}Severity:{C.RESET} {', '.join(sev_parts)}")
+
+        # Show critical/high findings detail (limit to 10)
+        shown = 0
+        for finding in nuclei_results:
+            sev = finding.severity if hasattr(finding, 'severity') else finding.get('severity', '')
+            if sev not in ('critical', 'high'):
+                continue
+            tid = finding.template_id if hasattr(finding, 'template_id') else finding.get('template_id', '')
+            tname = finding.template_name if hasattr(finding, 'template_name') else finding.get('template_name', tid)
+            host = finding.host if hasattr(finding, 'host') else finding.get('host', '')
+            color = sev_color.get(sev, C.WHITE)
+            self._box_line(
+                f"    {color}!! [{sev.upper()}] {tname}{C.RESET} {C.DIM}→{C.RESET} {C.WHITE}{host}{C.RESET}"
+            )
+            shown += 1
+            if shown >= 10:
+                remaining = sum(1 for f in nuclei_results
+                    if (f.severity if hasattr(f, 'severity') else f.get('severity', ''))
+                    in ('critical', 'high')) - shown
+                if remaining > 0:
+                    self._box_line(f"    {C.DIM}... and {remaining} more critical/high findings{C.RESET}")
+                break
 
     def _render_nmap(self, result: ScanResult):
         """Render the Nmap port scan summary line."""
@@ -647,6 +736,66 @@ class TerminalRenderer:
                         f"{C.DIM}(relay targets){C.RESET}"
                     )
 
+    def _render_msf(self, result: ScanResult):
+        """Render MSF SMB brute-force results summary."""
+        msf_stats = getattr(result, 'msf_stats', {})
+        msf_available = getattr(result, 'msf_available', False)
+        msf_results = getattr(result, 'msf_results', {})
+
+        if not msf_available or not msf_stats:
+            return
+
+        total_ips = msf_stats.get("total_ips", 0)
+        ips_tested = msf_stats.get("ips_tested", 0)
+        ips_skipped = msf_stats.get("ips_skipped", 0)
+        total_users = msf_stats.get("total_users_tested", 0)
+        creds_found = msf_stats.get("credentials_found", 0)
+        scan_time = msf_stats.get("scan_time", 0.0)
+
+        if total_ips == 0:
+            return
+
+        # Main MSF line
+        parts = [
+            f"{C.BRIGHT_GREEN}{ips_tested}{C.RESET}{C.WHITE}/{total_ips} IPs tested{C.RESET}",
+            f"{C.BRIGHT_GREEN}{total_users}{C.RESET}{C.WHITE} users tested{C.RESET}",
+        ]
+        if creds_found > 0:
+            parts.append(
+                f"{C.VULN}{creds_found} credentials found{C.RESET}"
+            )
+        else:
+            parts.append(
+                f"{C.DIM}0 credentials{C.RESET}"
+            )
+        if ips_skipped > 0:
+            parts.append(
+                f"{C.BRIGHT_YELLOW}{ips_skipped} skipped{C.RESET}"
+            )
+        content = (
+            f"{C.LABEL}MSF-Brute:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Show found credentials
+        if creds_found > 0 and msf_results:
+            for ip, host_result in msf_results.items():
+                creds = []
+                if hasattr(host_result, 'credentials'):
+                    creds = host_result.credentials
+                elif isinstance(host_result, dict):
+                    creds = host_result.get('credentials', [])
+                for cred in creds:
+                    user = cred.username if hasattr(cred, 'username') else cred.get('username', '')
+                    pwd = cred.password if hasattr(cred, 'password') else cred.get('password', '')
+                    domain = cred.domain if hasattr(cred, 'domain') else cred.get('domain', '')
+                    domain_str = f"{domain}\\" if domain else ""
+                    self._box_line(
+                        f"    {C.VULN}!! {ip} {domain_str}{user}:{pwd}{C.RESET}"
+                    )
+
     def _render_stats(self, result: ScanResult):
         """Render the Time/Total/DB stats line."""
         parts = [
@@ -701,6 +850,9 @@ class TerminalRenderer:
         # HTTPX Probe
         self._render_httpx(result)
 
+        # Nuclei
+        self._render_nuclei(result)
+
         # Tech
         self._render_tech(result)
 
@@ -712,6 +864,9 @@ class TerminalRenderer:
 
         # CrackMapExec
         self._render_cme(result)
+
+        # MSF SMB Brute-force
+        self._render_msf(result)
 
         # Stats
         self._render_stats(result)

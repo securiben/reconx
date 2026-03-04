@@ -72,9 +72,11 @@ class FileExporter:
         self._export_infrastructure(domain_dir, result)
         self._export_sources(domain_dir, result)
         self._export_httpx(domain_dir, result)
+        self._export_nuclei(domain_dir, result)
         self._export_nmap(domain_dir, result)
         self._export_enum4linux(domain_dir, result)
         self._export_cme(domain_dir, result)
+        self._export_msf(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -657,6 +659,65 @@ class FileExporter:
                 lines.append("")
             self._write(filepath, "\n".join(lines) + "\n")
 
+    def _export_nuclei(self, outdir: str, result: ScanResult):
+        """
+        Export nuclei vulnerability scan results.
+        Note: nuclei_results.txt is already written by the scanner directly.
+        This exports a structured summary and JSON.
+        """
+        nuclei_stats = getattr(result, 'nuclei_stats', {})
+        nuclei_results = getattr(result, 'nuclei_results', [])
+        if not getattr(result, 'nuclei_available', False) or not nuclei_results:
+            return
+
+        domain = result.target_domain
+
+        # ── nuclei_summary.txt ── Human-readable summary ─────────────
+        filepath = os.path.join(outdir, "nuclei_summary.txt")
+        lines = [f"# ReconX - Nuclei Vulnerability Scan for {domain}"]
+        lines.append(f"# Total findings: {nuclei_stats.get('total_findings', 0)}")
+        lines.append(f"# Critical: {nuclei_stats.get('critical', 0)}")
+        lines.append(f"# High: {nuclei_stats.get('high', 0)}")
+        lines.append(f"# Medium: {nuclei_stats.get('medium', 0)}")
+        lines.append(f"# Low: {nuclei_stats.get('low', 0)}")
+        lines.append(f"# Hosts scanned: {nuclei_stats.get('hosts_scanned', 0)}")
+        lines.append(f"# Scan time: {nuclei_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        # Group by severity
+        for sev in ["critical", "high", "medium", "low"]:
+            sev_findings = [
+                f for f in nuclei_results
+                if (f.severity if hasattr(f, 'severity') else f.get('severity', '')) == sev
+            ]
+            if not sev_findings:
+                continue
+            lines.append(f"── {sev.upper()} ({len(sev_findings)}) ──")
+            for finding in sev_findings:
+                tid = finding.template_id if hasattr(finding, 'template_id') else finding.get('template_id', '')
+                tname = finding.template_name if hasattr(finding, 'template_name') else finding.get('template_name', tid)
+                host = finding.host if hasattr(finding, 'host') else finding.get('host', '')
+                matched = finding.matched_at if hasattr(finding, 'matched_at') else finding.get('matched_at', host)
+                lines.append(f"  [{tid}] {tname}")
+                lines.append(f"    Host: {host}")
+                if matched and matched != host:
+                    lines.append(f"    Matched: {matched}")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── nuclei_summary.json ── Structured JSON ───────────────────
+        filepath_json = os.path.join(outdir, "nuclei_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": nuclei_stats,
+            "findings": [
+                r.to_dict() if hasattr(r, 'to_dict') else r
+                for r in nuclei_results
+            ],
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
     def _export_nmap(self, outdir: str, result: ScanResult):
         """
         Export nmap scan results as summary text file.
@@ -976,6 +1037,71 @@ class FileExporter:
             "protocols": {
                 proto: r.to_dict() if hasattr(r, 'to_dict') else r
                 for proto, r in cme_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_msf(self, outdir: str, result: ScanResult):
+        """
+        Export MSF SMB brute-force results.
+        Creates credentials file and structured JSON summary.
+        """
+        msf_stats = getattr(result, 'msf_stats', {})
+        msf_results = getattr(result, 'msf_results', {})
+        if not getattr(result, 'msf_available', False) or not msf_results:
+            return
+
+        domain = result.target_domain
+
+        # ── msf_smb_credentials.txt ── Human-readable credential list ─
+        filepath = os.path.join(outdir, "msf_smb_credentials.txt")
+        lines = [f"# ReconX - MSF SMB Brute-force Results for {domain}"]
+        lines.append(f"# IPs tested: {msf_stats.get('ips_tested', 0)}/{msf_stats.get('total_ips', 0)}")
+        lines.append(f"# IPs skipped: {msf_stats.get('ips_skipped', 0)}")
+        lines.append(f"# Total users tested: {msf_stats.get('total_users_tested', 0)}")
+        lines.append(f"# Credentials found: {msf_stats.get('credentials_found', 0)}")
+        lines.append(f"# Scan time: {msf_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for ip in sorted(msf_results.keys()):
+            host_result = msf_results[ip]
+            creds = []
+            if hasattr(host_result, 'credentials'):
+                creds = host_result.credentials
+            elif isinstance(host_result, dict):
+                creds = host_result.get('credentials', [])
+
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+            users_tested = host_result.users_tested if hasattr(host_result, 'users_tested') else host_result.get('users_tested', 0)
+
+            lines.append(f"── {ip} ──")
+            lines.append(f"  Users tested: {users_tested}")
+            if skipped:
+                lines.append(f"  SKIPPED: {skip_reason}")
+
+            if creds:
+                for cred in creds:
+                    user = cred.username if hasattr(cred, 'username') else cred.get('username', '')
+                    pwd = cred.password if hasattr(cred, 'password') else cred.get('password', '')
+                    cred_domain = cred.domain if hasattr(cred, 'domain') else cred.get('domain', '')
+                    port = cred.port if hasattr(cred, 'port') else cred.get('port', 445)
+                    domain_str = f"{cred_domain}\\" if cred_domain else ""
+                    lines.append(f"  [+] {domain_str}{user}:{pwd} (port {port})")
+            else:
+                lines.append("  No valid credentials found")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── msf_smb_summary.json ── Structured JSON ──────────────────
+        filepath_json = os.path.join(outdir, "msf_smb_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": msf_stats,
+            "hosts": {
+                ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                for ip, r in msf_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

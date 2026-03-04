@@ -470,6 +470,7 @@ class HttpxProbe:
     def get_stats(self) -> dict:
         """Get probe statistics."""
         status_dist = {}
+        status_codes = {}   # individual status codes: {200: 30, 301: 4, ...}
         cdn_count = 0
         tech_count = 0
         server_dist = {}
@@ -480,6 +481,8 @@ class HttpxProbe:
             sc = r.status_code
             sc_range = f"{sc // 100}xx"
             status_dist[sc_range] = status_dist.get(sc_range, 0) + 1
+            if sc:
+                status_codes[sc] = status_codes.get(sc, 0) + 1
 
             # CDN
             if r.cdn:
@@ -502,6 +505,7 @@ class HttpxProbe:
             "total_probed": self.total_probed,
             "alive": self.alive_count,
             "status_distribution": status_dist,
+            "status_codes": status_codes,
             "cdn_detected": cdn_count,
             "tech_detected": tech_count,
             "server_distribution": server_dist,

@@ -10,8 +10,10 @@ from .takeover import TakeoverScanner
 from .tech_profiler import TechProfiler
 from .httpx_probe import HttpxProbe
 from .nmap_scan import NmapScanner
+from .nuclei_scan import NucleiScanner
 from .enum4linux_scan import Enum4linuxScanner
 from .cme_scan import CMEScanner
+from .msf_smb_brute import MSFSMBBruteScanner
 
 __all__ = [
     "InfrastructureScanner",
@@ -20,6 +22,8 @@ __all__ = [
     "TechProfiler",
     "HttpxProbe",
     "NmapScanner",
+    "NucleiScanner",
     "Enum4linuxScanner",
     "CMEScanner",
+    "MSFSMBBruteScanner",
 ]

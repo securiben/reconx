@@ -324,6 +324,11 @@ class ScanResult:
     httpx_stats: Dict = field(default_factory=dict)
     httpx_available: bool = False
 
+    # Nuclei vulnerability scanner
+    nuclei_results: List = field(default_factory=list)
+    nuclei_stats: Dict = field(default_factory=dict)
+    nuclei_available: bool = False
+
     # Nmap port scanner
     nmap_results: Dict = field(default_factory=dict)
     nmap_stats: Dict = field(default_factory=dict)
@@ -338,6 +343,11 @@ class ScanResult:
     cme_results: Dict = field(default_factory=dict)
     cme_stats: Dict = field(default_factory=dict)
     cme_available: bool = False
+
+    # Metasploit SMB brute-force
+    msf_results: Dict = field(default_factory=dict)
+    msf_stats: Dict = field(default_factory=dict)
+    msf_available: bool = False
 
     def to_dict(self) -> dict:
         d = {
@@ -375,6 +385,14 @@ class ScanResult:
         }
         if self.httpx_stats:
             d["httpx"] = self.httpx_stats
+        if self.nuclei_results:
+            d["nuclei"] = {
+                "stats": self.nuclei_stats,
+                "findings": [
+                    r.to_dict() if hasattr(r, 'to_dict') else r
+                    for r in self.nuclei_results
+                ],
+            }
         if self.nmap_results:
             d["nmap"] = {
                 "stats": self.nmap_stats,
@@ -397,6 +415,14 @@ class ScanResult:
                 "protocols": {
                     proto: r.to_dict() if hasattr(r, 'to_dict') else r
                     for proto, r in self.cme_results.items()
+                },
+            }
+        if self.msf_results:
+            d["msf_smb_brute"] = {
+                "stats": self.msf_stats,
+                "hosts": {
+                    ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for ip, r in self.msf_results.items()
                 },
             }
         return d

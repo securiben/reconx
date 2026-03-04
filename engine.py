@@ -5,8 +5,11 @@ Manages concurrent execution and result aggregation.
 """
 
 import os
+import sys
 import time
 import random
+import signal
+import threading
 from typing import Dict, List, Optional
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -27,7 +30,8 @@ from .sources.base import BaseSource
 from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
-    NmapScanner, Enum4linuxScanner, CMEScanner,
+    NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
+    MSFSMBBruteScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -67,9 +71,88 @@ class ReconEngine:
         self.takeover_scanner = TakeoverScanner(config.scanner)
         self.tech_profiler = TechProfiler(config.scanner)
         self.httpx_probe = HttpxProbe(config.scanner)
+        self.nuclei_scanner = NucleiScanner(config.scanner)
         self.nmap_scanner = NmapScanner(config.scanner)
         self.enum4linux_scanner = Enum4linuxScanner(config.scanner)
         self.cme_scanner = CMEScanner(config.scanner)
+        self.msf_scanner = MSFSMBBruteScanner(config.scanner)
+
+        # Ctrl+C skip state
+        self._skip_requested = False
+        self._current_phase = ""
+
+    @staticmethod
+    def _prompt_skip(phase_name: str) -> bool:
+        """
+        Ask the user whether to skip the current phase or abort entirely.
+        Returns True if user wants to skip, False if user wants to continue waiting.
+        Raises SystemExit if user wants to abort the whole scan.
+        """
+        try:
+            print(
+                f"\n\033[93m[!]\033[0m Ctrl+C detected during \033[96m{phase_name}\033[0m"
+            )
+            print(
+                f"\033[93m[?]\033[0m Skip \033[96m{phase_name}\033[0m and continue to next step? "
+                f"\033[1;97m[y/N/q]\033[0m "
+                f"\033[90m(y=skip, n=resume, q=quit)\033[0m"
+            )
+            answer = ""
+            try:
+                answer = input("    > ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                # Second Ctrl+C during prompt = quit
+                print(f"\n\033[91m[!]\033[0m Aborting scan.\033[0m")
+                raise SystemExit(1)
+
+            if answer == "q":
+                print(f"\033[91m[!]\033[0m Aborting scan.\033[0m")
+                raise SystemExit(1)
+            elif answer == "y":
+                print(
+                    f"\033[93m[>]\033[0m Skipping \033[96m{phase_name}\033[0m → "
+                    f"continuing to next phase ...\n"
+                )
+                return True
+            else:
+                print(
+                    f"\033[36m[>]\033[0m Resuming \033[96m{phase_name}\033[0m ...\n"
+                )
+                return False
+        except Exception:
+            return False
+
+    def _safe_scan(self, phase_name: str, scan_func, *args, **kwargs):
+        """
+        Run a scan function with Ctrl+C interception.
+        If the user presses Ctrl+C, prompt to skip/continue/quit.
+
+        Args:
+            phase_name: Human-readable phase name (e.g. "nmap", "enum4linux").
+            scan_func: The scanning function to call.
+            *args, **kwargs: Arguments forwarded to scan_func.
+
+        Returns:
+            The result of scan_func, or None if skipped.
+        """
+        self._current_phase = phase_name
+        self._skip_requested = False
+
+        while True:
+            try:
+                result = scan_func(*args, **kwargs)
+                return result
+            except KeyboardInterrupt:
+                should_skip = self._prompt_skip(phase_name)
+                if should_skip:
+                    self._skip_requested = True
+                    return None
+                # Otherwise loop back — but since subprocess already died,
+                # we can't really resume it. For subprocess-based scans,
+                # skip is the only practical option after Ctrl+C.
+                # Return None to indicate partial/skipped.
+                self._skip_requested = True
+                return None
 
     def _init_sources(self):
         """Initialize all data source modules."""
@@ -233,8 +316,13 @@ class ReconEngine:
             if new_from_httpx > 0:
                 self.result.total_unique += new_from_httpx
 
-            # Print httpx stats
+            # Print httpx stats (individual status codes)
+            sc_codes = httpx_stats.get("status_codes", {})
             status_str = " ".join(
+                f"\033[{'92' if sc // 100 == 2 else '93' if sc // 100 == 3 else '91' if sc // 100 in (4,5) else '37'}m"
+                f"{cnt}×{sc}\033[0m"
+                for sc, cnt in sorted(sc_codes.items())
+            ) if sc_codes else " ".join(
                 f"\033[{'92' if k == '2xx' else '93' if k == '3xx' else '91' if k in ('4xx','5xx') else '37'}m"
                 f"{v} {k}\033[0m"
                 for k, v in sorted(httpx_stats.get("status_distribution", {}).items())
@@ -275,6 +363,65 @@ class ReconEngine:
         # ── Phase 5b: Reconcile infra stats with httpx CDN/server data ────
         if self.httpx_probe.available:
             self._reconcile_infra_from_httpx(subdomain_objects)
+
+        # ── Phase 5c: Nuclei vulnerability scanning ───────────────────────
+        if self.nuclei_scanner.available:
+            # Collect alive hostnames for nuclei
+            nuclei_targets = [s.hostname for s in subdomain_objects if s.is_alive]
+            if not nuclei_targets:
+                nuclei_targets = [s.hostname for s in subdomain_objects]
+
+            if nuclei_targets:
+                nuclei_output_dir = os.path.join(".", domain)
+                os.makedirs(nuclei_output_dir, exist_ok=True)
+
+                nuclei_results = self._safe_scan(
+                    "nuclei", self.nuclei_scanner.scan,
+                    nuclei_targets, output_dir=nuclei_output_dir,
+                )
+
+                if nuclei_results is not None:
+                    nuclei_stats = self.nuclei_scanner.stats
+
+                    self.result.nuclei_results = nuclei_results
+                    self.result.nuclei_stats = nuclei_stats.to_dict()
+                    self.result.nuclei_available = True
+
+                    # Print nuclei summary
+                    total = nuclei_stats.total_findings
+                    if total > 0:
+                        sev_parts = []
+                        if nuclei_stats.critical > 0:
+                            sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
+                        if nuclei_stats.high > 0:
+                            sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
+                        if nuclei_stats.medium > 0:
+                            sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
+                        if nuclei_stats.low > 0:
+                            sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
+                            f"{' | '.join(sev_parts)} "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m "
+                            f"on {nuclei_stats.hosts_scanned} hosts "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m nuclei: skipped by user\n"
+                    )
+        else:
+            print(
+                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
+            )
+            print(
+                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
+            )
 
         # ── Phase 6: Pattern collapse ──────────────────────────────────────
         all_hostnames = [s.hostname for s in subdomain_objects]
@@ -339,40 +486,49 @@ class ReconEngine:
                 # Run nmap with output directed to the domain results folder
                 nmap_output_dir = os.path.join(".", domain)
                 os.makedirs(nmap_output_dir, exist_ok=True)
-                nmap_results = self.nmap_scanner.scan(all_ips, output_dir=nmap_output_dir)
-                nmap_stats = self.nmap_scanner.stats
+                nmap_results = self._safe_scan(
+                    "nmap", self.nmap_scanner.scan,
+                    all_ips, output_dir=nmap_output_dir,
+                )
 
-                self.result.nmap_results = nmap_results
-                self.result.nmap_stats = nmap_stats.to_dict()
-                self.result.nmap_available = True
+                if nmap_results is not None:
+                    nmap_stats = self.nmap_scanner.stats
 
-                # Print nmap summary
-                if nmap_stats.hosts_up > 0:
-                    svc_str = ", ".join(
-                        f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
-                        for s in nmap_stats.top_services[:5]
-                    )
-                    port_str = ", ".join(
-                        f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
-                        for p in nmap_stats.top_ports[:5]
-                    )
-                    print(
-                        f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
-                        f"{nmap_stats.total_ips_scanned} scanned | "
-                        f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
-                        f"{nmap_stats.unique_services} services "
-                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
-                    )
-                    if svc_str:
-                        print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
-                    if port_str:
-                        print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
-                    print()
+                    self.result.nmap_results = nmap_results
+                    self.result.nmap_stats = nmap_stats.to_dict()
+                    self.result.nmap_available = True
+
+                    # Print nmap summary
+                    if nmap_stats.hosts_up > 0:
+                        svc_str = ", ".join(
+                            f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
+                            for s in nmap_stats.top_services[:5]
+                        )
+                        port_str = ", ".join(
+                            f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                            for p in nmap_stats.top_ports[:5]
+                        )
+                        print(
+                            f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
+                            f"{nmap_stats.total_ips_scanned} scanned | "
+                            f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
+                            f"{nmap_stats.unique_services} services "
+                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
+                        )
+                        if svc_str:
+                            print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
+                        if port_str:
+                            print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
+                            f"{nmap_stats.total_ips_scanned} scanned "
+                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                        )
                 else:
                     print(
-                        f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
-                        f"{nmap_stats.total_ips_scanned} scanned "
-                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                        f"\033[93m[!]\033[0m nmap: skipped by user\n"
                     )
             else:
                 print(
@@ -394,50 +550,56 @@ class ReconEngine:
                 enum_output_dir = os.path.join(".", domain)
                 os.makedirs(enum_output_dir, exist_ok=True)
 
-                enum_results = self.enum4linux_scanner.scan(
-                    enum_ips,
-                    output_dir=enum_output_dir,
+                enum_results = self._safe_scan(
+                    "enum4linux", self.enum4linux_scanner.scan,
+                    enum_ips, output_dir=enum_output_dir,
                 )
-                enum_stats = self.enum4linux_scanner.stats
 
-                self.result.enum4linux_results = enum_results
-                self.result.enum4linux_stats = enum_stats.to_dict()
-                self.result.enum4linux_available = True
+                if enum_results is not None:
+                    enum_stats = self.enum4linux_scanner.stats
 
-                # Print enum4linux summary
-                if enum_stats.hosts_responded > 0:
-                    parts = [
-                        f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
-                        f"{enum_stats.total_ips_scanned} scanned"
-                    ]
-                    if enum_stats.total_shares > 0:
-                        parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
-                    if enum_stats.total_users > 0:
-                        parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
-                    if enum_stats.total_groups > 0:
-                        parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
-                    if enum_stats.null_sessions > 0:
-                        parts.append(
-                            f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
-                        )
-                    print(
-                        f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
-                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
-                    )
+                    self.result.enum4linux_results = enum_results
+                    self.result.enum4linux_stats = enum_stats.to_dict()
+                    self.result.enum4linux_available = True
 
-                    # Highlight null sessions (critical finding)
-                    null_hosts = self.enum4linux_scanner.get_null_session_hosts()
-                    if null_hosts:
+                    # Print enum4linux summary
+                    if enum_stats.hosts_responded > 0:
+                        parts = [
+                            f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned"
+                        ]
+                        if enum_stats.total_shares > 0:
+                            parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
+                        if enum_stats.total_users > 0:
+                            parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
+                        if enum_stats.total_groups > 0:
+                            parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
+                        if enum_stats.null_sessions > 0:
+                            parts.append(
+                                f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
+                            )
                         print(
-                            f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
-                            f"allow null sessions\033[0m (anonymous access)"
+                            f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
                         )
-                    print()
+
+                        # Highlight null sessions (critical finding)
+                        null_hosts = self.enum4linux_scanner.get_null_session_hosts()
+                        if null_hosts:
+                            print(
+                                f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
+                                f"allow null sessions\033[0m (anonymous access)"
+                            )
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                        )
                 else:
                     print(
-                        f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
-                        f"{enum_stats.total_ips_scanned} scanned "
-                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                        f"\033[93m[!]\033[0m enum4linux: skipped by user\n"
                     )
         elif not self.enum4linux_scanner.available and self.result.nmap_available:
             print(
@@ -445,6 +607,74 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
+            )
+
+        # ── Phase 9c-2: MSF SMB brute-force (after enum4linux finds users) ──
+        if (self.msf_scanner.available
+                and self.result.enum4linux_available
+                and self.result.enum4linux_results):
+            # Get users discovered by enum4linux
+            enum_users = self.enum4linux_scanner.get_all_users()
+            if enum_users:
+                msf_output_dir = os.path.join(".", domain)
+                os.makedirs(msf_output_dir, exist_ok=True)
+
+                msf_results = self._safe_scan(
+                    "msf-brute", self.msf_scanner.scan,
+                    enum_users, output_dir=msf_output_dir,
+                )
+
+                if msf_results is not None:
+                    msf_stats = self.msf_scanner.stats
+
+                    self.result.msf_results = msf_results
+                    self.result.msf_stats = msf_stats.to_dict()
+                    self.result.msf_available = True
+
+                    # Print MSF summary
+                    if msf_stats.credentials_found > 0:
+                        print(
+                            f"\033[1;92m[+]\033[0m msf-brute: "
+                            f"\033[1;92m{msf_stats.credentials_found} credential(s) found!\033[0m | "
+                            f"{msf_stats.ips_tested} IPs tested | "
+                            f"{msf_stats.total_users_tested} users tested "
+                            f"\033[90m({msf_stats.scan_time:.1f}s)\033[0m"
+                        )
+                        # Show found credentials
+                        for cred in self.msf_scanner.get_all_credentials():
+                            domain_str = f"{cred.domain}\\" if cred.domain else ""
+                            print(
+                                f"\033[1;92m[+]\033[0m msf-brute: "
+                                f"\033[96m{cred.ip}\033[0m → "
+                                f"\033[1;92m{domain_str}{cred.username}:{cred.password}\033[0m"
+                            )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m msf-brute: "
+                            f"\033[37mno valid credentials\033[0m | "
+                            f"{msf_stats.ips_tested} IPs tested | "
+                            f"{msf_stats.total_users_tested} users tested "
+                            f"\033[90m({msf_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    if msf_stats.ips_skipped > 0:
+                        print(
+                            f"\033[93m[!]\033[0m msf-brute: "
+                            f"{msf_stats.ips_skipped} IP(s) skipped "
+                            f"(lockout/rate limit/timeout)"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m msf-brute: skipped by user\n"
+                    )
+        elif (not self.msf_scanner.available
+              and self.result.enum4linux_available
+              and self.enum4linux_scanner.get_all_users()):
+            print(
+                f"\033[93m[!]\033[0m msfconsole not found – skipping SMB brute-force"
+            )
+            print(
+                f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
             )
 
         # ── Phase 9c: CrackMapExec protocol enumeration ─────────────────────
@@ -455,43 +685,49 @@ class ReconEngine:
             cme_output_dir = os.path.join(".", domain)
             os.makedirs(cme_output_dir, exist_ok=True)
 
-            cme_results = self.cme_scanner.scan(
-                self.result.nmap_results,
-                output_dir=cme_output_dir,
+            cme_results = self._safe_scan(
+                "CME", self.cme_scanner.scan,
+                self.result.nmap_results, output_dir=cme_output_dir,
             )
-            cme_stats = self.cme_scanner.stats
 
-            self.result.cme_results = cme_results
-            self.result.cme_stats = cme_stats.to_dict()
-            self.result.cme_available = True
+            if cme_results is not None:
+                cme_stats = self.cme_scanner.stats
 
-            # Print CME summary
-            if cme_stats.protocols_scanned > 0:
-                proto_parts = []
-                for proto, count in sorted(cme_stats.protocol_summary.items()):
-                    proto_parts.append(
-                        f"\033[96m{proto}\033[0m(\033[92m{count}\033[0m)"
-                    )
-                proto_str = ", ".join(proto_parts)
-                print(
-                    f"\033[92m[+]\033[0m CME: \033[92m{cme_stats.protocols_scanned} protocols\033[0m "
-                    f"scanned | {cme_stats.total_hosts_discovered} hosts responded "
-                    f"\033[90m({cme_stats.scan_time:.1f}s)\033[0m"
-                )
-                if proto_parts:
-                    print(f"\033[92m[+]\033[0m CME: {proto_str}")
+                self.result.cme_results = cme_results
+                self.result.cme_stats = cme_stats.to_dict()
+                self.result.cme_available = True
 
-                # Highlight SMB signing disabled (important for pentesting)
-                smb_nosign = self.cme_scanner.get_smb_signing_disabled()
-                if smb_nosign:
+                # Print CME summary
+                if cme_stats.protocols_scanned > 0:
+                    proto_parts = []
+                    for proto, count in sorted(cme_stats.protocol_summary.items()):
+                        proto_parts.append(
+                            f"\033[96m{proto}\033[0m(\033[92m{count}\033[0m)"
+                        )
+                    proto_str = ", ".join(proto_parts)
                     print(
-                        f"\033[91m[!]\033[0m CME: \033[91m{len(smb_nosign)} hosts "
-                        f"with SMB signing disabled\033[0m (relay targets)"
+                        f"\033[92m[+]\033[0m CME: \033[92m{cme_stats.protocols_scanned} protocols\033[0m "
+                        f"scanned | {cme_stats.total_hosts_discovered} hosts responded "
+                        f"\033[90m({cme_stats.scan_time:.1f}s)\033[0m"
                     )
-                print()
+                    if proto_parts:
+                        print(f"\033[92m[+]\033[0m CME: {proto_str}")
+
+                    # Highlight SMB signing disabled (important for pentesting)
+                    smb_nosign = self.cme_scanner.get_smb_signing_disabled()
+                    if smb_nosign:
+                        print(
+                            f"\033[91m[!]\033[0m CME: \033[91m{len(smb_nosign)} hosts "
+                            f"with SMB signing disabled\033[0m (relay targets)"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
+                    )
             else:
                 print(
-                    f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
+                    f"\033[93m[!]\033[0m CME: skipped by user\n"
                 )
         elif not self.cme_scanner.available and self.result.nmap_available:
             print(
@@ -547,39 +783,48 @@ class ReconEngine:
             if all_ips:
                 nmap_output_dir = os.path.join(".", label.replace("/", "_"))
                 os.makedirs(nmap_output_dir, exist_ok=True)
-                nmap_results = self.nmap_scanner.scan(all_ips, output_dir=nmap_output_dir)
-                nmap_stats = self.nmap_scanner.stats
+                nmap_results = self._safe_scan(
+                    "nmap", self.nmap_scanner.scan,
+                    all_ips, output_dir=nmap_output_dir,
+                )
 
-                self.result.nmap_results = nmap_results
-                self.result.nmap_stats = nmap_stats.to_dict()
-                self.result.nmap_available = True
+                if nmap_results is not None:
+                    nmap_stats = self.nmap_scanner.stats
 
-                if nmap_stats.hosts_up > 0:
-                    svc_str = ", ".join(
-                        f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
-                        for s in nmap_stats.top_services[:5]
-                    )
-                    port_str = ", ".join(
-                        f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
-                        for p in nmap_stats.top_ports[:5]
-                    )
-                    print(
-                        f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
-                        f"{nmap_stats.total_ips_scanned} scanned | "
-                        f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
-                        f"{nmap_stats.unique_services} services "
-                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
-                    )
-                    if svc_str:
-                        print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
-                    if port_str:
-                        print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
-                    print()
+                    self.result.nmap_results = nmap_results
+                    self.result.nmap_stats = nmap_stats.to_dict()
+                    self.result.nmap_available = True
+
+                    if nmap_stats.hosts_up > 0:
+                        svc_str = ", ".join(
+                            f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
+                            for s in nmap_stats.top_services[:5]
+                        )
+                        port_str = ", ".join(
+                            f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                            for p in nmap_stats.top_ports[:5]
+                        )
+                        print(
+                            f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
+                            f"{nmap_stats.total_ips_scanned} scanned | "
+                            f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
+                            f"{nmap_stats.unique_services} services "
+                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
+                        )
+                        if svc_str:
+                            print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
+                        if port_str:
+                            print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
+                            f"{nmap_stats.total_ips_scanned} scanned "
+                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                        )
                 else:
                     print(
-                        f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
-                        f"{nmap_stats.total_ips_scanned} scanned "
-                        f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                        f"\033[93m[!]\033[0m nmap: skipped by user\n"
                     )
         else:
             print(
@@ -596,48 +841,54 @@ class ReconEngine:
                 enum_output_dir = os.path.join(".", label.replace("/", "_"))
                 os.makedirs(enum_output_dir, exist_ok=True)
 
-                enum_results = self.enum4linux_scanner.scan(
-                    enum_ips,
-                    output_dir=enum_output_dir,
+                enum_results = self._safe_scan(
+                    "enum4linux", self.enum4linux_scanner.scan,
+                    enum_ips, output_dir=enum_output_dir,
                 )
-                enum_stats = self.enum4linux_scanner.stats
 
-                self.result.enum4linux_results = enum_results
-                self.result.enum4linux_stats = enum_stats.to_dict()
-                self.result.enum4linux_available = True
+                if enum_results is not None:
+                    enum_stats = self.enum4linux_scanner.stats
 
-                if enum_stats.hosts_responded > 0:
-                    parts = [
-                        f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
-                        f"{enum_stats.total_ips_scanned} scanned"
-                    ]
-                    if enum_stats.total_shares > 0:
-                        parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
-                    if enum_stats.total_users > 0:
-                        parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
-                    if enum_stats.total_groups > 0:
-                        parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
-                    if enum_stats.null_sessions > 0:
-                        parts.append(
-                            f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
-                        )
-                    print(
-                        f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
-                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
-                    )
+                    self.result.enum4linux_results = enum_results
+                    self.result.enum4linux_stats = enum_stats.to_dict()
+                    self.result.enum4linux_available = True
 
-                    null_hosts = self.enum4linux_scanner.get_null_session_hosts()
-                    if null_hosts:
+                    if enum_stats.hosts_responded > 0:
+                        parts = [
+                            f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned"
+                        ]
+                        if enum_stats.total_shares > 0:
+                            parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
+                        if enum_stats.total_users > 0:
+                            parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
+                        if enum_stats.total_groups > 0:
+                            parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
+                        if enum_stats.null_sessions > 0:
+                            parts.append(
+                                f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
+                            )
                         print(
-                            f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
-                            f"allow null sessions\033[0m (anonymous access)"
+                            f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
                         )
-                    print()
+
+                        null_hosts = self.enum4linux_scanner.get_null_session_hosts()
+                        if null_hosts:
+                            print(
+                                f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
+                                f"allow null sessions\033[0m (anonymous access)"
+                            )
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                        )
                 else:
                     print(
-                        f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
-                        f"{enum_stats.total_ips_scanned} scanned "
-                        f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                        f"\033[93m[!]\033[0m enum4linux: skipped by user\n"
                     )
         elif not self.enum4linux_scanner.available and self.result.nmap_available:
             print(
@@ -645,6 +896,71 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
+            )
+
+        # ── MSF SMB brute-force (direct mode) ─────────────────────────────
+        if (self.msf_scanner.available
+                and self.result.enum4linux_available
+                and self.result.enum4linux_results):
+            enum_users = self.enum4linux_scanner.get_all_users()
+            if enum_users:
+                msf_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(msf_output_dir, exist_ok=True)
+
+                msf_results = self._safe_scan(
+                    "msf-brute", self.msf_scanner.scan,
+                    enum_users, output_dir=msf_output_dir,
+                )
+
+                if msf_results is not None:
+                    msf_stats = self.msf_scanner.stats
+
+                    self.result.msf_results = msf_results
+                    self.result.msf_stats = msf_stats.to_dict()
+                    self.result.msf_available = True
+
+                    if msf_stats.credentials_found > 0:
+                        print(
+                            f"\033[1;92m[+]\033[0m msf-brute: "
+                            f"\033[1;92m{msf_stats.credentials_found} credential(s) found!\033[0m | "
+                            f"{msf_stats.ips_tested} IPs tested | "
+                            f"{msf_stats.total_users_tested} users tested "
+                            f"\033[90m({msf_stats.scan_time:.1f}s)\033[0m"
+                        )
+                        for cred in self.msf_scanner.get_all_credentials():
+                            domain_str = f"{cred.domain}\\" if cred.domain else ""
+                            print(
+                                f"\033[1;92m[+]\033[0m msf-brute: "
+                                f"\033[96m{cred.ip}\033[0m → "
+                                f"\033[1;92m{domain_str}{cred.username}:{cred.password}\033[0m"
+                            )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m msf-brute: "
+                            f"\033[37mno valid credentials\033[0m | "
+                            f"{msf_stats.ips_tested} IPs tested | "
+                            f"{msf_stats.total_users_tested} users tested "
+                            f"\033[90m({msf_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    if msf_stats.ips_skipped > 0:
+                        print(
+                            f"\033[93m[!]\033[0m msf-brute: "
+                            f"{msf_stats.ips_skipped} IP(s) skipped "
+                            f"(lockout/rate limit/timeout)"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m msf-brute: skipped by user\n"
+                    )
+        elif (not self.msf_scanner.available
+              and self.result.enum4linux_available
+              and self.enum4linux_scanner.get_all_users()):
+            print(
+                f"\033[93m[!]\033[0m msfconsole not found – skipping SMB brute-force"
+            )
+            print(
+                f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
             )
 
         # ── CrackMapExec protocol enumeration (direct mode) ────────────────
@@ -655,39 +971,45 @@ class ReconEngine:
             cme_output_dir = os.path.join(".", label.replace("/", "_"))
             os.makedirs(cme_output_dir, exist_ok=True)
 
-            cme_results = self.cme_scanner.scan(
-                self.result.nmap_results,
-                output_dir=cme_output_dir,
+            cme_results = self._safe_scan(
+                "CME", self.cme_scanner.scan,
+                self.result.nmap_results, output_dir=cme_output_dir,
             )
-            cme_stats = self.cme_scanner.stats
 
-            self.result.cme_results = cme_results
-            self.result.cme_stats = cme_stats.to_dict()
-            self.result.cme_available = True
+            if cme_results is not None:
+                cme_stats = self.cme_scanner.stats
 
-            if cme_stats.protocols_scanned > 0:
-                proto_parts = []
-                for proto, count in sorted(cme_stats.protocol_summary.items()):
-                    proto_parts.append(f"\033[96m{proto}\033[0m(\033[92m{count}\033[0m)")
-                proto_str = ", ".join(proto_parts)
-                print(
-                    f"\033[92m[+]\033[0m CME: \033[92m{cme_stats.protocols_scanned} protocols\033[0m "
-                    f"scanned | {cme_stats.total_hosts_discovered} hosts responded "
-                    f"\033[90m({cme_stats.scan_time:.1f}s)\033[0m"
-                )
-                if proto_parts:
-                    print(f"\033[92m[+]\033[0m CME: {proto_str}")
+                self.result.cme_results = cme_results
+                self.result.cme_stats = cme_stats.to_dict()
+                self.result.cme_available = True
 
-                smb_nosign = self.cme_scanner.get_smb_signing_disabled()
-                if smb_nosign:
+                if cme_stats.protocols_scanned > 0:
+                    proto_parts = []
+                    for proto, count in sorted(cme_stats.protocol_summary.items()):
+                        proto_parts.append(f"\033[96m{proto}\033[0m(\033[92m{count}\033[0m)")
+                    proto_str = ", ".join(proto_parts)
                     print(
-                        f"\033[91m[!]\033[0m CME: \033[91m{len(smb_nosign)} hosts "
-                        f"with SMB signing disabled\033[0m (relay targets)"
+                        f"\033[92m[+]\033[0m CME: \033[92m{cme_stats.protocols_scanned} protocols\033[0m "
+                        f"scanned | {cme_stats.total_hosts_discovered} hosts responded "
+                        f"\033[90m({cme_stats.scan_time:.1f}s)\033[0m"
                     )
-                print()
+                    if proto_parts:
+                        print(f"\033[92m[+]\033[0m CME: {proto_str}")
+
+                    smb_nosign = self.cme_scanner.get_smb_signing_disabled()
+                    if smb_nosign:
+                        print(
+                            f"\033[91m[!]\033[0m CME: \033[91m{len(smb_nosign)} hosts "
+                            f"with SMB signing disabled\033[0m (relay targets)"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
+                    )
             else:
                 print(
-                    f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
+                    f"\033[93m[!]\033[0m CME: skipped by user\n"
                 )
         elif not self.cme_scanner.available and self.result.nmap_available:
             print(
