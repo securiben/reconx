@@ -393,20 +393,45 @@ class NucleiScanner:
         return self.results
 
     def _parse_results(self, filepath: str):
-        """Parse nuclei NDJSON output file."""
+        """Parse nuclei JSON export file (JSON array from -je, or NDJSON)."""
         try:
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
+                content = f.read().strip()
+            if not content:
+                return
+
+            # Try JSON array first (nuclei -je produces [{...}, {...}, ...])
+            try:
+                items = json.loads(content)
+                if isinstance(items, list):
+                    for data in items:
+                        if isinstance(data, dict):
+                            result = NucleiResult.from_json(data)
+                            if result.template_id:
+                                self.results.append(result)
+                    return
+                elif isinstance(items, dict):
+                    # Single JSON object
+                    result = NucleiResult.from_json(items)
+                    if result.template_id:
+                        self.results.append(result)
+                    return
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+            # Fallback: NDJSON (one JSON object per line)
+            for line in content.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if isinstance(data, dict):
                         result = NucleiResult.from_json(data)
                         if result.template_id:
                             self.results.append(result)
-                    except json.JSONDecodeError:
-                        continue
+                except (json.JSONDecodeError, ValueError):
+                    continue
         except Exception:
             pass
 
@@ -427,7 +452,7 @@ class NucleiScanner:
     def _parse_text_output(self, filepath: str):
         """
         Parse nuclei plain-text output (-o file) as fallback.
-        Lines like: [template-id] [severity] host matched-at
+        Nuclei format: [template-id] [protocol] [severity] host [extra...]
         """
         import re
         pattern = re.compile(
@@ -444,8 +469,9 @@ class NucleiScanner:
                         r = NucleiResult()
                         r.template_id = m.group(1)
                         r.template_name = m.group(1)
-                        r.severity = m.group(2).lower()
-                        # group(3) is protocol like http/https
+                        # group(2) = protocol (http, tcp, javascript, etc.)
+                        # group(3) = severity (critical, high, medium, low, info)
+                        r.severity = m.group(3).lower()
                         r.host = m.group(4)
                         r.matched_at = m.group(4)
                         self.results.append(r)
