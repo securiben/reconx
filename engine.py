@@ -684,8 +684,17 @@ class ReconEngine:
 
         # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
         if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            # Collect all IPs from nmap results
-            enum_ips = set(self.result.nmap_results.keys())
+            # Only scan IPs that have SMB/NetBIOS ports open
+            smb_ports = {445, 139, 137, 138}
+            enum_ips = set()
+            for ip, host_result in self.result.nmap_results.items():
+                ports = host_result.ports if hasattr(host_result, 'ports') else []
+                for p in ports:
+                    port_num = p.port if hasattr(p, 'port') else p.get('port', 0)
+                    state = p.state if hasattr(p, 'state') else p.get('state', '')
+                    if port_num in smb_ports and state == "open":
+                        enum_ips.add(ip)
+                        break
             if enum_ips:
                 enum_output_dir = os.path.join(".", domain)
                 os.makedirs(enum_output_dir, exist_ok=True)
@@ -1043,7 +1052,17 @@ class ReconEngine:
 
         # ── Enum4linux SMB/Windows enumeration (direct mode) ───────────────
         if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            enum_ips = set(self.result.nmap_results.keys())
+            # Only scan IPs that have SMB/NetBIOS ports open
+            smb_ports = {445, 139, 137, 138}
+            enum_ips = set()
+            for ip, host_result in self.result.nmap_results.items():
+                ports = host_result.ports if hasattr(host_result, 'ports') else []
+                for p in ports:
+                    port_num = p.port if hasattr(p, 'port') else p.get('port', 0)
+                    state = p.state if hasattr(p, 'state') else p.get('state', '')
+                    if port_num in smb_ports and state == "open":
+                        enum_ips.add(ip)
+                        break
             if enum_ips:
                 enum_output_dir = os.path.join(".", label.replace("/", "_"))
                 os.makedirs(enum_output_dir, exist_ok=True)
