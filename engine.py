@@ -126,6 +126,8 @@ class ReconEngine:
         """
         Run a scan function with Ctrl+C interception.
         If the user presses Ctrl+C, prompt to skip/continue/quit.
+        If user picks 'n' (resume), re-run the scan from scratch
+        because the subprocess is already dead after Ctrl+C.
 
         Args:
             phase_name: Human-readable phase name (e.g. "nmap", "enum4linux").
@@ -147,12 +149,9 @@ class ReconEngine:
                 if should_skip:
                     self._skip_requested = True
                     return None
-                # Otherwise loop back — but since subprocess already died,
-                # we can't really resume it. For subprocess-based scans,
-                # skip is the only practical option after Ctrl+C.
-                # Return None to indicate partial/skipped.
-                self._skip_requested = True
-                return None
+                # User chose 'n' (resume) — re-run the scan from scratch
+                # because the subprocess was already killed by Ctrl+C.
+                continue
 
     def _init_sources(self):
         """Initialize all data source modules."""
@@ -399,6 +398,8 @@ class ReconEngine:
                             sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
                         if nuclei_stats.low > 0:
                             sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
+                        if nuclei_stats.info > 0:
+                            sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
                         print(
                             f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
                             f"{' | '.join(sev_parts)} "

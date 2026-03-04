@@ -306,6 +306,10 @@ class NucleiScanner:
         if not alive_hostnames:
             return []
 
+        # Reset results (in case of re-run after Ctrl+C resume)
+        self.results = []
+        self.stats = NucleiStats()
+
         import time as _time
         scan_start = _time.time()
 
@@ -330,22 +334,23 @@ class NucleiScanner:
                     clean = h.replace("https://", "").replace("http://", "").rstrip("/")
                     f.write(clean + "\n")
 
-            # Exact command the user requested:
-            #   cat alive.txt | nuclei -s critical,high,medium,low -o nuclei_results.txt -no-color
+            # Exact command:
+            #   cat alive.txt | nuclei -s info,low,medium,high,critical -o nuclei_results.txt -no-color -silent
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-s", "critical,high,medium,low",
+                "-s", "info,low,medium,high,critical",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-no-color",
+                "-silent",
             ]
 
             # Run nuclei — stdout/stderr shown on terminal in real-time
             timeout_secs = max(600, len(alive_hostnames) * 10)
             print(
                 f"\033[36m[>]\033[0m nuclei: running "
-                f"\033[96m-s critical,high,medium,low\033[0m "
+                f"\033[96m-s info,low,medium,high,critical -silent\033[0m "
                 f"on \033[92m{len(alive_hostnames)}\033[0m targets ..."
             )
             proc = subprocess.Popen(

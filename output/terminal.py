@@ -465,6 +465,7 @@ class TerminalRenderer:
         high = nuclei_stats.get("high", 0)
         medium = nuclei_stats.get("medium", 0)
         low = nuclei_stats.get("low", 0)
+        info = nuclei_stats.get("info", 0)
         hosts_scanned = nuclei_stats.get("hosts_scanned", 0)
         scan_time = nuclei_stats.get("scan_time", 0.0)
 
@@ -477,6 +478,7 @@ class TerminalRenderer:
             "high": C.BRIGHT_RED,
             "medium": C.BRIGHT_YELLOW,
             "low": C.BRIGHT_CYAN,
+            "info": C.WHITE,
         }
 
         # Main nuclei line
@@ -501,6 +503,8 @@ class TerminalRenderer:
             sev_parts.append(f"{sev_color['medium']}{medium} medium{C.RESET}")
         if low > 0:
             sev_parts.append(f"{sev_color['low']}{low} low{C.RESET}")
+        if info > 0:
+            sev_parts.append(f"{sev_color['info']}{info} info{C.RESET}")
         if sev_parts:
             self._box_line(f"    {C.DIM}Severity:{C.RESET} {', '.join(sev_parts)}")
 
