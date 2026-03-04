@@ -93,7 +93,7 @@ class ReconConfig:
 
     # ── Direct target mode (IP / CIDR / file-of-IPs) ──────────────────────
     # When input_mode is "direct", subdomain enum is skipped entirely;
-    # the engine jumps straight to nuclei + nmap on direct_targets.
+    # the engine jumps straight to nmap + CME + enum4linux on direct_targets.
     input_mode: str = "domain"            # "domain" | "direct"
     direct_targets: List[str] = field(default_factory=list)  # IPs / CIDRs
     input_label: str = ""                 # Display label (e.g. "10.10.0.0/24")
@@ -126,10 +126,6 @@ class ReconConfig:
             name="Venom",
             description="querying VirusTotal passive DNS",
             api_key=os.getenv("VT_API_KEY"),
-        ),
-        "sonar": SourceConfig(
-            name="Sonar",
-            description="DNS brute-force via wordlist",
         ),
         "shodan": SourceConfig(
             name="Shodan",

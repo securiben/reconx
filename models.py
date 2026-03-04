@@ -324,11 +324,6 @@ class ScanResult:
     httpx_stats: Dict = field(default_factory=dict)
     httpx_available: bool = False
 
-    # Nuclei vulnerability scanner
-    nuclei_results: List = field(default_factory=list)
-    nuclei_stats: Dict = field(default_factory=dict)
-    nuclei_available: bool = False
-
     # Nmap port scanner
     nmap_results: Dict = field(default_factory=dict)
     nmap_stats: Dict = field(default_factory=dict)
@@ -380,11 +375,6 @@ class ScanResult:
         }
         if self.httpx_stats:
             d["httpx"] = self.httpx_stats
-        if self.nuclei_results:
-            d["nuclei"] = {
-                "stats": self.nuclei_stats,
-                "findings": [r.to_dict() if hasattr(r, 'to_dict') else r for r in self.nuclei_results],
-            }
         if self.nmap_results:
             d["nmap"] = {
                 "stats": self.nmap_stats,

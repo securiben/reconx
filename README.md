@@ -13,26 +13,25 @@
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-A high-performance CLI reconnaissance tool that accepts **domains, IP addresses, CIDR ranges, or target files** as input. For domains it aggregates subdomain data from **12 sources**, performs HTTP probing via [ProjectDiscovery httpx](https://github.com/projectdiscovery/httpx), runs automated vulnerability scanning with [ProjectDiscovery nuclei](https://github.com/projectdiscovery/nuclei), port scanning with [Nmap](https://nmap.org), SMB/Windows enumeration with [enum4linux](https://github.com/CiscoCXSecurity/enum4linux), and protocol enumeration with [CrackMapExec](https://github.com/byt3bl33d3r/CrackMapExec). For IP/CIDR targets it **skips enumeration entirely** and jumps straight to nuclei + nmap + enum4linux + CME. All results are presented in rich, color-coded terminal output with per-domain file exports.
+A high-performance CLI reconnaissance tool that accepts **domains, IP addresses, CIDR ranges, or target files** as input. For domains it aggregates subdomain data from **11 sources**, performs HTTP probing via [ProjectDiscovery httpx](https://github.com/projectdiscovery/httpx), port scanning with [Nmap](https://nmap.org), SMB/Windows enumeration with [enum4linux](https://github.com/CiscoCXSecurity/enum4linux), and protocol enumeration with [CrackMapExec](https://github.com/byt3bl33d3r/CrackMapExec). For IP/CIDR targets it **skips enumeration entirely** and jumps straight to nmap + enum4linux + CME. All results are presented in rich, color-coded terminal output with per-domain file exports.
 
 ## Features
 
 | Category | Details |
 |----------|---------|
-| **Multi-Source Enumeration** | 12 data sources — Atlas (crt.sh), Sphinx (Certspotter), Oracle (AlienVault OTX), Radar (HackerTarget), Torrent (Wayback Machine), Venom (VT + ThreatMiner + Anubis + RapidDNS), VirusTotal (VT v3 subdomains), Sonar (DNS brute-force), Shodan, Censys, SecurityTrails, URLScan.io |
+| **Multi-Source Enumeration** | 11 data sources — Atlas (crt.sh), Sphinx (Certspotter), Oracle (AlienVault OTX), Radar (HackerTarget), Torrent (Wayback Machine), Venom (VT + ThreatMiner + Anubis + RapidDNS), VirusTotal (VT v3 subdomains), Shodan, Censys, SecurityTrails, URLScan.io |
 | **HTTPX HTTP Probing** | ProjectDiscovery httpx integration — status codes, titles, technologies (Wappalyzer), favicon hashes, CDN detection, server headers, FQDNs from response bodies |
-| **Nuclei Vulnerability Scanning** | ProjectDiscovery nuclei integration — automated vuln scanning with dynamic tag selection based on detected tech stack (WordPress → `wordpress,wp-plugin`, Laravel → `laravel`, Spring → `spring,springboot`, etc.) |
 | **Nmap Port Scanning** | Nmap integration — `-sCV --top-ports 1000 -T3` service/version detection on all discovered IP addresses with `.nmap`, `.xml`, `.gnmap` output |
 | **Enum4linux Enumeration** | enum4linux integration — `-a` full SMB/Windows enumeration (shares, users, groups, password policy, null sessions) on all discovered IPs after nmap |
 | **CrackMapExec Protocol Enum** | CME/NetExec integration — protocol-based enumeration (SMB, SSH, RDP, WinRM, MSSQL, LDAP, etc.) grouped by open ports from nmap |
-| **Multi-Target Input** | Accepts domain names, single IPs (`10.10.0.5`), CIDR ranges (`10.10.0.0/24`), or target files (`targets.txt`) — IPs/CIDRs skip enumeration and go straight to nuclei + nmap + enum4linux + CME |
+| **Multi-Target Input** | Accepts domain names, single IPs (`10.10.0.5`), CIDR ranges (`10.10.0.0/24`), or target files (`targets.txt`) — IPs/CIDRs skip enumeration and go straight to nmap + enum4linux + CME |
 | **Infrastructure Classification** | Cloudflare, AWS, Azure, Akamai detection via CNAME patterns, IP ranges, and httpx CDN/server data |
 | **Certificate Transparency** | CT log triage with age classification — stale (1–2yr), aged (2yr+), no date |
 | **Subdomain Takeover** | 11+ provider fingerprints (Azure, AWS S3, GitHub Pages, Heroku, Shopify, Fastly, etc.) |
 | **Tech Stack Profiling** | 15+ technology signatures — Spring Boot Actuator, Tomcat, Jenkins, Grafana, WordPress, Laravel, Django, etc. with CRITICAL/High/Medium/Low/Info severity |
 | **Pattern Collapse** | Groups repetitive subdomains into wildcard patterns (e.g., `app-*.example.com`) |
 | **Concurrent Execution** | ThreadPoolExecutor with configurable worker count (default: 50) — optimized timeouts for fast enumeration |
-| **Structured Export** | JSON export + 30+ per-domain output files (alive hosts, IPs, tech, takeover, httpx data, nuclei findings, nmap results, enum4linux users/shares, CME protocols, etc.) |
+| **Structured Export** | JSON export + 25+ per-domain output files (alive hosts, IPs, tech, takeover, httpx data, nmap results, enum4linux users/shares, CME protocols, etc.) |
 | **Rich Terminal Output** | ANSI-colored box-drawn summary matching professional security tooling |
 
 ## Quick Start
@@ -41,7 +40,6 @@ A high-performance CLI reconnaissance tool that accepts **domains, IP addresses,
 
 - Python 3.8+
 - [ProjectDiscovery httpx](https://github.com/projectdiscovery/httpx) (recommended, for HTTP probing)
-- [ProjectDiscovery nuclei](https://github.com/projectdiscovery/nuclei) (recommended, for vulnerability scanning)
 - [Nmap](https://nmap.org) (recommended, for port scanning)
 - [enum4linux](https://github.com/CiscoCXSecurity/enum4linux) (optional, for SMB/Windows enumeration)
 - [CrackMapExec](https://github.com/byt3bl33d3r/CrackMapExec) or [NetExec](https://github.com/Pennyw0rth/NetExec) (optional, for protocol enumeration)
@@ -61,13 +59,6 @@ go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
 
 # Option B: Download binary
 # https://github.com/projectdiscovery/httpx/releases
-
-# (Recommended) Install ProjectDiscovery nuclei
-# Option A: Go install
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-
-# Option B: Download binary
-# https://github.com/projectdiscovery/nuclei/releases
 
 # (Recommended) Install Nmap
 # Debian/Ubuntu: sudo apt install nmap
@@ -105,10 +96,10 @@ Get free API keys from:
 ### Run
 
 ```bash
-# Domain → full recon pipeline (enum → httpx → nuclei → nmap)
+# Domain → full recon pipeline (enum → httpx → nmap)
 python main.py target.com
 
-# Single IP → direct scan (nuclei + nmap only, skips enumeration)
+# Single IP → direct scan (nmap + CME, skips enumeration)
 python main.py 10.10.0.5
 
 # CIDR range → direct scan on all hosts in range
@@ -169,10 +160,6 @@ Each scan creates a domain-specific folder with categorized output files:
 ├── httpx_servers.txt          # Server header distribution
 ├── httpx_titles.txt           # HTTP page titles
 ├── httpx_redirects.txt        # Redirect chains
-├── nuclei_findings.txt        # All nuclei vulnerability findings
-├── nuclei_critical.txt        # Critical severity findings only
-├── nuclei_high.txt            # High severity findings only
-└── nuclei_summary.json        # Nuclei scan statistics + findings
 ├── nmap_scan.nmap             # Nmap normal output
 ├── nmap_scan.xml              # Nmap XML output
 ├── nmap_scan.gnmap            # Nmap greppable output
@@ -202,7 +189,7 @@ reconx/
     ├── models.py                # Data models (Subdomain, TechMatch, CTEntry, etc.)
     ├── utils.py                 # DNS resolution, IP classification, pattern matching, input detection
     ├── engine.py                # Multi-phase pipeline orchestrator + direct-target mode
-    ├── sources/                 # 12 data source modules
+    ├── sources/                 # 11 data source modules
     │   ├── base.py              # Abstract base class
     │   ├── atlas.py             # crt.sh Certificate Transparency
     │   ├── sphinx.py            # Certspotter CT logs
@@ -211,7 +198,6 @@ reconx/
     │   ├── torrent.py           # Wayback Machine CDX index
     │   ├── venom.py             # VT + Anubis + ThreatMiner + RapidDNS
     │   ├── vt_siblings.py       # VT v3 subdomains API
-    │   ├── sonar.py             # DNS brute-force (wordlist)
     │   ├── shodan_source.py     # Shodan DNS + SSL cert search
     │   ├── censys_source.py     # Censys certificate + host search
     │   ├── sectrails_source.py  # SecurityTrails subdomain enumeration
@@ -222,25 +208,24 @@ reconx/
     │   ├── takeover.py          # Subdomain takeover detection
     │   ├── tech_profiler.py     # Technology stack profiling (15+ signatures)
     │   ├── httpx_probe.py       # ProjectDiscovery httpx CLI wrapper
-    │   ├── nuclei_scan.py       # ProjectDiscovery nuclei CLI wrapper (dynamic tags)
     │   ├── nmap_scan.py         # Nmap port & service scanner wrapper
     │   ├── enum4linux_scan.py   # Enum4linux SMB/Windows enumeration wrapper
     │   └── cme_scan.py          # CrackMapExec protocol enumeration wrapper
     └── output/                  # Output rendering
         ├── terminal.py          # ANSI terminal renderer (box-drawn)
         ├── json_export.py       # Structured JSON export
-        └── file_export.py       # Per-domain file exporter (30+ files)
+        └── file_export.py       # Per-domain file exporter (25+ files)
 ```
 
 ## Pipeline Phases
 
 ### Domain Mode
 
-When the input is a domain name, the engine executes a 12-phase pipeline:
+When the input is a domain name, the engine executes an 11-phase pipeline:
 
 | Phase | Name | Description |
 |-------|------|-------------|
-| 1 | **Sources** | Concurrent subdomain enumeration from all 12 sources |
+| 1 | **Sources** | Concurrent subdomain enumeration from all 11 sources |
 | 2 | **Dedup** | Normalize, deduplicate, and aggregate all discovered subdomains |
 | 3 | **CT Logs** | Query crt.sh for certificate transparency entries + age triage |
 | 4 | **Infrastructure** | DNS CNAME/A resolution → cloud provider classification |
@@ -249,10 +234,9 @@ When the input is a domain name, the engine executes a 12-phase pipeline:
 | 6 | **Collapse** | Group repetitive subdomains into wildcard patterns |
 | 7 | **Takeover** | Check for subdomain takeover vulnerabilities (11+ providers) |
 | 8 | **Tech Profile** | Technology stack detection on alive subdomains (15+ signatures) |
-| 9 | **Nuclei** | Automated vulnerability scanning with dynamic tags based on detected tech |
-| 9b | **Nmap** | Port & service scanning on all discovered IP addresses (-sCV --top-ports 1000) |
-| 9c | **Enum4linux** | SMB/Windows enumeration on all discovered IPs (shares, users, groups, null sessions) |
-| 9d | **CME** | CrackMapExec protocol enumeration grouped by open ports from nmap |
+| 9 | **Nmap** | Port & service scanning on all discovered IP addresses (-sCV --top-ports 1000) |
+| 9b | **Enum4linux** | SMB/Windows enumeration on all discovered IPs (shares, users, groups, null sessions) |
+| 9c | **CME** | CrackMapExec protocol enumeration grouped by open ports from nmap |
 | 10 | **Statistics** | Compute final stats (timing, counts, DB stats) |
 | 11 | **Output** | Terminal rendering + JSON export + per-domain file export |
 
@@ -262,11 +246,10 @@ When the input is an IP address, CIDR range, or a file containing only IPs/CIDRs
 
 | Phase | Name | Description |
 |-------|------|-------------|
-| 1 | **Nuclei** | Automated vulnerability scanning on all targets with base tags + severity filter (`low,medium,high,critical`) |
-| 2 | **Nmap** | Port & service scanning on all target IPs (`-sCV --top-ports 1000`) |
-| 3 | **Enum4linux** | SMB/Windows enumeration on all target IPs (`enum4linux -a`) |
-| 4 | **CME** | CrackMapExec protocol enumeration grouped by open ports from nmap |
-| 5 | **Output** | Terminal rendering + JSON export + per-target file export |
+| 1 | **Nmap** | Port & service scanning on all target IPs (`-sCV --top-ports 1000`) |
+| 2 | **Enum4linux** | SMB/Windows enumeration on all target IPs (`enum4linux -a`) |
+| 3 | **CME** | CrackMapExec protocol enumeration grouped by open ports from nmap |
+| 4 | **Output** | Terminal rendering + JSON export + per-target file export |
 
 ## Subdomain Takeover Detection
 
@@ -304,61 +287,6 @@ When the input is an IP address, CIDR range, or a file containing only IPs/CIDRs
 | ASP.NET | LOW | ViewState deserialization, verbose errors |
 | React | INFO | Exposed source maps |
 
-## Nuclei Vulnerability Scanning
-
-ReconX integrates [ProjectDiscovery nuclei](https://github.com/projectdiscovery/nuclei) for automated vulnerability scanning after subdomain discovery and tech profiling.
-
-### Dynamic Tag Selection
-
-Nuclei tags are **dynamically selected** based on technologies detected by httpx (Wappalyzer) and the built-in tech profiler. This ensures relevant templates are used without wasting time on irrelevant checks.
-
-**Severity filter**: `-s low,medium,high,critical` (info findings are excluded).
-
-**Base tags** (always included):
-```
-vuln, cve, vkev, panel, xss
-```
-
-**Conditional tags** (added when tech is detected):
-
-| Detected Technology | Extra Nuclei Tags |
-|---|---|
-| WordPress / wp-content / wp-includes | `wordpress`, `wp-plugin` |
-| Laravel | `laravel` |
-| Spring Boot / Spring Boot Actuator | `spring`, `springboot` |
-| Apache Tomcat | `tomcat`, `apache` |
-| Jenkins | `jenkins` |
-| Grafana | `grafana` |
-| Django | `django` |
-| Jira | `jira`, `atlassian` |
-| Confluence | `confluence`, `atlassian` |
-| GitLab | `gitlab` |
-| Nginx | `nginx` |
-| Drupal | `drupal` |
-| Magento | `magento` |
-| phpMyAdmin | `phpmyadmin` |
-| IIS / ASP.NET | `iis` |
-| WebLogic | `weblogic`, `oracle` |
-| Zimbra | `zimbra` |
-
-### Example
-
-If httpx detects WordPress and Nginx technologies on alive subdomains:
-```
-Tags: vuln, cve, discovery, vkev, panel, xss, wordpress, wp-plugin, nginx
-```
-
-If no specific tech is detected, only base tags are used — keeping scan time efficient.
-
-### Nuclei Output Files
-
-| File | Contents |
-|------|----------|
-| `nuclei_findings.txt` | All findings sorted by severity |
-| `nuclei_critical.txt` | Critical severity findings with details + curl commands |
-| `nuclei_high.txt` | High severity findings with details + references |
-| `nuclei_summary.json` | Full stats + all findings in structured JSON |
-
 ## Example Output
 
 ```
@@ -373,12 +301,6 @@ If no specific tech is detected, only base tags are used — keeping scan time e
 │ Tech: 3 medium (Laravel(2), WordPress(1))
 │     blog.target.com  ← WordPress [Body] – CMS – check /wp-admin, /xmlrpc.php
 │     app.target.com   ← Laravel [Body] – PHP framework – check /telescope, debug mode
-│ Nuclei: 14 findings (3 high | 8 medium | 3 info) (87.2s)
-│     Tech tags: wordpress, wp-plugin, laravel, nginx
-│     [HIGH] WordPress XML-RPC Enabled → blog.target.com
-│     [HIGH] Laravel Debug Mode → app.target.com
-│     [MEDIUM] WordPress User Enumeration → blog.target.com
-│     ... and 11 more finding(s)
 │ Nmap: 12/15 hosts up | 47 open ports | 8 services (124.3s)
 │     Services: http(12), ssh(8), https(7), smtp(3), mysql(2)
 │     Top ports: 80(12), 443(7), 22(8), 25(3), 3306(2)

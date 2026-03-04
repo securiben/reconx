@@ -19,7 +19,7 @@ from .models import (
 )
 from .sources import (
     AtlasSource, SphinxSource, OracleSource,
-    RadarSource, TorrentSource, VenomSource, SonarSource,
+    RadarSource, TorrentSource, VenomSource,
     ShodanSource, CensysSource, SecurityTrailsSource, URLScanSource,
     VTSiblingsSource,
 )
@@ -27,7 +27,7 @@ from .sources.base import BaseSource
 from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
-    NucleiScanner, NmapScanner, Enum4linuxScanner, CMEScanner,
+    NmapScanner, Enum4linuxScanner, CMEScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -67,7 +67,6 @@ class ReconEngine:
         self.takeover_scanner = TakeoverScanner(config.scanner)
         self.tech_profiler = TechProfiler(config.scanner)
         self.httpx_probe = HttpxProbe(config.scanner)
-        self.nuclei_scanner = NucleiScanner(config.scanner)
         self.nmap_scanner = NmapScanner(config.scanner)
         self.enum4linux_scanner = Enum4linuxScanner(config.scanner)
         self.cme_scanner = CMEScanner(config.scanner)
@@ -81,7 +80,6 @@ class ReconEngine:
             "radar": RadarSource,
             "torrent": TorrentSource,
             "venom": VenomSource,
-            "sonar": SonarSource,
             "shodan": ShodanSource,
             "censys": CensysSource,
             "sectrails": SecurityTrailsSource,
@@ -134,20 +132,11 @@ class ReconEngine:
                 # Print result message
                 count = len(all_subdomains_by_source[key])
                 elapsed_ms = int(source.elapsed * 1000)
-                if key == 'sonar' and hasattr(source, 'wordlist_size'):
-                    ws = source.wordlist_size
-                    rc = source.resolved_count
-                    print(
-                        f"\033[92m[+]\033[0m {source.name + ':':<{max_name_len + 1}} "
-                        f"\033[92m{rc:>4}\033[0m resolved from {ws} words "
-                        f"\033[90m({elapsed_ms}ms)\033[0m"
-                    )
-                else:
-                    print(
-                        f"\033[92m[+]\033[0m {source.name + ':':<{max_name_len + 1}} "
-                        f"\033[92m{count:>4}\033[0m subdomains "
-                        f"\033[90m({elapsed_ms}ms)\033[0m"
-                    )
+                print(
+                    f"\033[92m[+]\033[0m {source.name + ':':<{max_name_len + 1}} "
+                    f"\033[92m{count:>4}\033[0m subdomains "
+                    f"\033[90m({elapsed_ms}ms)\033[0m"
+                )
 
         # ── Phase 2: Deduplicate and aggregate ─────────────────────────────
         unique_hostnames = set()
@@ -338,75 +327,7 @@ class ReconEngine:
             f"\033[90m({beacon_elapsed:.1f}s)\033[0m\n"
         )
 
-        # ── Phase 9: Nuclei vulnerability scanning ─────────────────────────
-        if self.nuclei_scanner.available:
-            # Collect all detected technologies from httpx + tech profiler
-            detected_techs = set()
-            for sub in subdomain_objects:
-                for tech in getattr(sub, 'http_technologies', []) or []:
-                    detected_techs.add(tech)
-            for m in tech_matches:
-                detected_techs.add(m.tech.name)
-
-            # Build tags dynamically
-            nuclei_tags = self.nuclei_scanner.build_tags(detected_techs)
-            tag_extras = [t for t in nuclei_tags if t not in [
-                'vuln', 'cve', 'discovery', 'vkev', 'panel', 'xss'
-            ]]
-            tags_display = ", ".join(nuclei_tags)
-            print(f"\033[36m[>]\033[0m Nuclei: scanning {len(alive_subs)} alive hosts ...")
-            print(f"\033[36m[>]\033[0m Nuclei: tags = \033[96m{tags_display}\033[0m")
-            if tag_extras:
-                print(
-                    f"\033[36m[>]\033[0m Nuclei: tech-detected extras → "
-                    f"\033[93m{', '.join(tag_extras)}\033[0m"
-                )
-
-            alive_hostnames = [s.hostname for s in alive_subs]
-            nuclei_results = self.nuclei_scanner.scan(alive_hostnames, detected_techs)
-            nuclei_stats = self.nuclei_scanner.stats
-
-            self.result.nuclei_results = nuclei_results
-            self.result.nuclei_stats = nuclei_stats.to_dict()
-            self.result.nuclei_available = True
-
-            # Print nuclei summary
-            sev_parts = []
-            if nuclei_stats.critical > 0:
-                sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
-            if nuclei_stats.high > 0:
-                sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
-            if nuclei_stats.medium > 0:
-                sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
-            if nuclei_stats.low > 0:
-                sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
-            if nuclei_stats.info > 0:
-                sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
-
-            if nuclei_results:
-                sev_str = " | ".join(sev_parts)
-                print(
-                    f"\033[92m[+]\033[0m Nuclei: \033[92m{nuclei_stats.total_findings} findings\033[0m "
-                    f"({sev_str}) "
-                    f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m\n"
-                )
-            else:
-                print(
-                    f"\033[92m[+]\033[0m Nuclei: \033[92m0 findings\033[0m "
-                    f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m\n"
-                )
-        else:
-            print(
-                f"\033[93m[!]\033[0m ProjectDiscovery nuclei not found – skipping vulnerability scan"
-            )
-            print(
-                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m"
-            )
-            print(
-                f"\033[90m    Or download: https://github.com/projectdiscovery/nuclei/releases\033[0m\n"
-            )
-
-        # ── Phase 9b: Nmap port & service scanning ──────────────────────────
+        # ── Phase 9: Nmap port & service scanning ──────────────────────────
         if self.nmap_scanner.available:
             # Collect all unique IP addresses from resolved subdomains
             all_ips = set()
@@ -595,14 +516,14 @@ class ReconEngine:
 
     # ══════════════════════════════════════════════════════════════════════
     # Direct-target mode — IP / CIDR / file of IPs
-    # Skips all subdomain enumeration and goes straight to nuclei + nmap.
+    # Skips all subdomain enumeration and goes straight to nmap + CME + enum4linux.
     # ══════════════════════════════════════════════════════════════════════
 
     def _run_direct(self, start_time: float) -> ScanResult:
         """
         Execute a direct scan on IP addresses / CIDR ranges.
         Skips subdomain enum, CT logs, takeover, tech profiler, httpx, etc.
-        Only runs nuclei + nmap against the provided targets.
+        Runs nmap → CME → enum4linux against the provided targets.
         """
         targets = list(set(self.config.direct_targets))  # deduplicate
         label = self.config.input_label or self.config.target_domain
@@ -616,55 +537,8 @@ class ReconEngine:
         )
         print(
             f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
-            f"jumping to nuclei & nmap\n"
+            f"jumping to nmap, CME & enum4linux\n"
         )
-
-        # ── Nuclei vulnerability scanning ──────────────────────────────────
-        if self.nuclei_scanner.available:
-            nuclei_tags = self.nuclei_scanner.build_tags(set())  # base tags only
-            tags_display = ", ".join(nuclei_tags)
-            print(f"\033[36m[>]\033[0m Nuclei: scanning {len(targets)} target(s) ...")
-            print(f"\033[36m[>]\033[0m Nuclei: tags = \033[96m{tags_display}\033[0m")
-
-            nuclei_results = self.nuclei_scanner.scan(targets, set())
-            nuclei_stats = self.nuclei_scanner.stats
-
-            self.result.nuclei_results = nuclei_results
-            self.result.nuclei_stats = nuclei_stats.to_dict()
-            self.result.nuclei_available = True
-
-            # Print nuclei summary
-            sev_parts = []
-            if nuclei_stats.critical > 0:
-                sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
-            if nuclei_stats.high > 0:
-                sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
-            if nuclei_stats.medium > 0:
-                sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
-            if nuclei_stats.low > 0:
-                sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
-            if nuclei_stats.info > 0:
-                sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
-
-            if nuclei_results:
-                sev_str = " | ".join(sev_parts)
-                print(
-                    f"\033[92m[+]\033[0m Nuclei: \033[92m{nuclei_stats.total_findings} findings\033[0m "
-                    f"({sev_str}) "
-                    f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m\n"
-                )
-            else:
-                print(
-                    f"\033[92m[+]\033[0m Nuclei: \033[92m0 findings\033[0m "
-                    f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m\n"
-                )
-        else:
-            print(
-                f"\033[93m[!]\033[0m ProjectDiscovery nuclei not found – skipping vulnerability scan"
-            )
-            print(
-                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
-            )
 
         # ── Nmap port & service scanning ───────────────────────────────────
         if self.nmap_scanner.available:

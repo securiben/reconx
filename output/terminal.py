@@ -437,93 +437,6 @@ class TerminalRenderer:
 
                 self._box_line(line)
 
-    def _render_nuclei(self, result: ScanResult):
-        """Render the Nuclei vulnerability scan results section."""
-        from ..scanner.nuclei_scan import NUCLEI_SEVERITY_COLORS
-
-        nuclei_results = getattr(result, 'nuclei_results', [])
-        nuclei_stats = getattr(result, 'nuclei_stats', {})
-        nuclei_available = getattr(result, 'nuclei_available', False)
-
-        if not nuclei_available:
-            return
-
-        total = nuclei_stats.get("total_findings", 0)
-        crit = nuclei_stats.get("critical", 0)
-        high = nuclei_stats.get("high", 0)
-        med = nuclei_stats.get("medium", 0)
-        low = nuclei_stats.get("low", 0)
-        info = nuclei_stats.get("info", 0)
-        scan_time = nuclei_stats.get("scan_time", 0.0)
-        tags_used = nuclei_stats.get("tags_used", [])
-
-        # Summary line
-        sev_parts = []
-        if crit > 0:
-            sev_parts.append(f"{C.CRITICAL}!! {crit} critical{C.RESET}")
-        if high > 0:
-            sev_parts.append(f"{C.HIGH}{high} high{C.RESET}")
-        if med > 0:
-            sev_parts.append(f"{C.MEDIUM}{med} medium{C.RESET}")
-        if low > 0:
-            sev_parts.append(f"{C.LOW}{low} low{C.RESET}")
-        if info > 0:
-            sev_parts.append(f"{C.INFO_SEV}{info} info{C.RESET}")
-
-        if not sev_parts:
-            sev_parts.append(f"{C.BRIGHT_GREEN}0 findings{C.RESET}")
-
-        sev_str = f" {C.BORDER}|{C.RESET} ".join(sev_parts)
-        content = (
-            f"{C.LABEL}Nuclei:{C.RESET} "
-            f"{C.BRIGHT_GREEN}{total} findings{C.RESET} "
-            f"({sev_str}) "
-            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
-        )
-        self._box_line(content)
-
-        # Tags used (show tech-detected extras only)
-        if tags_used:
-            base_tags = {"vuln", "cve", "discovery", "vkev", "panel", "xss"}
-            extras = [t for t in tags_used if t not in base_tags]
-            if extras:
-                self._box_line(
-                    f"    {C.DIM}Tech tags:{C.RESET} "
-                    f"{C.BRIGHT_YELLOW}{', '.join(extras)}{C.RESET}"
-                )
-
-        # Show top findings (critical and high first, then medium)
-        if nuclei_results:
-            shown = 0
-            max_display = 10
-            sev_order = ["critical", "high", "medium", "low", "info"]
-
-            for sev in sev_order:
-                for r in nuclei_results:
-                    if r.severity != sev:
-                        continue
-                    if shown >= max_display:
-                        break
-
-                    sev_color = NUCLEI_SEVERITY_COLORS.get(r.severity, C.WHITE)
-                    host_display = r.host.replace("https://", "").replace("http://", "").rstrip("/")
-
-                    self._box_line(
-                        f"    {sev_color}[{r.severity.upper()}]{C.RESET} "
-                        f"{C.TECH_NAME}{r.template_name}{C.RESET} "
-                        f"{C.DIM}\u2192{C.RESET} "
-                        f"{C.WHITE}{host_display}{C.RESET}"
-                    )
-                    shown += 1
-                if shown >= max_display:
-                    break
-
-            remaining = total - shown
-            if remaining > 0:
-                self._box_line(
-                    f"    {C.DIM}... and {remaining} more finding(s){C.RESET}"
-                )
-
     def _render_nmap(self, result: ScanResult):
         """Render the Nmap port scan summary line."""
         nmap_stats = getattr(result, 'nmap_stats', {})
@@ -790,9 +703,6 @@ class TerminalRenderer:
 
         # Tech
         self._render_tech(result)
-
-        # Nuclei
-        self._render_nuclei(result)
 
         # Nmap
         self._render_nmap(result)

@@ -43,10 +43,7 @@ class FileExporter:
         ├── httpx_servers.txt        # Server header distribution
         ├── httpx_titles.txt         # HTTP page titles
         ├── httpx_redirects.txt      # Redirecting subdomains + locations
-        ├── nuclei_findings.txt      # All nuclei vulnerability findings
-        ├── nuclei_critical.txt      # Critical severity findings only
-        ├── nuclei_high.txt          # High severity findings only
-        └── nuclei_summary.json      # Nuclei scan statistics
+        └── nmap_summary.txt         # Nmap scan statistics
     """
 
     def __init__(self, base_dir: str = "results"):
@@ -75,7 +72,6 @@ class FileExporter:
         self._export_infrastructure(domain_dir, result)
         self._export_sources(domain_dir, result)
         self._export_httpx(domain_dir, result)
-        self._export_nuclei(domain_dir, result)
         self._export_nmap(domain_dir, result)
         self._export_enum4linux(domain_dir, result)
         self._export_cme(domain_dir, result)
@@ -660,122 +656,6 @@ class FileExporter:
                     lines.append(f"  → (final) {final}")
                 lines.append("")
             self._write(filepath, "\n".join(lines) + "\n")
-
-    def _export_nuclei(self, outdir: str, result: ScanResult):
-        """Export nuclei vulnerability scan results."""
-        nuclei_results = getattr(result, 'nuclei_results', [])
-        nuclei_stats = getattr(result, 'nuclei_stats', {})
-        nuclei_available = getattr(result, 'nuclei_available', False)
-
-        if not nuclei_available or not nuclei_results:
-            return
-
-        domain = result.target_domain
-
-        # ── nuclei_findings.txt ── All findings ──────────────────────────
-        filepath = os.path.join(outdir, "nuclei_findings.txt")
-        lines = [f"# ReconX - Nuclei Vulnerability Findings for {domain}"]
-        lines.append(f"# {len(nuclei_results)} total findings")
-        tags_used = nuclei_stats.get("tags_used", [])
-        if tags_used:
-            lines.append(f"# Tags: {', '.join(tags_used)}")
-        lines.append("")
-
-        sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-        sorted_results = sorted(
-            nuclei_results,
-            key=lambda r: (sev_order.get(r.severity, 5), r.template_id)
-        )
-
-        for r in sorted_results:
-            host = r.host.replace("https://", "").replace("http://", "").rstrip("/")
-            lines.append(f"[{r.severity.upper()}] {r.template_name}")
-            lines.append(f"  Template: {r.template_id}")
-            lines.append(f"  Host: {host}")
-            if r.matched_at and r.matched_at != r.host:
-                lines.append(f"  Matched: {r.matched_at}")
-            if r.description:
-                lines.append(f"  Description: {r.description[:200]}")
-            if r.reference:
-                for ref in r.reference[:3]:
-                    lines.append(f"  Reference: {ref}")
-            if r.matcher_name:
-                lines.append(f"  Matcher: {r.matcher_name}")
-            if r.extracted_results:
-                for ext in r.extracted_results[:3]:
-                    lines.append(f"  Extracted: {ext}")
-            lines.append("")
-
-        self._write(filepath, "\n".join(lines) + "\n")
-
-        # ── nuclei_critical.txt ── Critical only ─────────────────────────
-        critical = [r for r in nuclei_results if r.severity == "critical"]
-        if critical:
-            filepath = os.path.join(outdir, "nuclei_critical.txt")
-            lines = [f"# ReconX - CRITICAL Nuclei Findings for {domain}"]
-            lines.append(f"# {len(critical)} critical findings")
-            lines.append("")
-            for r in critical:
-                host = r.host.replace("https://", "").replace("http://", "").rstrip("/")
-                lines.append(f"[CRITICAL] {r.template_name}")
-                lines.append(f"  Template: {r.template_id}")
-                lines.append(f"  Host: {host}")
-                if r.matched_at and r.matched_at != r.host:
-                    lines.append(f"  Matched: {r.matched_at}")
-                if r.description:
-                    lines.append(f"  Description: {r.description[:300]}")
-                if r.reference:
-                    for ref in r.reference:
-                        lines.append(f"  Reference: {ref}")
-                if r.curl_command:
-                    lines.append(f"  Curl: {r.curl_command}")
-                lines.append("")
-            self._write(filepath, "\n".join(lines) + "\n")
-
-        # ── nuclei_high.txt ── High only ─────────────────────────────────
-        high = [r for r in nuclei_results if r.severity == "high"]
-        if high:
-            filepath = os.path.join(outdir, "nuclei_high.txt")
-            lines = [f"# ReconX - HIGH Nuclei Findings for {domain}"]
-            lines.append(f"# {len(high)} high findings")
-            lines.append("")
-            for r in high:
-                host = r.host.replace("https://", "").replace("http://", "").rstrip("/")
-                lines.append(f"[HIGH] {r.template_name}")
-                lines.append(f"  Template: {r.template_id}")
-                lines.append(f"  Host: {host}")
-                if r.matched_at and r.matched_at != r.host:
-                    lines.append(f"  Matched: {r.matched_at}")
-                if r.description:
-                    lines.append(f"  Description: {r.description[:300]}")
-                if r.reference:
-                    for ref in r.reference[:5]:
-                        lines.append(f"  Reference: {ref}")
-                lines.append("")
-            self._write(filepath, "\n".join(lines) + "\n")
-
-        # ── nuclei_summary.json ── Stats JSON ────────────────────────────
-        filepath = os.path.join(outdir, "nuclei_summary.json")
-        summary = {
-            "domain": domain,
-            "total_findings": nuclei_stats.get("total_findings", 0),
-            "severity": {
-                "critical": nuclei_stats.get("critical", 0),
-                "high": nuclei_stats.get("high", 0),
-                "medium": nuclei_stats.get("medium", 0),
-                "low": nuclei_stats.get("low", 0),
-                "info": nuclei_stats.get("info", 0),
-            },
-            "hosts_scanned": nuclei_stats.get("hosts_scanned", 0),
-            "templates_used": nuclei_stats.get("templates_used", 0),
-            "tags_used": tags_used,
-            "scan_time": nuclei_stats.get("scan_time", 0.0),
-            "findings": [
-                r.to_dict() if hasattr(r, 'to_dict') else r
-                for r in sorted_results
-            ],
-        }
-        self._write(filepath, json.dumps(summary, indent=2, ensure_ascii=False) + "\n")
 
     def _export_nmap(self, outdir: str, result: ScanResult):
         """

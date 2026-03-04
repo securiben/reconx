@@ -8,8 +8,8 @@ Usage:
 Examples:
     python main.py example.com              # Domain → full recon pipeline
     python main.py targets.txt              # File of targets (IPs/domains)
-    python main.py 10.10.0.5                # Single IP → nuclei + nmap
-    python main.py 10.10.0.0/24             # CIDR range → nuclei + nmap
+    python main.py 10.10.0.5                # Single IP → nmap + CME
+    python main.py 10.10.0.0/24             # CIDR range → nmap + CME
     python main.py example.com --demo
     python main.py example.com -o results.json
 """
@@ -62,7 +62,7 @@ def print_scan_start(label: str, demo: bool, direct: bool = False):
     print(f"\033[1;97m[»]\033[0m {mode}Target: \033[1;96m{label}\033[0m")
     if direct:
         print(f"\033[1;97m[»]\033[0m Mode: \033[93mDirect scan\033[0m (IP/CIDR — skipping subdomain enumeration)")
-        print(f"\033[1;97m[»]\033[0m Initializing nuclei & nmap ...\n")
+        print(f"\033[1;97m[»]\033[0m Initializing nmap & CME ...\n")
     else:
         print(f"\033[1;97m[»]\033[0m Initializing sources & scanners...")
         print(f"\033[1;97m[»]\033[0m Launching concurrent enumeration...\n")

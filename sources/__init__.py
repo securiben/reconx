@@ -9,7 +9,6 @@ from .oracle import OracleSource
 from .radar import RadarSource
 from .torrent import TorrentSource
 from .venom import VenomSource
-from .sonar import SonarSource
 from .shodan_source import ShodanSource
 from .censys_source import CensysSource
 from .sectrails_source import SecurityTrailsSource
@@ -23,7 +22,6 @@ __all__ = [
     "RadarSource",
     "TorrentSource",
     "VenomSource",
-    "SonarSource",
     "ShodanSource",
     "CensysSource",
     "SecurityTrailsSource",
