@@ -16,6 +16,7 @@ from .cme_scan import CMEScanner
 from .msf_smb_brute import MSFSMBBruteScanner
 from .rdp_brute import RDPBruteScanner
 from .wpscan import WPScanner
+from .smbclient_scan import SMBClientScanner
 
 __all__ = [
     "InfrastructureScanner",
@@ -30,4 +31,5 @@ __all__ = [
     "MSFSMBBruteScanner",
     "RDPBruteScanner",
     "WPScanner",
+    "SMBClientScanner",
 ]

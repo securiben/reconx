@@ -867,6 +867,98 @@ class TerminalRenderer:
                         f"    {C.VULN}!! {ip} {domain_str}{user}:{pwd}{pwn_str}{C.RESET}"
                     )
 
+    def _render_smbclient(self, result: ScanResult):
+        """Render the SMBClient null session detection summary."""
+        smb_stats = getattr(result, 'smbclient_stats', {})
+        smb_available = getattr(result, 'smbclient_available', False)
+        smb_results = getattr(result, 'smbclient_results', {})
+
+        if not smb_available or not smb_stats:
+            return
+
+        total_scanned = smb_stats.get("total_hosts_scanned", 0)
+        null_sessions = smb_stats.get("hosts_with_null_session", 0)
+        total_shares = smb_stats.get("total_shares", 0)
+        accessible = smb_stats.get("accessible_shares", 0)
+        files_listed = smb_stats.get("total_files_listed", 0)
+        hosts_accessible = smb_stats.get("hosts_with_accessible_shares", 0)
+        scan_time = smb_stats.get("scan_time", 0.0)
+
+        if total_scanned == 0:
+            return
+
+        # Main smbclient line
+        parts = [
+            f"{C.BRIGHT_GREEN}{total_scanned}{C.RESET}{C.WHITE} SMB host(s){C.RESET}",
+        ]
+        if null_sessions > 0:
+            parts.append(f"{C.VULN}{null_sessions} null session(s){C.RESET}")
+        else:
+            parts.append(f"{C.WHITE}0 null sessions{C.RESET}")
+        if total_shares > 0:
+            parts.append(f"{C.CYAN}{total_shares} share(s){C.RESET}")
+        if accessible > 0:
+            parts.append(f"{C.BRIGHT_RED}{accessible} accessible{C.RESET}")
+        if files_listed > 0:
+            parts.append(f"{C.BRIGHT_GREEN}{files_listed} files{C.RESET}")
+        content = (
+            f"{C.LABEL}SMBClient:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Show per-host null session details (limit to 10 entries)
+        shown = 0
+        for ip in sorted(smb_results.keys()):
+            host_result = smb_results[ip]
+            is_null = host_result.null_session if hasattr(host_result, 'null_session') else host_result.get('null_session', False)
+            if not is_null:
+                continue
+
+            shares = host_result.shares if hasattr(host_result, 'shares') else host_result.get('shares', [])
+            share_count = len(shares)
+            acc_count = host_result.accessible_shares if hasattr(host_result, 'accessible_shares') else host_result.get('accessible_shares', 0)
+
+            acc_str = ""
+            if acc_count > 0:
+                acc_str = f" {C.BRIGHT_RED}({acc_count} readable){C.RESET}"
+
+            share_names = []
+            for s in shares:
+                name = s.name if hasattr(s, 'name') else s.get('name', '')
+                share_names.append(name)
+
+            self._box_line(
+                f"    {C.VULN}!! {ip}{C.RESET} → "
+                f"{C.BRIGHT_GREEN}{share_count} shares{C.RESET}{acc_str}: "
+                f"{C.DIM}{', '.join(share_names[:8])}"
+                f"{'...' if len(share_names) > 8 else ''}{C.RESET}"
+            )
+
+            # Show accessible shares with file counts
+            for s in shares:
+                s_accessible = s.accessible if hasattr(s, 'accessible') else s.get('accessible', False)
+                if not s_accessible:
+                    continue
+                s_name = s.name if hasattr(s, 'name') else s.get('name', '')
+                s_files = s.files if hasattr(s, 'files') else s.get('files', [])
+                if s_files:
+                    self._box_line(
+                        f"      {C.BRIGHT_RED}↳ //{ip}/{s_name}{C.RESET} "
+                        f"→ {C.BRIGHT_GREEN}{len(s_files)} file(s)/dir(s){C.RESET}"
+                    )
+                    shown += 1
+                    if shown >= 10:
+                        break
+
+            shown += 1
+            if shown >= 10:
+                remaining = null_sessions - shown
+                if remaining > 0:
+                    self._box_line(f"    {C.DIM}... and {remaining} more null session host(s){C.RESET}")
+                break
+
     def _render_wpscan(self, result: ScanResult):
         """Render the WPScan WordPress scan summary."""
         wpscan_stats = getattr(result, 'wpscan_stats', {})
@@ -1032,6 +1124,9 @@ class TerminalRenderer:
 
         # RDP Brute-force
         self._render_rdp(result)
+
+        # SMBClient null session
+        self._render_smbclient(result)
 
         # WPScan WordPress
         self._render_wpscan(result)

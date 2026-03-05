@@ -359,6 +359,11 @@ class ScanResult:
     wpscan_stats: Dict = field(default_factory=dict)
     wpscan_available: bool = False
 
+    # SMBClient null session detection
+    smbclient_results: Dict = field(default_factory=dict)
+    smbclient_stats: Dict = field(default_factory=dict)
+    smbclient_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -449,6 +454,14 @@ class ScanResult:
                 "targets": {
                     url: r.to_dict() if hasattr(r, 'to_dict') else r
                     for url, r in self.wpscan_results.items()
+                },
+            }
+        if self.smbclient_results:
+            d["smbclient"] = {
+                "stats": self.smbclient_stats,
+                "hosts": {
+                    ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for ip, r in self.smbclient_results.items()
                 },
             }
         return d

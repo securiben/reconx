@@ -78,6 +78,7 @@ class FileExporter:
         self._export_cme(domain_dir, result)
         self._export_msf(domain_dir, result)
         self._export_rdp(domain_dir, result)
+        self._export_smbclient(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -1177,6 +1178,83 @@ class FileExporter:
             "hosts": {
                 ip: r.to_dict() if hasattr(r, 'to_dict') else r
                 for ip, r in rdp_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_smbclient(self, outdir: str, result: ScanResult):
+        """
+        Export SMBClient null session results.
+        Creates human-readable summary and structured JSON.
+        """
+        smb_stats = getattr(result, 'smbclient_stats', {})
+        smb_results = getattr(result, 'smbclient_results', {})
+        if not getattr(result, 'smbclient_available', False) or not smb_results:
+            return
+
+        domain = result.target_domain
+
+        # ── smbclient_nullsession.txt ── Human-readable summary ───────
+        filepath = os.path.join(outdir, "smbclient_nullsession.txt")
+        lines = [f"# ReconX - SMBClient Null Session Results for {domain}"]
+        lines.append(f"# Hosts scanned: {smb_stats.get('total_hosts_scanned', 0)}")
+        lines.append(f"# Hosts with null session: {smb_stats.get('hosts_with_null_session', 0)}")
+        lines.append(f"# Total shares: {smb_stats.get('total_shares', 0)}")
+        lines.append(f"# Accessible shares: {smb_stats.get('accessible_shares', 0)}")
+        lines.append(f"# Total files listed: {smb_stats.get('total_files_listed', 0)}")
+        lines.append(f"# Hosts with accessible shares: {smb_stats.get('hosts_with_accessible_shares', 0)}")
+        lines.append(f"# Scan time: {smb_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for ip in sorted(smb_results.keys()):
+            host_result = smb_results[ip]
+            null_session = host_result.null_session if hasattr(host_result, 'null_session') else host_result.get('null_session', False)
+            shares = host_result.shares if hasattr(host_result, 'shares') else host_result.get('shares', [])
+            workgroup = host_result.workgroup if hasattr(host_result, 'workgroup') else host_result.get('workgroup', '')
+            error = host_result.error if hasattr(host_result, 'error') else host_result.get('error', '')
+            acc_shares = host_result.accessible_shares if hasattr(host_result, 'accessible_shares') else host_result.get('accessible_shares', 0)
+            total_files = host_result.total_files_listed if hasattr(host_result, 'total_files_listed') else host_result.get('total_files_listed', 0)
+
+            null_str = "NULL SESSION" if null_session else "no null session"
+            lines.append(f"── {ip} ({null_str}) ──")
+            if workgroup:
+                lines.append(f"  Workgroup: {workgroup}")
+            if error and not null_session:
+                lines.append(f"  Error: {error}")
+
+            if shares:
+                lines.append(f"  Shares ({len(shares)}):")
+                lines.append(f"  {'Sharename':<40s} {'Type':<10s} Comment")
+                lines.append(f"  {'-' * 40} {'-' * 10} {'-' * 30}")
+                for share in shares:
+                    s_name = share.name if hasattr(share, 'name') else share.get('name', '')
+                    s_type = share.share_type if hasattr(share, 'share_type') else share.get('type', '')
+                    s_comment = share.comment if hasattr(share, 'comment') else share.get('comment', '')
+                    s_accessible = share.accessible if hasattr(share, 'accessible') else share.get('accessible', False)
+                    s_files = share.files if hasattr(share, 'files') else share.get('files', [])
+
+                    acc_marker = " [ACCESSIBLE]" if s_accessible else ""
+                    lines.append(f"  {s_name:<40s} {s_type:<10s} {s_comment}{acc_marker}")
+
+                    if s_accessible and s_files:
+                        lines.append(f"    Files ({len(s_files)}):")
+                        for f_entry in s_files[:50]:
+                            lines.append(f"      {f_entry}")
+                        if len(s_files) > 50:
+                            lines.append(f"      ... and {len(s_files) - 50} more")
+
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── smbclient_nullsession.json ── Structured JSON ────────────
+        filepath_json = os.path.join(outdir, "smbclient_nullsession.json")
+        json_data = {
+            "domain": domain,
+            "stats": smb_stats,
+            "hosts": {
+                ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                for ip, r in smb_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

@@ -31,7 +31,7 @@ from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
-    MSFSMBBruteScanner, RDPBruteScanner, WPScanner,
+    MSFSMBBruteScanner, RDPBruteScanner, WPScanner, SMBClientScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -78,6 +78,7 @@ class ReconEngine:
         self.msf_scanner = MSFSMBBruteScanner(config.scanner)
         self.rdp_scanner = RDPBruteScanner(config.scanner)
         self.wpscan_scanner = WPScanner(config.scanner)
+        self.smbclient_scanner = SMBClientScanner(config.scanner)
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -229,6 +230,8 @@ class ReconEngine:
                 fe._export_rdp(d, r)
             elif phase == "wpscan":
                 fe._export_wpscan(d, r)
+            elif phase == "smbclient":
+                fe._export_smbclient(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
 
@@ -672,6 +675,91 @@ class ReconEngine:
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
 
+        # ── Phase 9a-2: SMBClient null session detection ─────────────────────
+        if self.smbclient_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            from .scanner.smbclient_scan import SMBClientScanner as _SMBC
+            smb_hosts = _SMBC.get_smb_hosts(self.result.nmap_results)
+            if smb_hosts:
+                smb_output_dir = os.path.join(".", domain)
+                os.makedirs(smb_output_dir, exist_ok=True)
+
+                smb_results = self._safe_scan(
+                    "smbclient", self.smbclient_scanner.scan,
+                    smb_hosts, output_dir=smb_output_dir,
+                )
+
+                if smb_results is not None:
+                    smb_stats = self.smbclient_scanner.stats
+
+                    self.result.smbclient_results = smb_results
+                    self.result.smbclient_stats = smb_stats.to_dict()
+                    self.result.smbclient_available = True
+                    self._save_phase("smbclient")
+
+                    if smb_stats.hosts_with_null_session > 0:
+                        parts = [
+                            f"\033[91m{smb_stats.hosts_with_null_session} null session(s)\033[0m / "
+                            f"{smb_stats.total_hosts_scanned} scanned"
+                        ]
+                        if smb_stats.total_shares > 0:
+                            parts.append(f"\033[96m{smb_stats.total_shares} shares\033[0m")
+                        if smb_stats.accessible_shares > 0:
+                            parts.append(
+                                f"\033[91m{smb_stats.accessible_shares} accessible share(s)\033[0m"
+                            )
+                        if smb_stats.total_files_listed > 0:
+                            parts.append(
+                                f"\033[92m{smb_stats.total_files_listed} files listed\033[0m"
+                            )
+                        print(
+                            f"\033[92m[+]\033[0m smbclient: {' | '.join(parts)} "
+                            f"\033[90m({smb_stats.scan_time:.1f}s)\033[0m"
+                        )
+
+                        null_hosts = self.smbclient_scanner.get_null_session_hosts()
+                        if null_hosts:
+                            print(
+                                f"\033[91m[!]\033[0m smbclient: \033[91m{len(null_hosts)} host(s) "
+                                f"allow null sessions\033[0m (anonymous SMB access)"
+                            )
+                            for ip in null_hosts[:5]:
+                                hr = smb_results[ip]
+                                share_names = [s.name for s in hr.shares]
+                                print(
+                                    f"\033[91m[!]\033[0m smbclient: \033[96m{ip}\033[0m → "
+                                    f"{', '.join(share_names[:6])}"
+                                    f"{'...' if len(share_names) > 6 else ''}"
+                                )
+                        acc_hosts = self.smbclient_scanner.get_accessible_share_hosts()
+                        if acc_hosts:
+                            print(
+                                f"\033[1;91m[!]\033[0m smbclient: \033[1;91m{len(acc_hosts)} host(s) "
+                                f"with readable shares\033[0m (data exposure!)"
+                            )
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m smbclient: \033[37m0 null sessions\033[0m / "
+                            f"{smb_stats.total_hosts_scanned} scanned "
+                            f"\033[90m({smb_stats.scan_time:.1f}s)\033[0m\n"
+                        )
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m smbclient: skipped by user\n"
+                    )
+        elif not self.smbclient_scanner.available and self.result.nmap_available:
+            # Check if SMB hosts exist
+            from .scanner.smbclient_scan import SMBClientScanner as _SMBC2
+            smb_check = _SMBC2.get_smb_hosts(self.result.nmap_results) if self.result.nmap_results else set()
+            if smb_check:
+                print(
+                    f"\033[93m[!]\033[0m smbclient not found – skipping null session detection "
+                    f"({len(smb_check)} SMB host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: sudo apt install smbclient\033[0m\n"
+                )
+
         # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
         if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
             rdp_output_dir = os.path.join(".", domain)
@@ -979,7 +1067,7 @@ class ReconEngine:
         )
         print(
             f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
-            f"jumping to nmap, RDP-brute, enum4linux, MSF-brute, CME, Nuclei & WPScan\n"
+            f"jumping to nmap, smbclient, RDP-brute, enum4linux, MSF-brute, CME, Nuclei & WPScan\n"
         )
 
         # ── Nmap port & service scanning ───────────────────────────────────
@@ -1040,6 +1128,90 @@ class ReconEngine:
             print(
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
+
+        # ── SMBClient null session detection (direct mode) ──────────────────
+        if self.smbclient_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            from .scanner.smbclient_scan import SMBClientScanner as _SMBC
+            smb_hosts = _SMBC.get_smb_hosts(self.result.nmap_results)
+            if smb_hosts:
+                smb_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(smb_output_dir, exist_ok=True)
+
+                smb_results = self._safe_scan(
+                    "smbclient", self.smbclient_scanner.scan,
+                    smb_hosts, output_dir=smb_output_dir,
+                )
+
+                if smb_results is not None:
+                    smb_stats = self.smbclient_scanner.stats
+
+                    self.result.smbclient_results = smb_results
+                    self.result.smbclient_stats = smb_stats.to_dict()
+                    self.result.smbclient_available = True
+                    self._save_phase("smbclient")
+
+                    if smb_stats.hosts_with_null_session > 0:
+                        parts = [
+                            f"\033[91m{smb_stats.hosts_with_null_session} null session(s)\033[0m / "
+                            f"{smb_stats.total_hosts_scanned} scanned"
+                        ]
+                        if smb_stats.total_shares > 0:
+                            parts.append(f"\033[96m{smb_stats.total_shares} shares\033[0m")
+                        if smb_stats.accessible_shares > 0:
+                            parts.append(
+                                f"\033[91m{smb_stats.accessible_shares} accessible share(s)\033[0m"
+                            )
+                        if smb_stats.total_files_listed > 0:
+                            parts.append(
+                                f"\033[92m{smb_stats.total_files_listed} files listed\033[0m"
+                            )
+                        print(
+                            f"\033[92m[+]\033[0m smbclient: {' | '.join(parts)} "
+                            f"\033[90m({smb_stats.scan_time:.1f}s)\033[0m"
+                        )
+
+                        null_hosts = self.smbclient_scanner.get_null_session_hosts()
+                        if null_hosts:
+                            print(
+                                f"\033[91m[!]\033[0m smbclient: \033[91m{len(null_hosts)} host(s) "
+                                f"allow null sessions\033[0m (anonymous SMB access)"
+                            )
+                            for ip in null_hosts[:5]:
+                                hr = smb_results[ip]
+                                share_names = [s.name for s in hr.shares]
+                                print(
+                                    f"\033[91m[!]\033[0m smbclient: \033[96m{ip}\033[0m → "
+                                    f"{', '.join(share_names[:6])}"
+                                    f"{'...' if len(share_names) > 6 else ''}"
+                                )
+                        acc_hosts = self.smbclient_scanner.get_accessible_share_hosts()
+                        if acc_hosts:
+                            print(
+                                f"\033[1;91m[!]\033[0m smbclient: \033[1;91m{len(acc_hosts)} host(s) "
+                                f"with readable shares\033[0m (data exposure!)"
+                            )
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m smbclient: \033[37m0 null sessions\033[0m / "
+                            f"{smb_stats.total_hosts_scanned} scanned "
+                            f"\033[90m({smb_stats.scan_time:.1f}s)\033[0m\n"
+                        )
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m smbclient: skipped by user\n"
+                    )
+        elif not self.smbclient_scanner.available and self.result.nmap_available:
+            from .scanner.smbclient_scan import SMBClientScanner as _SMBC2
+            smb_check = _SMBC2.get_smb_hosts(self.result.nmap_results) if self.result.nmap_results else set()
+            if smb_check:
+                print(
+                    f"\033[93m[!]\033[0m smbclient not found – skipping null session detection "
+                    f"({len(smb_check)} SMB host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: sudo apt install smbclient\033[0m\n"
+                )
 
         # ── RDP brute-force (direct mode) ──────────────────────────────────
         if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
