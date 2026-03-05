@@ -371,18 +371,67 @@ class SMBClientScanner:
 
     def _list_files(self, ip: str, share_name: str) -> Tuple[List[str], bool, str]:
         """
-        Run 'smbclient //<ip>/<share> -N -c ls' to list files.
+        Recursively list files in a share via null session.
+        Descends into subdirectories (max depth 3, max 500 entries total).
 
         Returns:
             (file_entries, accessible, error_message)
         """
-        files: List[str] = []
+        all_entries: List[str] = []
         accessible = False
         error = ""
 
-        # Use shell=True to handle share names with spaces
+        # Start recursive listing from root "\"
+        ok, err = self._list_directory(
+            ip, share_name, "\\", depth=0, max_depth=3,
+            entries=all_entries, max_entries=500,
+        )
+        if ok:
+            accessible = True
+        if err and not all_entries:
+            error = err
+
+        return all_entries, accessible, error
+
+    def _list_directory(
+        self, ip: str, share_name: str, path: str,
+        depth: int, max_depth: int,
+        entries: List[str], max_entries: int,
+    ) -> Tuple[bool, str]:
+        """
+        List files at a specific path inside a share.
+        Recursively descends into subdirectories.
+
+        Args:
+            ip: Target IP.
+            share_name: Share name.
+            path: SMB path to list (e.g. "\\" for root, "\\IT\\" for subdir).
+            depth: Current recursion depth.
+            max_depth: Maximum recursion depth.
+            entries: Accumulator list for all discovered entries.
+            max_entries: Stop after this many total entries.
+
+        Returns:
+            (accessible, error_message)
+        """
+        if len(entries) >= max_entries:
+            return True, ""
+
+        # Build smbclient command: ls "<path>\*"
+        # For root: ls "\*"
+        # For subdir: ls "\IT\*"
+        ls_path = path.rstrip("\\") + "\\*" if path != "\\" else "\\*"
+
         escaped_share = share_name.replace("'", "'\\''")
-        cmd = f"{self.smbclient_path} '//{ip}/{escaped_share}' -N -c 'ls'"
+        escaped_path = ls_path.replace("'", "'\\''")
+        cmd = f"{self.smbclient_path} '//{ip}/{escaped_share}' -N -c 'ls \"{escaped_path}\"'"
+
+        accessible = False
+        error = ""
+        subdirs: List[Tuple[str, str]] = []  # (name, full_path)
+
+        # Indent prefix for tree display
+        indent = "  " * depth
 
         try:
             proc = subprocess.run(
@@ -399,26 +448,24 @@ class SMBClientScanner:
 
             # Check for errors
             if "NT_STATUS_ACCESS_DENIED" in output:
-                error = "access denied"
-                return files, False, error
+                return False, "access denied"
             if "NT_STATUS_LOGON_FAILURE" in output:
-                error = "logon failure"
-                return files, False, error
+                return False, "logon failure"
             if "NT_STATUS_BAD_NETWORK_NAME" in output:
-                error = "bad network name"
-                return files, False, error
+                return False, "bad network name"
+            if "NT_STATUS_NO_SUCH_FILE" in output:
+                return False, "no such path"
+            if "NT_STATUS_OBJECT_NAME_NOT_FOUND" in output:
+                return False, "path not found"
 
             # Parse file listing
-            # Format:   .                D        0  Fri Feb 27 21:50:10 2026
-            #           filename.ext     A  1234567  Mon Mar 30 10:54:26 2020
             for line in output.splitlines():
                 stripped = line.strip()
 
-                # Skip smb prompt lines and empty lines
                 if not stripped or stripped.startswith("smb:"):
                     continue
 
-                # Match file entry: <name>  <attrs>  <size>  <date>
+                # Match: <name>  <attrs>  <size>  <date>
                 file_match = re.match(
                     r'^(.+?)\s+([ADHNRS]+)\s+(\d+)\s+(.+)$',
                     stripped,
@@ -429,26 +476,54 @@ class SMBClientScanner:
                     fsize = file_match.group(3).strip()
                     fdate = file_match.group(4).strip()
 
-                    # Skip . and .. entries
                     if fname in (".", ".."):
                         continue
 
                     is_dir = "D" in attrs
                     type_indicator = "DIR " if is_dir else "FILE"
-                    entry = f"[{type_indicator}] {fname}  ({fsize} bytes)  {fdate}"
-                    files.append(entry)
+
+                    # Build display path
+                    if path == "\\":
+                        display_path = fname
+                    else:
+                        display_path = path.strip("\\") + "\\" + fname
+
+                    entry = f"{indent}[{type_indicator}] {display_path}  ({fsize} bytes)  {fdate}"
+                    entries.append(entry)
                     accessible = True
 
-            # Also check for "blocks" line indicating successful connection
+                    if len(entries) >= max_entries:
+                        entries.append(f"{indent}  ... (truncated at {max_entries} entries)")
+                        return True, ""
+
+                    # Queue subdirectory for recursive listing
+                    if is_dir and depth < max_depth:
+                        if path == "\\":
+                            sub_path = "\\" + fname + "\\"
+                        else:
+                            sub_path = path.rstrip("\\") + "\\" + fname + "\\"
+                        subdirs.append((fname, sub_path))
+
+            # "blocks of size" = successful connection
             if "blocks of size" in output or "blocks available" in output:
                 accessible = True
 
         except subprocess.TimeoutExpired:
-            error = "timeout"
+            return accessible, "timeout"
         except Exception as e:
-            error = str(e)
+            return accessible, str(e)
 
-        return files, accessible, error
+        # Recurse into subdirectories
+        for dir_name, sub_path in subdirs:
+            if len(entries) >= max_entries:
+                break
+            self._list_directory(
+                ip, share_name, sub_path,
+                depth=depth + 1, max_depth=max_depth,
+                entries=entries, max_entries=max_entries,
+            )
+
+        return accessible, error
 
     def _compute_stats(self, scan_time: float):
         """Compute aggregated statistics."""
@@ -481,7 +556,7 @@ class SMBClientScanner:
         for ip in sorted(self.results.keys()):
             hr = self.results[ip]
             null_str = "NULL SESSION" if hr.null_session else "no null session"
-            lines.append(f"── {ip} ({null_str}) ──")
+            lines.append(f"══ {ip} ({null_str}) ══")
             if hr.workgroup:
                 lines.append(f"  Workgroup: {hr.workgroup}")
             if hr.error and not hr.null_session:
@@ -489,21 +564,29 @@ class SMBClientScanner:
 
             if hr.shares:
                 lines.append(f"  Shares ({len(hr.shares)}):")
+                lines.append(f"  {'Sharename':<40s} {'Type':<10s} Comment")
+                lines.append(f"  {'-' * 40} {'-' * 10} {'-' * 30}")
                 for share in hr.shares:
                     acc_str = " [ACCESSIBLE]" if share.accessible else ""
-                    comment_str = f"  ({share.comment})" if share.comment else ""
+                    comment_str = f"  {share.comment}" if share.comment else ""
                     lines.append(
-                        f"    {share.name:<40s} {share.share_type:<10s}{comment_str}{acc_str}"
+                        f"  {share.name:<40s} {share.share_type:<10s}{comment_str}{acc_str}"
                     )
 
-                    if share.accessible and share.files:
-                        lines.append(f"      Files ({len(share.files)}):")
-                        for f in share.files[:50]:  # Limit to 50 files per share
-                            lines.append(f"        {f}")
-                        if len(share.files) > 50:
-                            lines.append(
-                                f"        ... and {len(share.files) - 50} more"
-                            )
+                # Show file listings for accessible shares
+                for share in hr.shares:
+                    if not share.accessible or not share.files:
+                        continue
+
+                    lines.append("")
+                    lines.append(
+                        f"  ── //{ip}/{share.name} "
+                        f"({len(share.files)} entries) ──"
+                    )
+                    for f_entry in share.files:
+                        # Entries already have depth-based indentation
+                        lines.append(f"    {f_entry}")
+
             lines.append("")
 
         try:
