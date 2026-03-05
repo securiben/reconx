@@ -174,7 +174,7 @@ class VNCBruteScanner:
         self.msf_path = self._find_msfconsole()
         self.available = self.msf_path is not None
         self.pass_file = pass_file or self.DEFAULT_PASS_FILE
-        self.results: Dict[str, VNCHostResult] = {}  # ip → result
+        self.results: Dict[str, VNCHostResult] = {}  # "ip:port" → result
         self.stats = VNCBruteStats()
 
     def _find_msfconsole(self) -> Optional[str]:
@@ -239,7 +239,7 @@ class VNCBruteScanner:
 
         return None
 
-    def _get_vnc_hosts(self, nmap_results: Dict) -> Dict[str, int]:
+    def _get_vnc_hosts(self, nmap_results: Dict) -> List[tuple]:
         """
         Extract hosts with VNC ports open from nmap results.
 
@@ -247,9 +247,9 @@ class VNCBruteScanner:
             nmap_results: Dict[str, NmapHostResult] from nmap scanner.
 
         Returns:
-            Dict mapping IP → VNC port number.
+            List of (ip, port) tuples – includes ALL VNC ports per host.
         """
-        vnc_hosts = {}
+        vnc_targets = []
         for ip, host_result in nmap_results.items():
             ports = []
             if hasattr(host_result, 'ports'):
@@ -266,10 +266,11 @@ class VNCBruteScanner:
                     port_num in VNC_PORTS
                     or "vnc" in service.lower()
                 ):
-                    vnc_hosts[ip] = port_num
-                    break  # One VNC port per host is enough
+                    vnc_targets.append((ip, port_num))
 
-        return vnc_hosts
+        # Sort by IP then port for consistent ordering
+        vnc_targets.sort(key=lambda t: (t[0], t[1]))
+        return vnc_targets
 
     def scan(
         self,
@@ -292,9 +293,9 @@ class VNCBruteScanner:
         if not nmap_results:
             return {}
 
-        # Find VNC hosts from nmap results
-        vnc_hosts = self._get_vnc_hosts(nmap_results)
-        if not vnc_hosts:
+        # Find VNC hosts from nmap results (all VNC ports per host)
+        vnc_targets = self._get_vnc_hosts(nmap_results)
+        if not vnc_targets:
             return {}
 
         # Locate password file
@@ -307,31 +308,32 @@ class VNCBruteScanner:
             return {}
 
         scan_start = time.time()
-        self.stats.total_vnc_hosts = len(vnc_hosts)
+        self.stats.total_vnc_hosts = len(vnc_targets)
 
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
+        unique_ips = len({t[0] for t in vnc_targets})
         print(
             f"\033[36m[>]\033[0m vnc-brute: VNC login brute-force on "
-            f"\033[96m{len(vnc_hosts)}\033[0m host(s) "
+            f"\033[96m{len(vnc_targets)}\033[0m target(s) "
+            f"(\033[96m{unique_ips}\033[0m unique IP(s)) "
             f"with \033[96m{os.path.basename(pass_file_path)}\033[0m ..."
         )
 
-        sorted_ips = sorted(vnc_hosts.keys())
-        for idx, ip in enumerate(sorted_ips, 1):
-            vnc_port = vnc_hosts[ip]
+        for idx, (ip, vnc_port) in enumerate(vnc_targets, 1):
+            result_key = f"{ip}:{vnc_port}"
 
             print(
                 f"\033[36m[>]\033[0m vnc-brute: "
-                f"[\033[96m{idx}/{len(sorted_ips)}\033[0m] "
+                f"[\033[96m{idx}/{len(vnc_targets)}\033[0m] "
                 f"\033[96m{ip}:{vnc_port}\033[0m ..."
             )
 
             host_result = self._brute_host(
                 ip, vnc_port, pass_file_path, output_dir,
             )
-            self.results[ip] = host_result
+            self.results[result_key] = host_result
 
             # Print per-host status
             if host_result.no_auth:
@@ -810,14 +812,14 @@ class VNCBruteScanner:
             pass
 
     def get_all_credentials(self) -> List[VNCCredential]:
-        """Get all discovered valid credentials across all hosts."""
+        """Get all discovered valid credentials across all hosts/ports."""
         creds = []
-        for ip, host_result in self.results.items():
+        for host_result in self.results.values():
             creds.extend(host_result.credentials)
         return creds
 
     def get_no_auth_hosts(self) -> List[str]:
-        """Get list of IPs with no-auth VNC access."""
+        """Get list of ip:port strings with no-auth VNC access."""
         return [
-            ip for ip, r in self.results.items() if r.no_auth
+            f"{r.ip}:{r.port}" for r in self.results.values() if r.no_auth
         ]

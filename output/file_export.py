@@ -1132,20 +1132,21 @@ class FileExporter:
         lines.append(f"# Scan time: {vnc_stats.get('scan_time', 0.0):.1f}s")
         lines.append("")
 
-        for ip in sorted(vnc_results.keys()):
-            host_result = vnc_results[ip]
+        for key in sorted(vnc_results.keys()):
+            host_result = vnc_results[key]
             creds = []
             if hasattr(host_result, 'credentials'):
                 creds = host_result.credentials
             elif isinstance(host_result, dict):
                 creds = host_result.get('credentials', [])
 
+            host_ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
             port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 5900)
             no_auth = host_result.no_auth if hasattr(host_result, 'no_auth') else host_result.get('no_auth', False)
             skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
             skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
 
-            lines.append(f"── {ip}:{port} ──")
+            lines.append(f"── {host_ip}:{port} ──")
             if no_auth:
                 lines.append("  [!] NO AUTHENTICATION REQUIRED")
             if skipped:
@@ -1167,12 +1168,13 @@ class FileExporter:
 
         # ── vnc_no_auth.txt ── Hosts with no authentication ──────────
         no_auth_hosts = []
-        for ip in sorted(vnc_results.keys()):
-            host_result = vnc_results[ip]
+        for key in sorted(vnc_results.keys()):
+            host_result = vnc_results[key]
             na = host_result.no_auth if hasattr(host_result, 'no_auth') else host_result.get('no_auth', False)
+            host_ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
             port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 5900)
             if na:
-                no_auth_hosts.append(f"{ip}:{port}")
+                no_auth_hosts.append(f"{host_ip}:{port}")
 
         if no_auth_hosts:
             na_filepath = os.path.join(outdir, "vnc_no_auth.txt")

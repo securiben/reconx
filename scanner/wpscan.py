@@ -272,6 +272,76 @@ class WPScanner:
             return False
 
     @staticmethod
+    def detect_wordpress_from_httpx(httpx_results: dict) -> Set[str]:
+        """
+        Detect WordPress targets from httpx probe results.
+
+        Checks technology list and response data for WordPress indicators.
+        Returns a set of URLs running WordPress.
+        """
+        wp_hosts: Set[str] = set()
+        wp_indicators = [
+            "wordpress", "wp-content", "wp-includes", "wp-admin",
+            "wp-login", "wp-json", "xmlrpc.php",
+        ]
+
+        for host, result in httpx_results.items():
+            is_wp = False
+
+            # Check technologies from httpx -td (Wappalyzer)
+            techs = []
+            if hasattr(result, 'technologies'):
+                techs = result.technologies
+            elif isinstance(result, dict):
+                techs = result.get('technologies', [])
+
+            for tech in techs:
+                if "wordpress" in tech.lower():
+                    is_wp = True
+                    break
+
+            # Check title for WordPress indicators
+            if not is_wp:
+                title = ""
+                if hasattr(result, 'title'):
+                    title = result.title
+                elif isinstance(result, dict):
+                    title = result.get('title', '')
+                if title and "wordpress" in title.lower():
+                    is_wp = True
+
+            # Check final_url / redirect for wp- paths
+            if not is_wp:
+                final_url = ""
+                if hasattr(result, 'final_url'):
+                    final_url = result.final_url
+                elif isinstance(result, dict):
+                    final_url = result.get('final_url', '')
+                if final_url:
+                    url_lower = final_url.lower()
+                    for kw in wp_indicators:
+                        if kw in url_lower:
+                            is_wp = True
+                            break
+
+            if is_wp:
+                # Build URL from httpx result
+                url = ""
+                if hasattr(result, 'url'):
+                    url = result.url
+                elif isinstance(result, dict):
+                    url = result.get('url', '')
+
+                if not url:
+                    url = host if host.startswith("http") else f"http://{host}"
+
+                normalized = WPScanner._normalize_wp_url(url)
+                if normalized:
+                    wp_hosts.add(normalized)
+
+        return wp_hosts
+
+    @staticmethod
     def detect_wordpress_targets(nuclei_results: list) -> Set[str]:
         """
         Detect WordPress targets from nuclei findings.
