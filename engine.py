@@ -1930,12 +1930,15 @@ class ReconEngine:
             # In direct mode, detect WP from nmap HTTP/HTTPS services
             wp_targets: set[str] = set()
             for ip, host_result in self.result.nmap_results.items():
-                for port_info in host_result.get("ports", []):
-                    svc = (port_info.get("service", "") or "").lower()
-                    if svc in ("http", "https", "http-proxy", "https-alt"):
-                        port = port_info.get("port", 80)
-                        scheme = "https" if "https" in svc or port == 443 else "http"
-                        wp_targets.add(f"{scheme}://{ip}:{port}")
+                ports = host_result.ports if hasattr(host_result, 'ports') else []
+                for p in ports:
+                    svc = (p.service if hasattr(p, 'service') else (p.get("service", "") if isinstance(p, dict) else "")) or ""
+                    svc = svc.lower()
+                    port_num = p.port if hasattr(p, 'port') else (p.get("port", 80) if isinstance(p, dict) else 80)
+                    state = p.state if hasattr(p, 'state') else (p.get("state", "") if isinstance(p, dict) else "")
+                    if state == "open" and svc in ("http", "https", "http-proxy", "https-alt"):
+                        scheme = "https" if "https" in svc or port_num == 443 else "http"
+                        wp_targets.add(f"{scheme}://{ip}:{port_num}")
             if wp_targets:
                 wpscan_output_dir = os.path.join(".", label.replace("/", "_"))
                 os.makedirs(wpscan_output_dir, exist_ok=True)
