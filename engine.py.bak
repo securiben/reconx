@@ -690,83 +690,6 @@ class ReconEngine:
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
             )
 
-        # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
-        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            # Only scan IPs that have SMB/NetBIOS ports open
-            smb_ports = {445, 139, 137, 138}
-            enum_ips = set()
-            for ip, host_result in self.result.nmap_results.items():
-                ports = host_result.ports if hasattr(host_result, 'ports') else []
-                for p in ports:
-                    port_num = p.port if hasattr(p, 'port') else p.get('port', 0)
-                    state = p.state if hasattr(p, 'state') else p.get('state', '')
-                    if port_num in smb_ports and state == "open":
-                        enum_ips.add(ip)
-                        break
-            if enum_ips:
-                enum_output_dir = os.path.join(".", domain)
-                os.makedirs(enum_output_dir, exist_ok=True)
-
-                enum_results = self._safe_scan(
-                    "enum4linux", self.enum4linux_scanner.scan,
-                    enum_ips, output_dir=enum_output_dir,
-                )
-
-                if enum_results is not None:
-                    enum_stats = self.enum4linux_scanner.stats
-
-                    self.result.enum4linux_results = enum_results
-                    self.result.enum4linux_stats = enum_stats.to_dict()
-                    self.result.enum4linux_available = True
-                    self._save_phase("enum4linux")
-
-                    # Print enum4linux summary
-                    if enum_stats.hosts_responded > 0:
-                        parts = [
-                            f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
-                            f"{enum_stats.total_ips_scanned} scanned"
-                        ]
-                        if enum_stats.total_shares > 0:
-                            parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
-                        if enum_stats.total_users > 0:
-                            parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
-                        if enum_stats.total_groups > 0:
-                            parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
-                        if enum_stats.null_sessions > 0:
-                            parts.append(
-                                f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
-                            )
-                        print(
-                            f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
-                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
-                        )
-
-                        # Highlight null sessions (critical finding)
-                        null_hosts = self.enum4linux_scanner.get_null_session_hosts()
-                        if null_hosts:
-                            print(
-                                f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
-                                f"allow null sessions\033[0m (anonymous access)"
-                            )
-                        print()
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
-                            f"{enum_stats.total_ips_scanned} scanned "
-                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
-                        )
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m enum4linux: skipped by user\n"
-                    )
-        elif not self.enum4linux_scanner.available and self.result.nmap_available:
-            print(
-                f"\033[93m[!]\033[0m enum4linux not found – skipping SMB/Windows enumeration"
-            )
-            print(
-                f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
-            )
-
         # ── Phase 9a-2: SMBClient null session detection ─────────────────────
         if self.smbclient_scanner.available and self.result.nmap_available and self.result.nmap_results:
             from .scanner.smbclient_scan import SMBClientScanner as _SMBC
@@ -850,6 +773,154 @@ class ReconEngine:
                 )
                 print(
                     f"\033[90m    Install: sudo apt install smbclient\033[0m\n"
+                )
+
+        # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
+        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            rdp_output_dir = os.path.join(".", domain)
+            os.makedirs(rdp_output_dir, exist_ok=True)
+
+            rdp_results = self._safe_scan(
+                "rdp-brute", self.rdp_scanner.scan,
+                self.result.nmap_results, output_dir=rdp_output_dir,
+            )
+
+            if rdp_results is not None:
+                rdp_stats = self.rdp_scanner.stats
+
+                self.result.rdp_results = rdp_results
+                self.result.rdp_stats = rdp_stats.to_dict()
+                self.result.rdp_available = True
+                self._save_phase("rdp")
+
+                if rdp_stats.credentials_found > 0:
+                    pwn_str = ""
+                    if rdp_stats.pwned_count > 0:
+                        pwn_str = (
+                            f" | \033[1;91m{rdp_stats.pwned_count} Pwn3d!\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m rdp-brute: "
+                        f"\033[1;92m{rdp_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{rdp_stats.hosts_tested} hosts tested | "
+                        f"{rdp_stats.total_users_tested} users tested"
+                        f"{pwn_str} "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m rdp-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{rdp_stats.hosts_tested}/{rdp_stats.total_rdp_hosts} hosts tested "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if rdp_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m rdp-brute: "
+                        f"{rdp_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
+                )
+        elif (not self.rdp_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            # Check if there are any RDP hosts to notify user
+            rdp_check = self.rdp_scanner._get_rdp_hosts(self.result.nmap_results) if hasattr(self.rdp_scanner, '_get_rdp_hosts') else {}
+            if rdp_check:
+                print(
+                    f"\033[93m[!]\033[0m netexec not found – skipping RDP brute-force "
+                    f"({len(rdp_check)} RDP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: pip install netexec\033[0m\n"
+                )
+
+        # ── Phase 9b-2: VNC brute-force (msfconsole) ────────────────────────
+        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            vnc_output_dir = os.path.join(".", domain)
+            os.makedirs(vnc_output_dir, exist_ok=True)
+
+            vnc_results = self._safe_scan(
+                "vnc-brute", self.vnc_scanner.scan,
+                self.result.nmap_results, output_dir=vnc_output_dir,
+            )
+
+            if vnc_results is not None:
+                vnc_stats = self.vnc_scanner.stats
+
+                self.result.vnc_results = vnc_results
+                self.result.vnc_stats = vnc_stats.to_dict()
+                self.result.vnc_available = True
+                self._save_phase("vnc")
+
+                if vnc_stats.credentials_found > 0:
+                    no_auth_str = ""
+                    if vnc_stats.hosts_no_auth > 0:
+                        no_auth_str = (
+                            f" | \033[1;91m{vnc_stats.hosts_no_auth} NO AUTH\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m vnc-brute: "
+                        f"\033[1;92m{vnc_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{vnc_stats.hosts_tested} hosts tested"
+                        f"{no_auth_str} "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    # Show found credentials
+                    for cred in self.vnc_scanner.get_all_credentials():
+                        if cred.anonymous:
+                            print(
+                                f"\033[1;91m[!]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;91mNO AUTHENTICATION REQUIRED\033[0m"
+                            )
+                        else:
+                            print(
+                                f"\033[1;92m[+]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;92m:{cred.password}\033[0m"
+                            )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m vnc-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{vnc_stats.hosts_tested}/{vnc_stats.total_vnc_hosts} hosts tested "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if vnc_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m vnc-brute: "
+                        f"{vnc_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                # Highlight no-auth hosts (critical finding)
+                no_auth = self.vnc_scanner.get_no_auth_hosts()
+                if no_auth:
+                    print(
+                        f"\033[1;91m[!]\033[0m vnc-brute: \033[1;91m{len(no_auth)} host(s) "
+                        f"with NO AUTHENTICATION\033[0m (open VNC access!)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
+                )
+        elif (not self.vnc_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.vnc_brute import VNCBruteScanner as _VNC2
+            vnc_check = _VNC2(self.config.scanner)._get_vnc_hosts(self.result.nmap_results)
+            if vnc_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping VNC brute-force "
+                    f"({len(vnc_check)} VNC host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
                 )
 
         # ── Phase 9b-3: SMB brute-force (netexec / nxc) ───────────────────
@@ -960,153 +1031,82 @@ class ReconEngine:
                     f"\033[90m    Install: pip install netexec\033[0m\n"
                 )
 
-        # ── Phase 9b-2: VNC brute-force (msfconsole) ────────────────────────
-        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            vnc_output_dir = os.path.join(".", domain)
-            os.makedirs(vnc_output_dir, exist_ok=True)
+        # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
+        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            # Only scan IPs that have SMB/NetBIOS ports open
+            smb_ports = {445, 139, 137, 138}
+            enum_ips = set()
+            for ip, host_result in self.result.nmap_results.items():
+                ports = host_result.ports if hasattr(host_result, 'ports') else []
+                for p in ports:
+                    port_num = p.port if hasattr(p, 'port') else p.get('port', 0)
+                    state = p.state if hasattr(p, 'state') else p.get('state', '')
+                    if port_num in smb_ports and state == "open":
+                        enum_ips.add(ip)
+                        break
+            if enum_ips:
+                enum_output_dir = os.path.join(".", domain)
+                os.makedirs(enum_output_dir, exist_ok=True)
 
-            vnc_results = self._safe_scan(
-                "vnc-brute", self.vnc_scanner.scan,
-                self.result.nmap_results, output_dir=vnc_output_dir,
-            )
+                enum_results = self._safe_scan(
+                    "enum4linux", self.enum4linux_scanner.scan,
+                    enum_ips, output_dir=enum_output_dir,
+                )
 
-            if vnc_results is not None:
-                vnc_stats = self.vnc_scanner.stats
+                if enum_results is not None:
+                    enum_stats = self.enum4linux_scanner.stats
 
-                self.result.vnc_results = vnc_results
-                self.result.vnc_stats = vnc_stats.to_dict()
-                self.result.vnc_available = True
-                self._save_phase("vnc")
+                    self.result.enum4linux_results = enum_results
+                    self.result.enum4linux_stats = enum_stats.to_dict()
+                    self.result.enum4linux_available = True
+                    self._save_phase("enum4linux")
 
-                if vnc_stats.credentials_found > 0:
-                    no_auth_str = ""
-                    if vnc_stats.hosts_no_auth > 0:
-                        no_auth_str = (
-                            f" | \033[1;91m{vnc_stats.hosts_no_auth} NO AUTH\033[0m"
+                    # Print enum4linux summary
+                    if enum_stats.hosts_responded > 0:
+                        parts = [
+                            f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned"
+                        ]
+                        if enum_stats.total_shares > 0:
+                            parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
+                        if enum_stats.total_users > 0:
+                            parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
+                        if enum_stats.total_groups > 0:
+                            parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
+                        if enum_stats.null_sessions > 0:
+                            parts.append(
+                                f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
+                            )
+                        print(
+                            f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
                         )
-                    print(
-                        f"\033[1;92m[+]\033[0m vnc-brute: "
-                        f"\033[1;92m{vnc_stats.credentials_found} credential(s) found!\033[0m | "
-                        f"{vnc_stats.hosts_tested} hosts tested"
-                        f"{no_auth_str} "
-                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
-                    )
-                    # Show found credentials
-                    for cred in self.vnc_scanner.get_all_credentials():
-                        if cred.anonymous:
+
+                        # Highlight null sessions (critical finding)
+                        null_hosts = self.enum4linux_scanner.get_null_session_hosts()
+                        if null_hosts:
                             print(
-                                f"\033[1;91m[!]\033[0m vnc-brute: "
-                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
-                                f"\033[1;91mNO AUTHENTICATION REQUIRED\033[0m"
+                                f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
+                                f"allow null sessions\033[0m (anonymous access)"
                             )
-                        else:
-                            print(
-                                f"\033[1;92m[+]\033[0m vnc-brute: "
-                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
-                                f"\033[1;92m:{cred.password}\033[0m"
-                            )
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                        )
                 else:
                     print(
-                        f"\033[92m[+]\033[0m vnc-brute: "
-                        f"\033[37mno valid credentials\033[0m | "
-                        f"{vnc_stats.hosts_tested}/{vnc_stats.total_vnc_hosts} hosts tested "
-                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                        f"\033[93m[!]\033[0m enum4linux: skipped by user\n"
                     )
-                if vnc_stats.hosts_skipped > 0:
-                    print(
-                        f"\033[93m[!]\033[0m vnc-brute: "
-                        f"{vnc_stats.hosts_skipped} host(s) skipped "
-                        f"(lockout/connection errors)"
-                    )
-                # Highlight no-auth hosts (critical finding)
-                no_auth = self.vnc_scanner.get_no_auth_hosts()
-                if no_auth:
-                    print(
-                        f"\033[1;91m[!]\033[0m vnc-brute: \033[1;91m{len(no_auth)} host(s) "
-                        f"with NO AUTHENTICATION\033[0m (open VNC access!)"
-                    )
-                print()
-            else:
-                print(
-                    f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
-                )
-        elif (not self.vnc_scanner.available
-              and self.result.nmap_available
-              and self.result.nmap_results):
-            from .scanner.vnc_brute import VNCBruteScanner as _VNC2
-            vnc_check = _VNC2(self.config.scanner)._get_vnc_hosts(self.result.nmap_results)
-            if vnc_check:
-                print(
-                    f"\033[93m[!]\033[0m msfconsole not found – skipping VNC brute-force "
-                    f"({len(vnc_check)} VNC host(s) detected)"
-                )
-                print(
-                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
-                )
-
-        # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
-        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            rdp_output_dir = os.path.join(".", domain)
-            os.makedirs(rdp_output_dir, exist_ok=True)
-
-            rdp_results = self._safe_scan(
-                "rdp-brute", self.rdp_scanner.scan,
-                self.result.nmap_results, output_dir=rdp_output_dir,
+        elif not self.enum4linux_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m enum4linux not found – skipping SMB/Windows enumeration"
             )
-
-            if rdp_results is not None:
-                rdp_stats = self.rdp_scanner.stats
-
-                self.result.rdp_results = rdp_results
-                self.result.rdp_stats = rdp_stats.to_dict()
-                self.result.rdp_available = True
-                self._save_phase("rdp")
-
-                if rdp_stats.credentials_found > 0:
-                    pwn_str = ""
-                    if rdp_stats.pwned_count > 0:
-                        pwn_str = (
-                            f" | \033[1;91m{rdp_stats.pwned_count} Pwn3d!\033[0m"
-                        )
-                    print(
-                        f"\033[1;92m[+]\033[0m rdp-brute: "
-                        f"\033[1;92m{rdp_stats.credentials_found} credential(s) found!\033[0m | "
-                        f"{rdp_stats.hosts_tested} hosts tested | "
-                        f"{rdp_stats.total_users_tested} users tested"
-                        f"{pwn_str} "
-                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
-                    )
-                else:
-                    print(
-                        f"\033[92m[+]\033[0m rdp-brute: "
-                        f"\033[37mno valid credentials\033[0m | "
-                        f"{rdp_stats.hosts_tested}/{rdp_stats.total_rdp_hosts} hosts tested "
-                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
-                    )
-                if rdp_stats.hosts_skipped > 0:
-                    print(
-                        f"\033[93m[!]\033[0m rdp-brute: "
-                        f"{rdp_stats.hosts_skipped} host(s) skipped "
-                        f"(lockout/connection errors)"
-                    )
-                print()
-            else:
-                print(
-                    f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
-                )
-        elif (not self.rdp_scanner.available
-              and self.result.nmap_available
-              and self.result.nmap_results):
-            # Check if there are any RDP hosts to notify user
-            rdp_check = self.rdp_scanner._get_rdp_hosts(self.result.nmap_results) if hasattr(self.rdp_scanner, '_get_rdp_hosts') else {}
-            if rdp_check:
-                print(
-                    f"\033[93m[!]\033[0m netexec not found – skipping RDP brute-force "
-                    f"({len(rdp_check)} RDP host(s) detected)"
-                )
-                print(
-                    f"\033[90m    Install: pip install netexec\033[0m\n"
-                )
+            print(
+                f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
+            )
 
         # ── Phase 9c-2: MSF SMB brute-force (after enum4linux finds users) ──
         if (self.msf_scanner.available
@@ -1274,7 +1274,7 @@ class ReconEngine:
         )
         print(
             f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
-            f"jumping to nmap, enum4linux, smbclient, smb-brute, vnc-brute, RDP-brute, MSF-brute, CME, Nuclei & WPScan\n"
+            f"jumping to nmap, smbclient, RDP-brute, enum4linux, MSF-brute, CME, WPScan & Nuclei\n"
         )
 
         # ── Nmap port & service scanning ───────────────────────────────────
@@ -1334,81 +1334,6 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
-            )
-
-        # ── Enum4linux SMB/Windows enumeration (direct mode) ───────────────
-        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            # Only scan IPs that have SMB/NetBIOS ports open
-            smb_ports = {445, 139, 137, 138}
-            enum_ips = set()
-            for ip, host_result in self.result.nmap_results.items():
-                ports = host_result.ports if hasattr(host_result, 'ports') else []
-                for p in ports:
-                    port_num = p.port if hasattr(p, 'port') else p.get('port', 0)
-                    state = p.state if hasattr(p, 'state') else p.get('state', '')
-                    if port_num in smb_ports and state == "open":
-                        enum_ips.add(ip)
-                        break
-            if enum_ips:
-                enum_output_dir = os.path.join(".", label.replace("/", "_"))
-                os.makedirs(enum_output_dir, exist_ok=True)
-
-                enum_results = self._safe_scan(
-                    "enum4linux", self.enum4linux_scanner.scan,
-                    enum_ips, output_dir=enum_output_dir,
-                )
-
-                if enum_results is not None:
-                    enum_stats = self.enum4linux_scanner.stats
-
-                    self.result.enum4linux_results = enum_results
-                    self.result.enum4linux_stats = enum_stats.to_dict()
-                    self.result.enum4linux_available = True
-                    self._save_phase("enum4linux")
-
-                    if enum_stats.hosts_responded > 0:
-                        parts = [
-                            f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
-                            f"{enum_stats.total_ips_scanned} scanned"
-                        ]
-                        if enum_stats.total_shares > 0:
-                            parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
-                        if enum_stats.total_users > 0:
-                            parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
-                        if enum_stats.total_groups > 0:
-                            parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
-                        if enum_stats.null_sessions > 0:
-                            parts.append(
-                                f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
-                            )
-                        print(
-                            f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
-                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
-                        )
-
-                        null_hosts = self.enum4linux_scanner.get_null_session_hosts()
-                        if null_hosts:
-                            print(
-                                f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
-                                f"allow null sessions\033[0m (anonymous access)"
-                            )
-                        print()
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
-                            f"{enum_stats.total_ips_scanned} scanned "
-                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
-                        )
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m enum4linux: skipped by user\n"
-                    )
-        elif not self.enum4linux_scanner.available and self.result.nmap_available:
-            print(
-                f"\033[93m[!]\033[0m enum4linux not found – skipping SMB/Windows enumeration"
-            )
-            print(
-                f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
             )
 
         # ── SMBClient null session detection (direct mode) ──────────────────
@@ -1493,6 +1418,151 @@ class ReconEngine:
                 )
                 print(
                     f"\033[90m    Install: sudo apt install smbclient\033[0m\n"
+                )
+
+        # ── RDP brute-force (direct mode) ──────────────────────────────────
+        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            rdp_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(rdp_output_dir, exist_ok=True)
+
+            rdp_results = self._safe_scan(
+                "rdp-brute", self.rdp_scanner.scan,
+                self.result.nmap_results, output_dir=rdp_output_dir,
+            )
+
+            if rdp_results is not None:
+                rdp_stats = self.rdp_scanner.stats
+
+                self.result.rdp_results = rdp_results
+                self.result.rdp_stats = rdp_stats.to_dict()
+                self.result.rdp_available = True
+                self._save_phase("rdp")
+
+                if rdp_stats.credentials_found > 0:
+                    pwn_str = ""
+                    if rdp_stats.pwned_count > 0:
+                        pwn_str = (
+                            f" | \033[1;91m{rdp_stats.pwned_count} Pwn3d!\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m rdp-brute: "
+                        f"\033[1;92m{rdp_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{rdp_stats.hosts_tested} hosts tested | "
+                        f"{rdp_stats.total_users_tested} users tested"
+                        f"{pwn_str} "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m rdp-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{rdp_stats.hosts_tested}/{rdp_stats.total_rdp_hosts} hosts tested "
+                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if rdp_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m rdp-brute: "
+                        f"{rdp_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
+                )
+        elif (not self.rdp_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            rdp_check = self.rdp_scanner._get_rdp_hosts(self.result.nmap_results) if hasattr(self.rdp_scanner, '_get_rdp_hosts') else {}
+            if rdp_check:
+                print(
+                    f"\033[93m[!]\033[0m netexec not found – skipping RDP brute-force "
+                    f"({len(rdp_check)} RDP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: pip install netexec\033[0m\n"
+                )
+
+        # ── VNC brute-force (direct mode) ──────────────────────────────────
+        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            vnc_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(vnc_output_dir, exist_ok=True)
+
+            vnc_results = self._safe_scan(
+                "vnc-brute", self.vnc_scanner.scan,
+                self.result.nmap_results, output_dir=vnc_output_dir,
+            )
+
+            if vnc_results is not None:
+                vnc_stats = self.vnc_scanner.stats
+
+                self.result.vnc_results = vnc_results
+                self.result.vnc_stats = vnc_stats.to_dict()
+                self.result.vnc_available = True
+                self._save_phase("vnc")
+
+                if vnc_stats.credentials_found > 0:
+                    no_auth_str = ""
+                    if vnc_stats.hosts_no_auth > 0:
+                        no_auth_str = (
+                            f" | \033[1;91m{vnc_stats.hosts_no_auth} NO AUTH\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m vnc-brute: "
+                        f"\033[1;92m{vnc_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{vnc_stats.hosts_tested} hosts tested"
+                        f"{no_auth_str} "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.vnc_scanner.get_all_credentials():
+                        if cred.anonymous:
+                            print(
+                                f"\033[1;91m[!]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;91mNO AUTHENTICATION REQUIRED\033[0m"
+                            )
+                        else:
+                            print(
+                                f"\033[1;92m[+]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;92m:{cred.password}\033[0m"
+                            )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m vnc-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{vnc_stats.hosts_tested}/{vnc_stats.total_vnc_hosts} hosts tested "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if vnc_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m vnc-brute: "
+                        f"{vnc_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                no_auth = self.vnc_scanner.get_no_auth_hosts()
+                if no_auth:
+                    print(
+                        f"\033[1;91m[!]\033[0m vnc-brute: \033[1;91m{len(no_auth)} host(s) "
+                        f"with NO AUTHENTICATION\033[0m (open VNC access!)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
+                )
+        elif (not self.vnc_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.vnc_brute import VNCBruteScanner as _VNC3
+            vnc_check = _VNC3(self.config.scanner)._get_vnc_hosts(self.result.nmap_results)
+            if vnc_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping VNC brute-force "
+                    f"({len(vnc_check)} VNC host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
                 )
 
         # ── SMB brute-force (direct mode) ──────────────────────────────────
@@ -1599,150 +1669,80 @@ class ReconEngine:
                     f"\033[90m    Install: pip install netexec\033[0m\n"
                 )
 
-        # ── VNC brute-force (direct mode) ──────────────────────────────────
-        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            vnc_output_dir = os.path.join(".", label.replace("/", "_"))
-            os.makedirs(vnc_output_dir, exist_ok=True)
+        # ── Enum4linux SMB/Windows enumeration (direct mode) ───────────────
+        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            # Only scan IPs that have SMB/NetBIOS ports open
+            smb_ports = {445, 139, 137, 138}
+            enum_ips = set()
+            for ip, host_result in self.result.nmap_results.items():
+                ports = host_result.ports if hasattr(host_result, 'ports') else []
+                for p in ports:
+                    port_num = p.port if hasattr(p, 'port') else p.get('port', 0)
+                    state = p.state if hasattr(p, 'state') else p.get('state', '')
+                    if port_num in smb_ports and state == "open":
+                        enum_ips.add(ip)
+                        break
+            if enum_ips:
+                enum_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(enum_output_dir, exist_ok=True)
 
-            vnc_results = self._safe_scan(
-                "vnc-brute", self.vnc_scanner.scan,
-                self.result.nmap_results, output_dir=vnc_output_dir,
-            )
+                enum_results = self._safe_scan(
+                    "enum4linux", self.enum4linux_scanner.scan,
+                    enum_ips, output_dir=enum_output_dir,
+                )
 
-            if vnc_results is not None:
-                vnc_stats = self.vnc_scanner.stats
+                if enum_results is not None:
+                    enum_stats = self.enum4linux_scanner.stats
 
-                self.result.vnc_results = vnc_results
-                self.result.vnc_stats = vnc_stats.to_dict()
-                self.result.vnc_available = True
-                self._save_phase("vnc")
+                    self.result.enum4linux_results = enum_results
+                    self.result.enum4linux_stats = enum_stats.to_dict()
+                    self.result.enum4linux_available = True
+                    self._save_phase("enum4linux")
 
-                if vnc_stats.credentials_found > 0:
-                    no_auth_str = ""
-                    if vnc_stats.hosts_no_auth > 0:
-                        no_auth_str = (
-                            f" | \033[1;91m{vnc_stats.hosts_no_auth} NO AUTH\033[0m"
+                    if enum_stats.hosts_responded > 0:
+                        parts = [
+                            f"\033[92m{enum_stats.hosts_responded} hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned"
+                        ]
+                        if enum_stats.total_shares > 0:
+                            parts.append(f"\033[96m{enum_stats.total_shares} shares\033[0m")
+                        if enum_stats.total_users > 0:
+                            parts.append(f"\033[96m{enum_stats.total_users} users\033[0m")
+                        if enum_stats.total_groups > 0:
+                            parts.append(f"\033[96m{enum_stats.total_groups} groups\033[0m")
+                        if enum_stats.null_sessions > 0:
+                            parts.append(
+                                f"\033[91m{enum_stats.null_sessions} null session(s)\033[0m"
+                            )
+                        print(
+                            f"\033[92m[+]\033[0m enum4linux: {' | '.join(parts)} "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m"
                         )
-                    print(
-                        f"\033[1;92m[+]\033[0m vnc-brute: "
-                        f"\033[1;92m{vnc_stats.credentials_found} credential(s) found!\033[0m | "
-                        f"{vnc_stats.hosts_tested} hosts tested"
-                        f"{no_auth_str} "
-                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
-                    )
-                    for cred in self.vnc_scanner.get_all_credentials():
-                        if cred.anonymous:
+
+                        null_hosts = self.enum4linux_scanner.get_null_session_hosts()
+                        if null_hosts:
                             print(
-                                f"\033[1;91m[!]\033[0m vnc-brute: "
-                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
-                                f"\033[1;91mNO AUTHENTICATION REQUIRED\033[0m"
+                                f"\033[91m[!]\033[0m enum4linux: \033[91m{len(null_hosts)} host(s) "
+                                f"allow null sessions\033[0m (anonymous access)"
                             )
-                        else:
-                            print(
-                                f"\033[1;92m[+]\033[0m vnc-brute: "
-                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
-                                f"\033[1;92m:{cred.password}\033[0m"
-                            )
+                        print()
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m enum4linux: \033[37m0 hosts responded\033[0m / "
+                            f"{enum_stats.total_ips_scanned} scanned "
+                            f"\033[90m({enum_stats.scan_time:.1f}s)\033[0m\n"
+                        )
                 else:
                     print(
-                        f"\033[92m[+]\033[0m vnc-brute: "
-                        f"\033[37mno valid credentials\033[0m | "
-                        f"{vnc_stats.hosts_tested}/{vnc_stats.total_vnc_hosts} hosts tested "
-                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                        f"\033[93m[!]\033[0m enum4linux: skipped by user\n"
                     )
-                if vnc_stats.hosts_skipped > 0:
-                    print(
-                        f"\033[93m[!]\033[0m vnc-brute: "
-                        f"{vnc_stats.hosts_skipped} host(s) skipped "
-                        f"(lockout/connection errors)"
-                    )
-                no_auth = self.vnc_scanner.get_no_auth_hosts()
-                if no_auth:
-                    print(
-                        f"\033[1;91m[!]\033[0m vnc-brute: \033[1;91m{len(no_auth)} host(s) "
-                        f"with NO AUTHENTICATION\033[0m (open VNC access!)"
-                    )
-                print()
-            else:
-                print(
-                    f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
-                )
-        elif (not self.vnc_scanner.available
-              and self.result.nmap_available
-              and self.result.nmap_results):
-            from .scanner.vnc_brute import VNCBruteScanner as _VNC3
-            vnc_check = _VNC3(self.config.scanner)._get_vnc_hosts(self.result.nmap_results)
-            if vnc_check:
-                print(
-                    f"\033[93m[!]\033[0m msfconsole not found – skipping VNC brute-force "
-                    f"({len(vnc_check)} VNC host(s) detected)"
-                )
-                print(
-                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
-                )
-
-        # ── RDP brute-force (direct mode) ──────────────────────────────────
-        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            rdp_output_dir = os.path.join(".", label.replace("/", "_"))
-            os.makedirs(rdp_output_dir, exist_ok=True)
-
-            rdp_results = self._safe_scan(
-                "rdp-brute", self.rdp_scanner.scan,
-                self.result.nmap_results, output_dir=rdp_output_dir,
+        elif not self.enum4linux_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m enum4linux not found – skipping SMB/Windows enumeration"
             )
-
-            if rdp_results is not None:
-                rdp_stats = self.rdp_scanner.stats
-
-                self.result.rdp_results = rdp_results
-                self.result.rdp_stats = rdp_stats.to_dict()
-                self.result.rdp_available = True
-                self._save_phase("rdp")
-
-                if rdp_stats.credentials_found > 0:
-                    pwn_str = ""
-                    if rdp_stats.pwned_count > 0:
-                        pwn_str = (
-                            f" | \033[1;91m{rdp_stats.pwned_count} Pwn3d!\033[0m"
-                        )
-                    print(
-                        f"\033[1;92m[+]\033[0m rdp-brute: "
-                        f"\033[1;92m{rdp_stats.credentials_found} credential(s) found!\033[0m | "
-                        f"{rdp_stats.hosts_tested} hosts tested | "
-                        f"{rdp_stats.total_users_tested} users tested"
-                        f"{pwn_str} "
-                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
-                    )
-                else:
-                    print(
-                        f"\033[92m[+]\033[0m rdp-brute: "
-                        f"\033[37mno valid credentials\033[0m | "
-                        f"{rdp_stats.hosts_tested}/{rdp_stats.total_rdp_hosts} hosts tested "
-                        f"\033[90m({rdp_stats.scan_time:.1f}s)\033[0m"
-                    )
-                if rdp_stats.hosts_skipped > 0:
-                    print(
-                        f"\033[93m[!]\033[0m rdp-brute: "
-                        f"{rdp_stats.hosts_skipped} host(s) skipped "
-                        f"(lockout/connection errors)"
-                    )
-                print()
-            else:
-                print(
-                    f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
-                )
-        elif (not self.rdp_scanner.available
-              and self.result.nmap_available
-              and self.result.nmap_results):
-            rdp_check = self.rdp_scanner._get_rdp_hosts(self.result.nmap_results) if hasattr(self.rdp_scanner, '_get_rdp_hosts') else {}
-            if rdp_check:
-                print(
-                    f"\033[93m[!]\033[0m netexec not found – skipping RDP brute-force "
-                    f"({len(rdp_check)} RDP host(s) detected)"
-                )
-                print(
-                    f"\033[90m    Install: pip install netexec\033[0m\n"
-                )
+            print(
+                f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
+            )
 
         # ── MSF SMB brute-force (direct mode) ─────────────────────────────
         if (self.msf_scanner.available
@@ -1866,64 +1866,6 @@ class ReconEngine:
                 f"\033[90m    Install: pip install crackmapexec | or: https://github.com/byt3bl33d3r/CrackMapExec\033[0m\n"
             )
 
-        # ── Nuclei vulnerability scanning (direct mode) ──────────────────
-        if self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            # Use IPs from nmap results as nuclei targets
-            nuclei_targets = sorted(self.result.nmap_results.keys())
-            if nuclei_targets:
-                nuclei_output_dir = os.path.join(".", label.replace("/", "_"))
-                os.makedirs(nuclei_output_dir, exist_ok=True)
-
-                nuclei_results = self._safe_scan(
-                    "nuclei", self.nuclei_scanner.scan,
-                    nuclei_targets, output_dir=nuclei_output_dir,
-                )
-
-                if nuclei_results is not None:
-                    nuclei_stats = self.nuclei_scanner.stats
-
-                    self.result.nuclei_results = nuclei_results
-                    self.result.nuclei_stats = nuclei_stats.to_dict()
-                    self.result.nuclei_available = True
-                    self._save_phase("nuclei")
-
-                    total = nuclei_stats.total_findings
-                    if total > 0:
-                        sev_parts = []
-                        if nuclei_stats.critical > 0:
-                            sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
-                        if nuclei_stats.high > 0:
-                            sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
-                        if nuclei_stats.medium > 0:
-                            sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
-                        if nuclei_stats.low > 0:
-                            sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
-                        if nuclei_stats.info > 0:
-                            sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
-                        print(
-                            f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
-                            f"{' | '.join(sev_parts)} "
-                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m "
-                            f"on {nuclei_stats.hosts_scanned} hosts "
-                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    print()
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m nuclei: skipped by user\n"
-                    )
-        elif not self.nuclei_scanner.available and self.result.nmap_available:
-            print(
-                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
-            )
-            print(
-                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
-            )
-
         # ── WPScan WordPress scanning (direct mode) ──────────────────────
         if self.wpscan_scanner.available and self.result.nmap_available and self.result.nmap_results:
             from .scanner.wpscan import WPScanner as _WPS
@@ -1981,6 +1923,64 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
+            )
+
+        # ── Nuclei vulnerability scanning (direct mode) ──────────────────
+        if self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            # Use IPs from nmap results as nuclei targets
+            nuclei_targets = sorted(self.result.nmap_results.keys())
+            if nuclei_targets:
+                nuclei_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(nuclei_output_dir, exist_ok=True)
+
+                nuclei_results = self._safe_scan(
+                    "nuclei", self.nuclei_scanner.scan,
+                    nuclei_targets, output_dir=nuclei_output_dir,
+                )
+
+                if nuclei_results is not None:
+                    nuclei_stats = self.nuclei_scanner.stats
+
+                    self.result.nuclei_results = nuclei_results
+                    self.result.nuclei_stats = nuclei_stats.to_dict()
+                    self.result.nuclei_available = True
+                    self._save_phase("nuclei")
+
+                    total = nuclei_stats.total_findings
+                    if total > 0:
+                        sev_parts = []
+                        if nuclei_stats.critical > 0:
+                            sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
+                        if nuclei_stats.high > 0:
+                            sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
+                        if nuclei_stats.medium > 0:
+                            sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
+                        if nuclei_stats.low > 0:
+                            sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
+                        if nuclei_stats.info > 0:
+                            sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
+                            f"{' | '.join(sev_parts)} "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m "
+                            f"on {nuclei_stats.hosts_scanned} hosts "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m nuclei: skipped by user\n"
+                    )
+        elif not self.nuclei_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
+            )
+            print(
+                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
             )
 
         # ── Statistics & Output ────────────────────────────────────────────
