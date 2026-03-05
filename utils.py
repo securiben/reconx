@@ -381,7 +381,7 @@ def detect_input_type(value: str) -> str:
     return "domain"
 
 
-def _parse_multi_files(value: str) -> Optional[List[str]]:
+def parse_multi_files(value: str) -> Optional[List[str]]:
     """
     Parse a comma-separated list of file paths.
     Supports double-quoted paths for filenames with spaces:
@@ -401,8 +401,8 @@ def _parse_multi_files(value: str) -> Optional[List[str]]:
     except Exception:
         return None
 
-    # Strip whitespace and quotes from each part
-    paths = [p.strip().strip('"').strip("'") for p in parts if p.strip()]
+    # Strip whitespace from each part (csv.reader already handles quotes)
+    paths = [p.strip() for p in parts if p.strip()]
 
     if len(paths) < 2:
         return None
@@ -419,54 +419,12 @@ def resolve_targets(value: str) -> Tuple[str, List[str], bool]:
     """
     Resolve a CLI argument into a list of targets and a mode flag.
 
-    Supports:
-        - Single target: IP, CIDR, domain, or file
-        - Multiple files: file1.txt,"file 2.txt",file3.txt
-
     Returns:
         (label, targets_list, is_direct_mode)
         - label: display label for terminal output
         - targets_list: list of IP addresses / hostnames
         - is_direct_mode: True when subdomain enum should be skipped
     """
-    # ── Check for multi-file input (comma-separated) ──────────────────
-    multi_files = _parse_multi_files(value)
-    if multi_files:
-        all_targets: List[str] = []
-        has_domain = False
-        labels = []
-
-        for filepath in multi_files:
-            raw_targets = parse_target_file(filepath)
-            for t in raw_targets:
-                if is_cidr(t):
-                    all_targets.extend(expand_cidr(t))
-                elif is_ip_address(t):
-                    all_targets.append(t.strip())
-                else:
-                    all_targets.append(t.strip())
-                    has_domain = True
-            # Build label from filename (without extension)
-            fname = os.path.basename(filepath)
-            root, ext = os.path.splitext(fname)
-            labels.append(root if ext else fname)
-
-        # Deduplicate while preserving order
-        seen: Set[str] = set()
-        unique_targets: List[str] = []
-        for t in all_targets:
-            if t not in seen:
-                seen.add(t)
-                unique_targets.append(t)
-
-        label = "+".join(labels)
-        print(
-            f"\033[1;97m[»]\033[0m Multi-file input: "
-            f"\033[92m{len(multi_files)}\033[0m files → "
-            f"\033[92m{len(unique_targets)}\033[0m unique targets "
-            f"\033[90m({', '.join(os.path.basename(f) for f in multi_files)})\033[0m"
-        )
-        return label, unique_targets, not has_domain
 
     # ── Single target ─────────────────────────────────────────────────
     input_type = detect_input_type(value)

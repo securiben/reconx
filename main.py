@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from reconx.config import ReconConfig
 from reconx.engine import ReconEngine
-from reconx.utils import resolve_targets
+from reconx.utils import resolve_targets, parse_multi_files
 
 
 # ─── Banner ───────────────────────────────────────────────────────────────────
@@ -161,12 +161,42 @@ def main():
     if not args.no_banner:
         print_banner()
 
+    # ── Check for multi-file input ─────────────────────────────────────
+    multi_files = parse_multi_files(args.target)
+    if multi_files:
+        print(
+            f"\033[1;97m[»]\033[0m Multi-file input: "
+            f"\033[92m{len(multi_files)}\033[0m files → "
+            f"\033[90m{', '.join(os.path.basename(f) for f in multi_files)}\033[0m\n"
+        )
+        for idx, filepath in enumerate(multi_files, 1):
+            print(
+                f"\033[1;97m{'═' * 80}\033[0m"
+            )
+            print(
+                f"\033[1;97m[»]\033[0m File \033[92m{idx}/{len(multi_files)}\033[0m: "
+                f"\033[1;96m{filepath}\033[0m"
+            )
+            print(
+                f"\033[1;97m{'═' * 80}\033[0m\n"
+            )
+            _run_single_target(filepath, args)
+            if idx < len(multi_files):
+                print()  # Separator between scans
+    else:
+        _run_single_target(args.target, args)
+
+    print()  # Final newline
+
+
+def _run_single_target(target: str, args):
+    """Run a single scan for one target (file, IP, CIDR, or domain)."""
     # ── Detect input type ──────────────────────────────────────────────
-    label, targets, is_direct = resolve_targets(args.target)
+    label, targets, is_direct = resolve_targets(target)
 
     # Build configuration
     config = ReconConfig(
-        target_domain=args.target if not is_direct else label,
+        target_domain=target if not is_direct else label,
         output_file=args.output,
         demo_mode=args.demo,
         verbose=args.verbose,
@@ -202,8 +232,6 @@ def main():
             import traceback
             traceback.print_exc()
         sys.exit(1)
-
-    print()  # Final newline
 
 
 if __name__ == "__main__":

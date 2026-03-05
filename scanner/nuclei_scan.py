@@ -343,7 +343,7 @@ class NucleiScanner:
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
-                "-c,", "30",
+                "-c", "30",
                 "-no-color",
                 "-silent",
             ]
