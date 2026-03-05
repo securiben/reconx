@@ -10,7 +10,7 @@ Detection: checks nuclei findings for WordPress indicators:
 Command:
   wpscan --url <URL> \
     --api-token <TOKEN> \
-    --enumerate vp,ap,vt,at,tt,cb,dbe \
+    --enumerate vp, ap, vt, at, tt, cb, dbe \
     --plugins-detection mixed \
     --output wpscan_results.txt
 
@@ -48,7 +48,7 @@ WP_NAME_KEYWORDS = [
 
 # ─── Default API token ───────────────────────────────────────────────────────
 
-DEFAULT_API_TOKEN = "kWBU7sDaQRrEpjYX7UsNujZotvd6awLHGnEBKWbmJ3I"
+DEFAULT_API_TOKEN = os.getenv("WPSCAN_API_TOKEN", "")
 
 
 # ─── Data classes ─────────────────────────────────────────────────────────────
@@ -413,33 +413,20 @@ class WPScanner:
         result = WPScanHostResult(url=url)
         target_start = _time.time()
 
-        # Sanitize URL for filename
-        safe_name = re.sub(r'[^\w\-.]', '_', url.replace("://", "_"))
-        json_output = os.path.join(output_dir, f"wpscan_{safe_name}.json")
-        txt_output = os.path.join(output_dir, f"wpscan_{safe_name}.txt")
+        txt_output = os.path.join(output_dir, "wpscan_summary.txt")
 
+        # One-liner:
+        #   wpscan --url <URL> --api-token <TOKEN>
+        #     --enumerate vp, ap, vt, at, tt, cb, dbe
+        #     --plugins-detection mixed --output wpscan_summary.txt -v
         cmd = [
             self.wpscan_path,
             "--url", url,
             "--api-token", self.api_token,
-            "--enumerate", "vp,ap,vt,at,tt,cb,dbe",
+            "--enumerate", "vp, ap, vt, at, tt, cb, dbe",
             "--plugins-detection", "mixed",
-            "--format", "json",
-            "-o", json_output,
-            "--no-banner",
-            "--random-user-agent",
-        ]
-
-        # Also produce human-readable output
-        cmd_txt = [
-            self.wpscan_path,
-            "--url", url,
-            "--api-token", self.api_token,
-            "--enumerate", "vp,ap,vt,at,tt,cb,dbe",
-            "--plugins-detection", "mixed",
-            "-o", txt_output,
-            "--no-banner",
-            "--random-user-agent",
+            "--output", txt_output,
+            "-v",
         ]
 
         print(
@@ -447,14 +434,11 @@ class WPScanner:
         )
 
         try:
-            # Run JSON scan
             timeout_secs = 600
             proc = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
+                stdout=sys.stderr,        # Show live output on terminal
                 stderr=sys.stderr,
-                encoding="utf-8",
-                errors="replace",
             )
             try:
                 proc.wait(timeout=timeout_secs)
@@ -463,27 +447,9 @@ class WPScanner:
                 proc.wait()
                 result.error = "timeout"
 
-            # Parse JSON output
-            if os.path.isfile(json_output) and os.path.getsize(json_output) > 0:
-                self._parse_json_result(json_output, result)
-
-            # Run text-format scan for human-readable file
-            try:
-                proc_txt = subprocess.Popen(
-                    cmd_txt,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-                proc_txt.wait(timeout=timeout_secs)
-            except (subprocess.TimeoutExpired, Exception):
-                if 'proc_txt' in dir():
-                    try:
-                        proc_txt.kill()
-                        proc_txt.wait()
-                    except Exception:
-                        pass
+            # Parse the text output file for results
+            if os.path.isfile(txt_output) and os.path.getsize(txt_output) > 0:
+                self._parse_text_output(txt_output, result)
 
         except FileNotFoundError:
             self.available = False
@@ -493,6 +459,63 @@ class WPScanner:
 
         result.scan_time = _time.time() - target_start
         return result
+
+    def _parse_text_output(self, filepath: str, result: WPScanHostResult):
+        """
+        Parse wpscan verbose text output as fallback.
+        Extracts version, plugins, themes, users, vulnerabilities.
+        """
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception:
+            return
+
+        # WordPress version: [+] WordPress version X.Y.Z
+        ver_match = re.search(r'WordPress version\s+(\S+)', content)
+        if ver_match and not result.wp_version:
+            result.wp_version = ver_match.group(1)
+
+        # Theme: [+] WordPress theme in use: <slug>
+        theme_match = re.search(r'WordPress theme in use:\s+(\S+)', content)
+        if theme_match and not result.main_theme:
+            result.main_theme = theme_match.group(1)
+
+        # Vulnerabilities: [!] Title: <vuln title>
+        for m in re.finditer(r'\[!\]\s*Title:\s*(.+)', content):
+            title = m.group(1).strip()
+            # Avoid duplicates (JSON parse may have already added)
+            existing_titles = {v.title for v in result.vulnerabilities}
+            plugin_titles = {v.title for p in result.plugins for v in p.vulnerabilities}
+            theme_titles = {v.title for t in result.themes for v in t.vulnerabilities}
+            if title not in existing_titles and title not in plugin_titles and title not in theme_titles:
+                vuln = WPScanVulnerability(title=title)
+                # Try to get CVE
+                cve_match = re.search(r'(CVE-\d{4}-\d+)', title)
+                if cve_match:
+                    vuln.cve = cve_match.group(1)
+                result.vulnerabilities.append(vuln)
+
+        # Users: [i] User(s) Identified: ... | [+] <username>
+        user_section = re.search(r'User\(s\) Identified.*?(?=\n\n|\[(?:\+|\*)\]\s+(?![\w])|\Z)', content, re.DOTALL)
+        if user_section:
+            for um in re.finditer(r'\[\+\]\s+(\S+)', user_section.group()):
+                username = um.group(1)
+                existing_users = {u.username for u in result.users}
+                if username not in existing_users:
+                    result.users.append(WPScanUser(username=username))
+
+        # Config backups: [!] A config backup file has been found: <url>
+        for m in re.finditer(r'config backup.*?:\s*(https?://\S+)', content, re.IGNORECASE):
+            url = m.group(1).strip()
+            if url not in result.config_backups:
+                result.config_backups.append(url)
+
+        # DB exports: [!] A database export.*: <url>
+        for m in re.finditer(r'database export.*?:\s*(https?://\S+)', content, re.IGNORECASE):
+            url = m.group(1).strip()
+            if url not in result.db_exports:
+                result.db_exports.append(url)
 
     def _parse_json_result(self, filepath: str, result: WPScanHostResult):
         """Parse wpscan JSON output."""
