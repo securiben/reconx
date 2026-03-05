@@ -3,6 +3,9 @@ Nmap Port & Service Scanner for ReconX.
 Runs nmap against discovered IP addresses for port scanning
 and service/version detection.
 
+Performs host discovery (ping) first — only scans hosts that are up.
+Hosts that do not respond to ping are skipped.
+
 Command: nmap -iL <ip_file> -sCV --top-ports 1000 -T3 -oA <output_prefix>
 
 Requires: nmap installed in PATH
@@ -127,12 +130,12 @@ class NmapScanner:
 
     def scan(self, ip_addresses: Set[str], output_dir: str = "") -> Dict[str, NmapHostResult]:
         """
-        Run nmap against a set of IP addresses with -Pn (skip host discovery).
+        Run nmap against a set of IP addresses (with host discovery).
 
-        Always uses -Pn because many hosts block ICMP, which causes nmap
-        to waste time or skip them entirely. This is standard pentest practice.
+        Performs host discovery (ping) first. Only hosts that respond
+        (hosts up) are port-scanned. Hosts that are down are skipped.
 
-        Command: nmap -iL <file> -Pn -sCV --top-ports 1000 -T3 -oA <prefix>
+        Command: nmap -iL <file> -sCV --top-ports 1000 -T3 -oA <prefix>
 
         Args:
             ip_addresses: Set of IP addresses to scan.
@@ -140,7 +143,7 @@ class NmapScanner:
                         If empty, uses a temp directory.
 
         Returns:
-            Dict mapping IP → NmapHostResult.
+            Dict mapping IP → NmapHostResult (only hosts up).
         """
         if not self.available:
             return {}
@@ -162,7 +165,7 @@ class NmapScanner:
         try:
             self._run_nmap_scan(
                 ip_addresses, output_prefix, tmpdir,
-                extra_flags=["-Pn"], label="IPs",
+                extra_flags=[], label="IPs",
             )
 
             # Copy output files to output_dir if needed
