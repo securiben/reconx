@@ -415,19 +415,19 @@ class WPScanner:
 
         txt_output = os.path.join(output_dir, "wpscan_summary.txt")
 
-        # One-liner:
+        # One-liner (shell=True so spaces after commas work like manual):
         #   wpscan --url <URL> --api-token <TOKEN>
         #     --enumerate vp, ap, vt, at, tt, cb, dbe
         #     --plugins-detection mixed --output wpscan_summary.txt -v
-        cmd = [
-            self.wpscan_path,
-            "--url", url,
-            "--api-token", self.api_token,
-            "--enumerate", "vp, ap, vt, at, tt, cb, dbe",
-            "--plugins-detection", "mixed",
-            "--output", txt_output,
-            "-v",
-        ]
+        cmd = (
+            f'{self.wpscan_path}'
+            f' --url {url}'
+            f' --api-token {self.api_token}'
+            f' --enumerate vp, ap, vt, at, tt, cb, dbe'
+            f' --plugins-detection mixed'
+            f' --output {txt_output}'
+            f' -v'
+        )
 
         print(
             f"\033[36m    [>]\033[0m wpscan: \033[96m{url}\033[0m ..."
@@ -437,6 +437,7 @@ class WPScanner:
             timeout_secs = 600
             proc = subprocess.Popen(
                 cmd,
+                shell=True,
                 stdout=sys.stderr,        # Show live output on terminal
                 stderr=sys.stderr,
             )
