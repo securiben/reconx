@@ -1180,3 +1180,83 @@ class FileExporter:
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_wpscan(self, outdir: str, result: ScanResult):
+        """
+        Export WPScan results.
+        Creates human-readable summary and structured JSON.
+        """
+        wpscan_stats = getattr(result, 'wpscan_stats', {})
+        wpscan_results = getattr(result, 'wpscan_results', {})
+        if not getattr(result, 'wpscan_available', False) or not wpscan_results:
+            return
+
+        domain = result.target_domain
+
+        # ── wpscan_summary.txt ── Human-readable summary ─────────────
+        filepath = os.path.join(outdir, "wpscan_summary.txt")
+        lines = [f"# ReconX - WPScan Results for {domain}"]
+        lines.append(f"# Targets scanned: {wpscan_stats.get('targets_scanned', 0)}")
+        lines.append(f"# Targets with vulns: {wpscan_stats.get('targets_with_vulns', 0)}")
+        lines.append(f"# Total vulnerabilities: {wpscan_stats.get('total_vulns', 0)}")
+        lines.append(f"# Total plugins: {wpscan_stats.get('total_plugins', 0)}")
+        lines.append(f"# Total themes: {wpscan_stats.get('total_themes', 0)}")
+        lines.append(f"# Total users: {wpscan_stats.get('total_users', 0)}")
+        lines.append(f"# Outdated plugins: {wpscan_stats.get('outdated_plugins', 0)}")
+        lines.append(f"# Config backups: {wpscan_stats.get('config_backups', 0)}")
+        lines.append(f"# DB exports: {wpscan_stats.get('db_exports', 0)}")
+        lines.append(f"# Scan time: {wpscan_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for url in sorted(wpscan_results.keys()):
+            host_result = wpscan_results[url]
+            wp_ver = host_result.wp_version if hasattr(host_result, 'wp_version') else host_result.get('wp_version', '')
+            wp_status = host_result.wp_version_status if hasattr(host_result, 'wp_version_status') else host_result.get('wp_version_status', '')
+            plugins = host_result.plugins if hasattr(host_result, 'plugins') else host_result.get('plugins', [])
+            themes = host_result.themes if hasattr(host_result, 'themes') else host_result.get('themes', [])
+            users = host_result.users if hasattr(host_result, 'users') else host_result.get('users', [])
+            vulns = host_result.vulnerabilities if hasattr(host_result, 'vulnerabilities') else host_result.get('vulnerabilities', [])
+            total_v = host_result.total_vulns if hasattr(host_result, 'total_vulns') else host_result.get('total_vulns', 0)
+
+            lines.append(f"── {url} ──")
+            if wp_ver:
+                lines.append(f"  WordPress: {wp_ver} ({wp_status})")
+            lines.append(f"  Plugins: {len(plugins)}  |  Themes: {len(themes)}  |  Users: {len(users)}")
+            lines.append(f"  Vulnerabilities: {total_v}")
+
+            if vulns:
+                lines.append("  Core vulnerabilities:")
+                for v in vulns:
+                    title = v.title if hasattr(v, 'title') else v.get('title', '')
+                    lines.append(f"    - {title}")
+
+            for p in plugins:
+                p_slug = p.slug if hasattr(p, 'slug') else p.get('slug', '')
+                p_ver = p.version if hasattr(p, 'version') else p.get('version', '')
+                p_outdated = p.outdated if hasattr(p, 'outdated') else p.get('outdated', False)
+                p_vulns = p.vulnerabilities if hasattr(p, 'vulnerabilities') else p.get('vulnerabilities', [])
+                outdated_str = " [OUTDATED]" if p_outdated else ""
+                lines.append(f"  Plugin: {p_slug} {p_ver}{outdated_str}")
+                for v in p_vulns:
+                    title = v.title if hasattr(v, 'title') else v.get('title', '')
+                    lines.append(f"    - {title}")
+
+            for u in users:
+                uname = u.username if hasattr(u, 'username') else u.get('username', '')
+                lines.append(f"  User: {uname}")
+
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── wpscan_summary.json ── Structured JSON ────────────────────
+        filepath_json = os.path.join(outdir, "wpscan_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": wpscan_stats,
+            "targets": {
+                url: r.to_dict() if hasattr(r, 'to_dict') else r
+                for url, r in wpscan_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

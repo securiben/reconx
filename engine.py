@@ -31,7 +31,7 @@ from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
-    MSFSMBBruteScanner, RDPBruteScanner,
+    MSFSMBBruteScanner, RDPBruteScanner, WPScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -77,6 +77,7 @@ class ReconEngine:
         self.cme_scanner = CMEScanner(config.scanner)
         self.msf_scanner = MSFSMBBruteScanner(config.scanner)
         self.rdp_scanner = RDPBruteScanner(config.scanner)
+        self.wpscan_scanner = WPScanner(config.scanner)
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -226,6 +227,8 @@ class ReconEngine:
                 fe._export_msf(d, r)
             elif phase == "rdp":
                 fe._export_rdp(d, r)
+            elif phase == "wpscan":
+                fe._export_wpscan(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
 
@@ -491,6 +494,57 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
+            )
+
+        # ── Phase 5d: WPScan WordPress scanning ──────────────────────────
+        if self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results:
+            from .scanner.wpscan import WPScanner as _WPS
+            wp_targets = _WPS.detect_wordpress_targets(self.result.nuclei_results)
+            if wp_targets:
+                wpscan_output_dir = os.path.join(".", domain)
+                os.makedirs(wpscan_output_dir, exist_ok=True)
+
+                wpscan_results = self._safe_scan(
+                    "wpscan", self.wpscan_scanner.scan,
+                    sorted(wp_targets), output_dir=wpscan_output_dir,
+                )
+
+                if wpscan_results is not None:
+                    wpscan_stats = self.wpscan_scanner.stats
+
+                    self.result.wpscan_results = wpscan_results
+                    self.result.wpscan_stats = wpscan_stats.to_dict()
+                    self.result.wpscan_available = True
+                    self._save_phase("wpscan")
+
+                    total_vulns = wpscan_stats.total_vulns
+                    if total_vulns > 0:
+                        print(
+                            f"\033[92m[+]\033[0m wpscan: \033[92m{total_vulns} vulnerability/ies\033[0m "
+                            f"on \033[96m{wpscan_stats.targets_scanned}\033[0m WordPress target(s) "
+                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m wpscan: \033[37m0 vulnerabilities\033[0m "
+                            f"on {wpscan_stats.targets_scanned} WordPress target(s) "
+                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m wpscan: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[·]\033[0m wpscan: no WordPress targets detected by nuclei\n"
+                )
+        elif not self.wpscan_scanner.available and self.result.nuclei_available:
+            print(
+                f"\033[93m[!]\033[0m wpscan not found – skipping WordPress scan"
+            )
+            print(
+                f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
             )
 
         # ── Phase 6: Pattern collapse ──────────────────────────────────────
@@ -925,7 +979,7 @@ class ReconEngine:
         )
         print(
             f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
-            f"jumping to nmap, RDP-brute, enum4linux, MSF-brute, CME & Nuclei\n"
+            f"jumping to nmap, RDP-brute, enum4linux, MSF-brute, CME, Nuclei & WPScan\n"
         )
 
         # ── Nmap port & service scanning ───────────────────────────────────
@@ -1303,6 +1357,57 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
+            )
+
+        # ── WPScan WordPress scanning (direct mode) ──────────────────────
+        if self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results:
+            from .scanner.wpscan import WPScanner as _WPS
+            wp_targets = _WPS.detect_wordpress_targets(self.result.nuclei_results)
+            if wp_targets:
+                wpscan_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(wpscan_output_dir, exist_ok=True)
+
+                wpscan_results = self._safe_scan(
+                    "wpscan", self.wpscan_scanner.scan,
+                    sorted(wp_targets), output_dir=wpscan_output_dir,
+                )
+
+                if wpscan_results is not None:
+                    wpscan_stats = self.wpscan_scanner.stats
+
+                    self.result.wpscan_results = wpscan_results
+                    self.result.wpscan_stats = wpscan_stats.to_dict()
+                    self.result.wpscan_available = True
+                    self._save_phase("wpscan")
+
+                    total_vulns = wpscan_stats.total_vulns
+                    if total_vulns > 0:
+                        print(
+                            f"\033[92m[+]\033[0m wpscan: \033[92m{total_vulns} vulnerability/ies\033[0m "
+                            f"on \033[96m{wpscan_stats.targets_scanned}\033[0m WordPress target(s) "
+                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m wpscan: \033[37m0 vulnerabilities\033[0m "
+                            f"on {wpscan_stats.targets_scanned} WordPress target(s) "
+                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m wpscan: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[·]\033[0m wpscan: no WordPress targets detected by nuclei\n"
+                )
+        elif not self.wpscan_scanner.available and self.result.nuclei_available:
+            print(
+                f"\033[93m[!]\033[0m wpscan not found – skipping WordPress scan"
+            )
+            print(
+                f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
             )
 
         # ── Statistics & Output ────────────────────────────────────────────

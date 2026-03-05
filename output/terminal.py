@@ -867,6 +867,97 @@ class TerminalRenderer:
                         f"    {C.VULN}!! {ip} {domain_str}{user}:{pwd}{pwn_str}{C.RESET}"
                     )
 
+    def _render_wpscan(self, result: ScanResult):
+        """Render the WPScan WordPress scan summary."""
+        wpscan_stats = getattr(result, 'wpscan_stats', {})
+        wpscan_available = getattr(result, 'wpscan_available', False)
+        wpscan_results = getattr(result, 'wpscan_results', {})
+
+        if not wpscan_available or not wpscan_stats:
+            return
+
+        targets_scanned = wpscan_stats.get("targets_scanned", 0)
+        targets_with_vulns = wpscan_stats.get("targets_with_vulns", 0)
+        total_vulns = wpscan_stats.get("total_vulns", 0)
+        total_plugins = wpscan_stats.get("total_plugins", 0)
+        total_users = wpscan_stats.get("total_users", 0)
+        outdated_plugins = wpscan_stats.get("outdated_plugins", 0)
+        config_backups = wpscan_stats.get("config_backups", 0)
+        db_exports = wpscan_stats.get("db_exports", 0)
+        scan_time = wpscan_stats.get("scan_time", 0.0)
+
+        if targets_scanned == 0:
+            return
+
+        # Main wpscan line
+        parts = [
+            f"{C.BRIGHT_GREEN}{targets_scanned}{C.RESET}{C.WHITE} WordPress target(s){C.RESET}",
+        ]
+        if total_vulns > 0:
+            parts.append(f"{C.VULN}{total_vulns} vuln(s){C.RESET}")
+        if total_plugins > 0:
+            parts.append(f"{C.CYAN}{total_plugins} plugin(s){C.RESET}")
+        if total_users > 0:
+            parts.append(f"{C.WHITE}{total_users} user(s){C.RESET}")
+        content = (
+            f"{C.LABEL}WPScan:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({scan_time:.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        # Detail line
+        detail_parts = []
+        if outdated_plugins > 0:
+            detail_parts.append(f"{C.BRIGHT_YELLOW}{outdated_plugins} outdated plugin(s){C.RESET}")
+        if config_backups > 0:
+            detail_parts.append(f"{C.VULN}{config_backups} config backup(s){C.RESET}")
+        if db_exports > 0:
+            detail_parts.append(f"{C.VULN}{db_exports} DB export(s){C.RESET}")
+        if targets_with_vulns > 0:
+            detail_parts.append(f"{C.BRIGHT_RED}{targets_with_vulns} vulnerable target(s){C.RESET}")
+        if detail_parts:
+            self._box_line(f"    {C.DIM}Details:{C.RESET} {', '.join(detail_parts)}")
+
+        # Show per-target vulnerabilities (limit to 10)
+        shown = 0
+        for url, host_result in wpscan_results.items():
+            # Core vulns
+            vulns = host_result.vulnerabilities if hasattr(host_result, 'vulnerabilities') else []
+            for v in vulns:
+                title = v.title if hasattr(v, 'title') else v.get('title', '')
+                self._box_line(
+                    f"    {C.VULN}!! [CORE] {title}{C.RESET} {C.DIM}→{C.RESET} {C.WHITE}{url}{C.RESET}"
+                )
+                shown += 1
+                if shown >= 10:
+                    break
+            if shown >= 10:
+                break
+
+            # Plugin vulns
+            plugins = host_result.plugins if hasattr(host_result, 'plugins') else []
+            for p in plugins:
+                p_vulns = p.vulnerabilities if hasattr(p, 'vulnerabilities') else []
+                p_slug = p.slug if hasattr(p, 'slug') else p.get('slug', '')
+                for v in p_vulns:
+                    title = v.title if hasattr(v, 'title') else v.get('title', '')
+                    self._box_line(
+                        f"    {C.BRIGHT_RED}!! [{p_slug}] {title}{C.RESET} {C.DIM}→{C.RESET} {C.WHITE}{url}{C.RESET}"
+                    )
+                    shown += 1
+                    if shown >= 10:
+                        break
+                if shown >= 10:
+                    break
+            if shown >= 10:
+                break
+
+        if shown >= 10:
+            remaining = total_vulns - shown
+            if remaining > 0:
+                self._box_line(f"    {C.DIM}... and {remaining} more vulnerability/ies{C.RESET}")
+
     def _render_stats(self, result: ScanResult):
         """Render the Time/Total/DB stats line."""
         parts = [
@@ -941,6 +1032,9 @@ class TerminalRenderer:
 
         # RDP Brute-force
         self._render_rdp(result)
+
+        # WPScan WordPress
+        self._render_wpscan(result)
 
         # Stats
         self._render_stats(result)

@@ -354,6 +354,11 @@ class ScanResult:
     rdp_stats: Dict = field(default_factory=dict)
     rdp_available: bool = False
 
+    # WPScan WordPress scanner
+    wpscan_results: Dict = field(default_factory=dict)
+    wpscan_stats: Dict = field(default_factory=dict)
+    wpscan_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -436,6 +441,14 @@ class ScanResult:
                 "hosts": {
                     ip: r.to_dict() if hasattr(r, 'to_dict') else r
                     for ip, r in self.rdp_results.items()
+                },
+            }
+        if self.wpscan_results:
+            d["wpscan"] = {
+                "stats": self.wpscan_stats,
+                "targets": {
+                    url: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for url, r in self.wpscan_results.items()
                 },
             }
         return d
