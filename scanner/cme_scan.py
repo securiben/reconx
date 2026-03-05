@@ -526,37 +526,6 @@ class CMEScanner:
             if h.signing == "not required"
         ]
 
-    def get_rdp_usernames(self) -> Dict[str, List[str]]:
-        """
-        Extract hostnames / machine names from CME RDP results
-        to use as potential usernames for RDP brute-force.
-
-        CME RDP output lines look like:
-          RDP  192.1.2.100  3389  D253YTJ3  [*] Windows 10 ... (name:D253YTJ3) (domain:D253YTJ3)
-
-        Returns:
-            Dict mapping IP → list of potential usernames (hostname + domain).
-            Only includes entries where at least one name was extracted.
-        """
-        rdp_result = self.protocol_results.get("rdp")
-        if not rdp_result:
-            return {}
-
-        ip_usernames: Dict[str, List[str]] = {}
-
-        for host in rdp_result.host_results:
-            names: Set[str] = set()
-
-            if host.hostname:
-                names.add(host.hostname)
-            if host.domain and host.domain != host.hostname:
-                names.add(host.domain)
-
-            if names:
-                ip_usernames[host.ip] = sorted(names)
-
-        return ip_usernames
-
     def get_hosts_by_protocol(self) -> Dict[str, List[str]]:
         """Get dict of protocol → list of responding IPs."""
         result = {}
