@@ -10,6 +10,7 @@ Examples:
     python main.py targets.txt              # File of targets (IPs/domains)
     python main.py 10.10.0.5                # Single IP → nmap + CME
     python main.py 10.10.0.0/24             # CIDR range → nmap + CME
+    python main.py 'a.txt,"file 2.txt",c.txt'  # Multiple files (comma-separated)
     python main.py example.com --demo
     python main.py example.com -o results.json
 """
