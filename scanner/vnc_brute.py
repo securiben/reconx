@@ -583,7 +583,7 @@ class VNCBruteScanner:
                 f"set RPORT {port}\n"
                 f"set PASS_FILE {pass_file}\n"
                 f"set ANONYMOUS_LOGIN true\n"
-                f"set STOP_ON_SUCCESS true\n"
+                # f"set STOP_ON_SUCCESS true\n"
                 f"set VERBOSE false\n"
                 f"set ConnectTimeout 10\n"
                 f"set THREADS 1\n"
