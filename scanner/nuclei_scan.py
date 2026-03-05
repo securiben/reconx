@@ -339,7 +339,7 @@ class NucleiScanner:
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-s", "info,low,medium,high,critical",
+               # "-s", "info,low,medium,high,critical",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
