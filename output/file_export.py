@@ -78,6 +78,8 @@ class FileExporter:
         self._export_cme(domain_dir, result)
         self._export_msf(domain_dir, result)
         self._export_rdp(domain_dir, result)
+        self._export_vnc(domain_dir, result)
+        self._export_smb_brute(domain_dir, result)
         self._export_smbclient(domain_dir, result)
 
         return os.path.abspath(domain_dir)
@@ -1104,6 +1106,225 @@ class FileExporter:
             "hosts": {
                 ip: r.to_dict() if hasattr(r, 'to_dict') else r
                 for ip, r in msf_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_vnc(self, outdir: str, result: ScanResult):
+        """
+        Export VNC brute-force results.
+        Creates credentials file, no-auth list, and structured JSON summary.
+        """
+        vnc_stats = getattr(result, 'vnc_stats', {})
+        vnc_results = getattr(result, 'vnc_results', {})
+        if not getattr(result, 'vnc_available', False) or not vnc_results:
+            return
+
+        domain = result.target_domain
+
+        # ── vnc_credentials.txt ── Human-readable credential list ─────
+        filepath = os.path.join(outdir, "vnc_credentials.txt")
+        lines = [f"# ReconX - VNC Brute-force Results for {domain}"]
+        lines.append(f"# Hosts tested: {vnc_stats.get('hosts_tested', 0)}/{vnc_stats.get('total_vnc_hosts', 0)}")
+        lines.append(f"# Hosts skipped: {vnc_stats.get('hosts_skipped', 0)}")
+        lines.append(f"# Hosts no-auth: {vnc_stats.get('hosts_no_auth', 0)}")
+        lines.append(f"# Credentials found: {vnc_stats.get('credentials_found', 0)}")
+        lines.append(f"# Scan time: {vnc_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for ip in sorted(vnc_results.keys()):
+            host_result = vnc_results[ip]
+            creds = []
+            if hasattr(host_result, 'credentials'):
+                creds = host_result.credentials
+            elif isinstance(host_result, dict):
+                creds = host_result.get('credentials', [])
+
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 5900)
+            no_auth = host_result.no_auth if hasattr(host_result, 'no_auth') else host_result.get('no_auth', False)
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+
+            lines.append(f"── {ip}:{port} ──")
+            if no_auth:
+                lines.append("  [!] NO AUTHENTICATION REQUIRED")
+            if skipped:
+                lines.append(f"  SKIPPED: {skip_reason}")
+
+            if creds:
+                for cred in creds:
+                    pwd = cred.password if hasattr(cred, 'password') else cred.get('password', '')
+                    anon = cred.anonymous if hasattr(cred, 'anonymous') else cred.get('anonymous', False)
+                    if anon:
+                        lines.append(f"  [!] NO AUTH (anonymous access)")
+                    else:
+                        lines.append(f"  [+] :{pwd}")
+            else:
+                lines.append("  No valid credentials found")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── vnc_no_auth.txt ── Hosts with no authentication ──────────
+        no_auth_hosts = []
+        for ip in sorted(vnc_results.keys()):
+            host_result = vnc_results[ip]
+            na = host_result.no_auth if hasattr(host_result, 'no_auth') else host_result.get('no_auth', False)
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 5900)
+            if na:
+                no_auth_hosts.append(f"{ip}:{port}")
+
+        if no_auth_hosts:
+            na_filepath = os.path.join(outdir, "vnc_no_auth.txt")
+            na_lines = [f"# ReconX - VNC Hosts with No Authentication for {domain}"]
+            na_lines.append(f"# Total: {len(no_auth_hosts)} host(s)")
+            na_lines.append("")
+            na_lines.extend(no_auth_hosts)
+            self._write(na_filepath, "\n".join(na_lines) + "\n")
+
+        # ── vnc_brute_summary.json ── Structured JSON ─────────────────
+        filepath_json = os.path.join(outdir, "vnc_brute_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": vnc_stats,
+            "hosts": {
+                ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                for ip, r in vnc_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_smb_brute(self, outdir: str, result: ScanResult):
+        """
+        Export SMB brute-force results (nxc).
+        Creates credentials file, SAM hashes file, and structured JSON summary.
+        """
+        smb_stats = getattr(result, 'smb_brute_stats', {})
+        smb_results = getattr(result, 'smb_brute_results', {})
+        if not getattr(result, 'smb_brute_available', False) or not smb_results:
+            return
+
+        domain = result.target_domain
+
+        # ── smb_brute_credentials.txt ── Human-readable credential list ───
+        filepath = os.path.join(outdir, "smb_brute_credentials.txt")
+        lines = [f"# ReconX - SMB Brute-force Results for {domain}"]
+        lines.append(f"# Hosts tested: {smb_stats.get('hosts_tested', 0)}/{smb_stats.get('total_smb_hosts', 0)}")
+        lines.append(f"# Hosts skipped: {smb_stats.get('hosts_skipped', 0)}")
+        lines.append(f"# Null auth hosts: {smb_stats.get('null_auth_hosts', 0)}")
+        lines.append(f"# Credentials found: {smb_stats.get('credentials_found', 0)}")
+        lines.append(f"# Pwn3d hosts: {smb_stats.get('pwned_count', 0)}")
+        lines.append(f"# SAM hashes dumped: {smb_stats.get('sam_hashes_dumped', 0)}")
+        lines.append(f"# Scan time: {smb_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for ip in sorted(smb_results.keys()):
+            host_result = smb_results[ip]
+            creds = []
+            if hasattr(host_result, 'credentials'):
+                creds = host_result.credentials
+            elif isinstance(host_result, dict):
+                creds = host_result.get('credentials', [])
+
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 445)
+            null_auth = host_result.null_auth if hasattr(host_result, 'null_auth') else host_result.get('null_auth', False)
+            hostname = host_result.hostname if hasattr(host_result, 'hostname') else host_result.get('hostname', '')
+            os_info = host_result.os_info if hasattr(host_result, 'os_info') else host_result.get('os_info', '')
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+
+            lines.append(f"── {ip}:{port} ──")
+            if hostname:
+                lines.append(f"  Hostname: {hostname}")
+            if os_info:
+                lines.append(f"  OS: {os_info}")
+            if null_auth:
+                lines.append("  [!] ANONYMOUS/NULL ACCESS ALLOWED")
+            if skipped:
+                lines.append(f"  SKIPPED: {skip_reason}")
+
+            if creds:
+                for cred in creds:
+                    username = cred.username if hasattr(cred, 'username') else cred.get('username', '')
+                    password = cred.password if hasattr(cred, 'password') else cred.get('password', '')
+                    cred_domain = cred.domain if hasattr(cred, 'domain') else cred.get('domain', '')
+                    pwned = cred.pwned if hasattr(cred, 'pwned') else cred.get('pwned', False)
+                    anonymous = cred.anonymous if hasattr(cred, 'anonymous') else cred.get('anonymous', False)
+                    domain_str = f"{cred_domain}\\" if cred_domain else ""
+                    pwn_tag = " (Pwn3d!)" if pwned else ""
+                    anon_tag = " (anonymous)" if anonymous else ""
+                    lines.append(f"  [+] {domain_str}{username}:{password}{pwn_tag}{anon_tag}")
+            else:
+                lines.append("  No valid credentials found")
+
+            # Shares
+            shares = []
+            if hasattr(host_result, 'shares'):
+                shares = host_result.shares
+            elif isinstance(host_result, dict):
+                shares = host_result.get('shares', [])
+            if shares:
+                lines.append("  Shares:")
+                for share in shares:
+                    name = share.name if hasattr(share, 'name') else share.get('name', '')
+                    access = share.access if hasattr(share, 'access') else share.get('access', '')
+                    comment = share.comment if hasattr(share, 'comment') else share.get('comment', '')
+                    comment_str = f" ({comment})" if comment else ""
+                    lines.append(f"    {name} [{access}]{comment_str}")
+
+            # SAM hashes
+            sam_hashes = []
+            if hasattr(host_result, 'sam_hashes'):
+                sam_hashes = host_result.sam_hashes
+            elif isinstance(host_result, dict):
+                sam_hashes = host_result.get('sam_hashes', [])
+            if sam_hashes:
+                lines.append("  SAM Hashes:")
+                for h in sam_hashes:
+                    username = h.username if hasattr(h, 'username') else h.get('username', '')
+                    rid = h.rid if hasattr(h, 'rid') else h.get('rid', '')
+                    lm_hash = h.lm_hash if hasattr(h, 'lm_hash') else h.get('lm_hash', '')
+                    nt_hash = h.nt_hash if hasattr(h, 'nt_hash') else h.get('nt_hash', '')
+                    lines.append(f"    {username}:{rid}:{lm_hash}:{nt_hash}:::")
+
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── smb_brute_sam_hashes.txt ── All SAM hashes (hashcat/john format) ─
+        all_hashes = []
+        for ip in sorted(smb_results.keys()):
+            host_result = smb_results[ip]
+            sam_hashes = []
+            if hasattr(host_result, 'sam_hashes'):
+                sam_hashes = host_result.sam_hashes
+            elif isinstance(host_result, dict):
+                sam_hashes = host_result.get('sam_hashes', [])
+            for h in sam_hashes:
+                username = h.username if hasattr(h, 'username') else h.get('username', '')
+                rid = h.rid if hasattr(h, 'rid') else h.get('rid', '')
+                lm_hash = h.lm_hash if hasattr(h, 'lm_hash') else h.get('lm_hash', '')
+                nt_hash = h.nt_hash if hasattr(h, 'nt_hash') else h.get('nt_hash', '')
+                all_hashes.append(f"{username}:{rid}:{lm_hash}:{nt_hash}:::")
+
+        if all_hashes:
+            hash_filepath = os.path.join(outdir, "smb_brute_sam_hashes.txt")
+            hash_lines = [f"# ReconX - SAM Hashes dumped via SMB Brute-force for {domain}"]
+            hash_lines.append(f"# Total: {len(all_hashes)} hash(es)")
+            hash_lines.append(f"# Format: username:rid:lm_hash:nt_hash:::")
+            hash_lines.append(f"# Crack with: hashcat -m 1000 smb_brute_sam_hashes.txt wordlist.txt")
+            hash_lines.append("")
+            hash_lines.extend(all_hashes)
+            self._write(hash_filepath, "\n".join(hash_lines) + "\n")
+
+        # ── smb_brute_summary.json ── Structured JSON ─────────────────
+        filepath_json = os.path.join(outdir, "smb_brute_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": smb_stats,
+            "hosts": {
+                ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                for ip, r in smb_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

@@ -354,6 +354,16 @@ class ScanResult:
     rdp_stats: Dict = field(default_factory=dict)
     rdp_available: bool = False
 
+    # VNC brute-force (msfconsole)
+    vnc_results: Dict = field(default_factory=dict)
+    vnc_stats: Dict = field(default_factory=dict)
+    vnc_available: bool = False
+
+    # SMB brute-force (netexec nxc)
+    smb_brute_results: Dict = field(default_factory=dict)
+    smb_brute_stats: Dict = field(default_factory=dict)
+    smb_brute_available: bool = False
+
     # WPScan WordPress scanner
     wpscan_results: Dict = field(default_factory=dict)
     wpscan_stats: Dict = field(default_factory=dict)

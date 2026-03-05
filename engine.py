@@ -31,7 +31,7 @@ from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
-    MSFSMBBruteScanner, RDPBruteScanner, WPScanner, SMBClientScanner,
+    MSFSMBBruteScanner, RDPBruteScanner, VNCBruteScanner, SMBBruteScanner, WPScanner, SMBClientScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -77,6 +77,8 @@ class ReconEngine:
         self.cme_scanner = CMEScanner(config.scanner)
         self.msf_scanner = MSFSMBBruteScanner(config.scanner)
         self.rdp_scanner = RDPBruteScanner(config.scanner)
+        self.vnc_scanner = VNCBruteScanner(config.scanner)
+        self.smb_brute_scanner = SMBBruteScanner(config.scanner)
         self.wpscan_scanner = WPScanner(config.scanner)
         self.smbclient_scanner = SMBClientScanner(config.scanner)
 
@@ -228,6 +230,10 @@ class ReconEngine:
                 fe._export_msf(d, r)
             elif phase == "rdp":
                 fe._export_rdp(d, r)
+            elif phase == "vnc":
+                fe._export_vnc(d, r)
+            elif phase == "smb_brute":
+                fe._export_smb_brute(d, r)
             elif phase == "wpscan":
                 fe._export_wpscan(d, r)
             elif phase == "smbclient":
@@ -824,6 +830,198 @@ class ReconEngine:
                     f"\033[90m    Install: pip install netexec\033[0m\n"
                 )
 
+        # ── Phase 9b-2: VNC brute-force (msfconsole) ────────────────────────
+        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            vnc_output_dir = os.path.join(".", domain)
+            os.makedirs(vnc_output_dir, exist_ok=True)
+
+            vnc_results = self._safe_scan(
+                "vnc-brute", self.vnc_scanner.scan,
+                self.result.nmap_results, output_dir=vnc_output_dir,
+            )
+
+            if vnc_results is not None:
+                vnc_stats = self.vnc_scanner.stats
+
+                self.result.vnc_results = vnc_results
+                self.result.vnc_stats = vnc_stats.to_dict()
+                self.result.vnc_available = True
+                self._save_phase("vnc")
+
+                if vnc_stats.credentials_found > 0:
+                    no_auth_str = ""
+                    if vnc_stats.hosts_no_auth > 0:
+                        no_auth_str = (
+                            f" | \033[1;91m{vnc_stats.hosts_no_auth} NO AUTH\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m vnc-brute: "
+                        f"\033[1;92m{vnc_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{vnc_stats.hosts_tested} hosts tested"
+                        f"{no_auth_str} "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    # Show found credentials
+                    for cred in self.vnc_scanner.get_all_credentials():
+                        if cred.anonymous:
+                            print(
+                                f"\033[1;91m[!]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;91mNO AUTHENTICATION REQUIRED\033[0m"
+                            )
+                        else:
+                            print(
+                                f"\033[1;92m[+]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;92m:{cred.password}\033[0m"
+                            )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m vnc-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{vnc_stats.hosts_tested}/{vnc_stats.total_vnc_hosts} hosts tested "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if vnc_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m vnc-brute: "
+                        f"{vnc_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                # Highlight no-auth hosts (critical finding)
+                no_auth = self.vnc_scanner.get_no_auth_hosts()
+                if no_auth:
+                    print(
+                        f"\033[1;91m[!]\033[0m vnc-brute: \033[1;91m{len(no_auth)} host(s) "
+                        f"with NO AUTHENTICATION\033[0m (open VNC access!)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
+                )
+        elif (not self.vnc_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.vnc_brute import VNCBruteScanner as _VNC2
+            vnc_check = _VNC2(self.config.scanner)._get_vnc_hosts(self.result.nmap_results)
+            if vnc_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping VNC brute-force "
+                    f"({len(vnc_check)} VNC host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
+        # ── Phase 9b-3: SMB brute-force (netexec / nxc) ───────────────────
+        if self.smb_brute_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            smb_brute_output_dir = os.path.join(".", domain)
+            os.makedirs(smb_brute_output_dir, exist_ok=True)
+
+            smb_brute_results = self._safe_scan(
+                "smb-brute", self.smb_brute_scanner.scan,
+                self.result.nmap_results, output_dir=smb_brute_output_dir,
+            )
+
+            if smb_brute_results is not None:
+                smb_brute_stats = self.smb_brute_scanner.stats
+
+                self.result.smb_brute_results = smb_brute_results
+                self.result.smb_brute_stats = smb_brute_stats.to_dict()
+                self.result.smb_brute_available = True
+                self._save_phase("smb_brute")
+
+                if smb_brute_stats.credentials_found > 0:
+                    pwn_str = ""
+                    if smb_brute_stats.pwned_count > 0:
+                        pwn_str = (
+                            f" | \033[1;91m{smb_brute_stats.pwned_count} Pwn3d!\033[0m"
+                        )
+                    sam_str = ""
+                    if smb_brute_stats.sam_hashes_dumped > 0:
+                        sam_str = (
+                            f" | \033[1;95m{smb_brute_stats.sam_hashes_dumped} SAM hashes\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m smb-brute: "
+                        f"\033[1;92m{smb_brute_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{smb_brute_stats.hosts_tested} hosts tested"
+                        f"{pwn_str}{sam_str} "
+                        f"\033[90m({smb_brute_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    # Show found credentials
+                    for cred in self.smb_brute_scanner.get_all_credentials():
+                        domain_str = f"{cred.domain}\\" if cred.domain else ""
+                        pwn_tag = " \033[1;91m(Pwn3d!)\033[0m" if cred.pwned else ""
+                        anon_tag = " \033[1;93m(anonymous)\033[0m" if cred.anonymous else ""
+                        print(
+                            f"\033[1;92m[+]\033[0m smb-brute: "
+                            f"\033[96m{cred.ip}\033[0m → "
+                            f"\033[1;92m{domain_str}{cred.username}:{cred.password}\033[0m"
+                            f"{pwn_tag}{anon_tag}"
+                        )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m smb-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{smb_brute_stats.hosts_tested}/{smb_brute_stats.total_smb_hosts} hosts tested "
+                        f"\033[90m({smb_brute_stats.scan_time:.1f}s)\033[0m"
+                    )
+                # Show null auth hosts
+                null_hosts = self.smb_brute_scanner.get_null_auth_hosts()
+                if null_hosts:
+                    print(
+                        f"\033[1;91m[!]\033[0m smb-brute: \033[1;91m{len(null_hosts)} host(s) "
+                        f"allow anonymous/null access\033[0m"
+                    )
+                # Show Pwn3d hosts
+                pwned_hosts = self.smb_brute_scanner.get_pwned_hosts()
+                if pwned_hosts:
+                    print(
+                        f"\033[1;91m[!]\033[0m smb-brute: \033[1;91m{len(pwned_hosts)} host(s) "
+                        f"Pwn3d!\033[0m (admin access)"
+                    )
+                # Show SAM hashes
+                sam_hashes = self.smb_brute_scanner.get_all_sam_hashes()
+                if sam_hashes:
+                    print(
+                        f"\033[1;95m[+]\033[0m smb-brute: \033[1;95m{len(sam_hashes)} SAM hash(es) "
+                        f"dumped\033[0m"
+                    )
+                    for h in sam_hashes[:10]:
+                        print(
+                            f"\033[1;95m[+]\033[0m   {h.username}:{h.rid}:{h.lm_hash}:{h.nt_hash}"
+                        )
+                    if len(sam_hashes) > 10:
+                        print(
+                            f"\033[90m    ... and {len(sam_hashes) - 10} more (see smb_brute_sam_hashes.txt)\033[0m"
+                        )
+                if smb_brute_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m smb-brute: "
+                        f"{smb_brute_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m smb-brute: skipped by user\n"
+                )
+        elif (not self.smb_brute_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.smb_brute import SMBBruteScanner as _SMBB2
+            smb_b_check = _SMBB2(self.config.scanner)._get_smb_hosts(self.result.nmap_results)
+            if smb_b_check:
+                print(
+                    f"\033[93m[!]\033[0m netexec (nxc) not found – skipping SMB brute-force "
+                    f"({len(smb_b_check)} SMB host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: pip install netexec\033[0m\n"
+                )
+
         # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
         if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
             # Only scan IPs that have SMB/NetBIOS ports open
@@ -1271,6 +1469,192 @@ class ReconEngine:
                 print(
                     f"\033[93m[!]\033[0m netexec not found – skipping RDP brute-force "
                     f"({len(rdp_check)} RDP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: pip install netexec\033[0m\n"
+                )
+
+        # ── VNC brute-force (direct mode) ──────────────────────────────────
+        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            vnc_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(vnc_output_dir, exist_ok=True)
+
+            vnc_results = self._safe_scan(
+                "vnc-brute", self.vnc_scanner.scan,
+                self.result.nmap_results, output_dir=vnc_output_dir,
+            )
+
+            if vnc_results is not None:
+                vnc_stats = self.vnc_scanner.stats
+
+                self.result.vnc_results = vnc_results
+                self.result.vnc_stats = vnc_stats.to_dict()
+                self.result.vnc_available = True
+                self._save_phase("vnc")
+
+                if vnc_stats.credentials_found > 0:
+                    no_auth_str = ""
+                    if vnc_stats.hosts_no_auth > 0:
+                        no_auth_str = (
+                            f" | \033[1;91m{vnc_stats.hosts_no_auth} NO AUTH\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m vnc-brute: "
+                        f"\033[1;92m{vnc_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{vnc_stats.hosts_tested} hosts tested"
+                        f"{no_auth_str} "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.vnc_scanner.get_all_credentials():
+                        if cred.anonymous:
+                            print(
+                                f"\033[1;91m[!]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;91mNO AUTHENTICATION REQUIRED\033[0m"
+                            )
+                        else:
+                            print(
+                                f"\033[1;92m[+]\033[0m vnc-brute: "
+                                f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                                f"\033[1;92m:{cred.password}\033[0m"
+                            )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m vnc-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{vnc_stats.hosts_tested}/{vnc_stats.total_vnc_hosts} hosts tested "
+                        f"\033[90m({vnc_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if vnc_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m vnc-brute: "
+                        f"{vnc_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                no_auth = self.vnc_scanner.get_no_auth_hosts()
+                if no_auth:
+                    print(
+                        f"\033[1;91m[!]\033[0m vnc-brute: \033[1;91m{len(no_auth)} host(s) "
+                        f"with NO AUTHENTICATION\033[0m (open VNC access!)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
+                )
+        elif (not self.vnc_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.vnc_brute import VNCBruteScanner as _VNC3
+            vnc_check = _VNC3(self.config.scanner)._get_vnc_hosts(self.result.nmap_results)
+            if vnc_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping VNC brute-force "
+                    f"({len(vnc_check)} VNC host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
+        # ── SMB brute-force (direct mode) ──────────────────────────────────
+        if self.smb_brute_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            smb_brute_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(smb_brute_output_dir, exist_ok=True)
+
+            smb_brute_results = self._safe_scan(
+                "smb-brute", self.smb_brute_scanner.scan,
+                self.result.nmap_results, output_dir=smb_brute_output_dir,
+            )
+
+            if smb_brute_results is not None:
+                smb_brute_stats = self.smb_brute_scanner.stats
+
+                self.result.smb_brute_results = smb_brute_results
+                self.result.smb_brute_stats = smb_brute_stats.to_dict()
+                self.result.smb_brute_available = True
+                self._save_phase("smb_brute")
+
+                if smb_brute_stats.credentials_found > 0:
+                    pwn_str = ""
+                    if smb_brute_stats.pwned_count > 0:
+                        pwn_str = (
+                            f" | \033[1;91m{smb_brute_stats.pwned_count} Pwn3d!\033[0m"
+                        )
+                    sam_str = ""
+                    if smb_brute_stats.sam_hashes_dumped > 0:
+                        sam_str = (
+                            f" | \033[1;95m{smb_brute_stats.sam_hashes_dumped} SAM hashes\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m smb-brute: "
+                        f"\033[1;92m{smb_brute_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{smb_brute_stats.hosts_tested} hosts tested"
+                        f"{pwn_str}{sam_str} "
+                        f"\033[90m({smb_brute_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.smb_brute_scanner.get_all_credentials():
+                        domain_str = f"{cred.domain}\\" if cred.domain else ""
+                        pwn_tag = " \033[1;91m(Pwn3d!)\033[0m" if cred.pwned else ""
+                        anon_tag = " \033[1;93m(anonymous)\033[0m" if cred.anonymous else ""
+                        print(
+                            f"\033[1;92m[+]\033[0m smb-brute: "
+                            f"\033[96m{cred.ip}\033[0m → "
+                            f"\033[1;92m{domain_str}{cred.username}:{cred.password}\033[0m"
+                            f"{pwn_tag}{anon_tag}"
+                        )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m smb-brute: "
+                        f"\033[37mno valid credentials\033[0m | "
+                        f"{smb_brute_stats.hosts_tested}/{smb_brute_stats.total_smb_hosts} hosts tested "
+                        f"\033[90m({smb_brute_stats.scan_time:.1f}s)\033[0m"
+                    )
+                null_hosts = self.smb_brute_scanner.get_null_auth_hosts()
+                if null_hosts:
+                    print(
+                        f"\033[1;91m[!]\033[0m smb-brute: \033[1;91m{len(null_hosts)} host(s) "
+                        f"allow anonymous/null access\033[0m"
+                    )
+                pwned_hosts = self.smb_brute_scanner.get_pwned_hosts()
+                if pwned_hosts:
+                    print(
+                        f"\033[1;91m[!]\033[0m smb-brute: \033[1;91m{len(pwned_hosts)} host(s) "
+                        f"Pwn3d!\033[0m (admin access)"
+                    )
+                sam_hashes = self.smb_brute_scanner.get_all_sam_hashes()
+                if sam_hashes:
+                    print(
+                        f"\033[1;95m[+]\033[0m smb-brute: \033[1;95m{len(sam_hashes)} SAM hash(es) "
+                        f"dumped\033[0m"
+                    )
+                    for h in sam_hashes[:10]:
+                        print(
+                            f"\033[1;95m[+]\033[0m   {h.username}:{h.rid}:{h.lm_hash}:{h.nt_hash}"
+                        )
+                    if len(sam_hashes) > 10:
+                        print(
+                            f"\033[90m    ... and {len(sam_hashes) - 10} more (see smb_brute_sam_hashes.txt)\033[0m"
+                        )
+                if smb_brute_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m smb-brute: "
+                        f"{smb_brute_stats.hosts_skipped} host(s) skipped "
+                        f"(lockout/connection errors)"
+                    )
+                print()
+            else:
+                print(
+                    f"\033[93m[!]\033[0m smb-brute: skipped by user\n"
+                )
+        elif (not self.smb_brute_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.smb_brute import SMBBruteScanner as _SMBB3
+            smb_b_check = _SMBB3(self.config.scanner)._get_smb_hosts(self.result.nmap_results)
+            if smb_b_check:
+                print(
+                    f"\033[93m[!]\033[0m netexec (nxc) not found – skipping SMB brute-force "
+                    f"({len(smb_b_check)} SMB host(s) detected)"
                 )
                 print(
                     f"\033[90m    Install: pip install netexec\033[0m\n"
