@@ -32,6 +32,7 @@ from .scanner import (
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
     MSFSMBBruteScanner, RDPBruteScanner, VNCBruteScanner, SMBBruteScanner, WPScanner, SMBClientScanner,
+    KatanaScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -81,6 +82,7 @@ class ReconEngine:
         self.smb_brute_scanner = SMBBruteScanner(config.scanner)
         self.wpscan_scanner = WPScanner(config.scanner)
         self.smbclient_scanner = SMBClientScanner(config.scanner)
+        self.katana_scanner = KatanaScanner(config.scanner)
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -238,6 +240,8 @@ class ReconEngine:
                 fe._export_wpscan(d, r)
             elif phase == "smbclient":
                 fe._export_smbclient(d, r)
+            elif phase == "katana":
+                fe._export_katana(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
         except Exception:
@@ -1228,6 +1232,70 @@ class ReconEngine:
                 f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
             )
 
+        # ── Katana web crawling (domain mode) ─────────────────────────────
+        if self.katana_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            from .scanner.katana_scan import KatanaScanner as _KAT
+            katana_targets: set = set()
+
+            # Gather HTTP/HTTPS targets from httpx results
+            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
+                katana_targets |= _KAT.get_http_targets_from_httpx(self.result.httpx_results)
+
+            # Also gather from nmap HTTP/HTTPS services
+            katana_targets |= _KAT.get_http_targets_from_nmap(self.result.nmap_results)
+
+            if katana_targets:
+                katana_output_dir = os.path.join(".", domain)
+                os.makedirs(katana_output_dir, exist_ok=True)
+
+                katana_results = self._safe_scan(
+                    "katana", self.katana_scanner.scan,
+                    sorted(katana_targets), output_dir=katana_output_dir,
+                )
+
+                if katana_results is not None:
+                    katana_stats = self.katana_scanner.stats
+
+                    self.result.katana_results = katana_results
+                    self.result.katana_stats = katana_stats.to_dict()
+                    self.result.katana_available = True
+                    self._save_phase("katana")
+
+                    total_urls = katana_stats.total_urls
+                    if total_urls > 0:
+                        parts = [f"\033[92m{total_urls} URLs\033[0m"]
+                        if katana_stats.js_files > 0:
+                            parts.append(f"\033[96m{katana_stats.js_files} JS\033[0m")
+                        if katana_stats.api_endpoints > 0:
+                            parts.append(f"\033[93m{katana_stats.api_endpoints} API\033[0m")
+                        print(
+                            f"\033[92m[+]\033[0m katana: {' | '.join(parts)} "
+                            f"from \033[96m{katana_stats.targets_crawled}\033[0m target(s) "
+                            f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m katana: \033[37m0 URLs\033[0m "
+                            f"from {katana_stats.targets_crawled} target(s) "
+                            f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m katana: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[\u00b7]\033[0m katana: no HTTP/HTTPS targets found\n"
+                )
+        elif not self.katana_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m katana not found \u2013 skipping web crawling"
+            )
+            print(
+                f"\033[90m    Install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
+            )
+
         # ── Phase 10: Statistics ───────────────────────────────────────────
         self.result.flagged_interesting = sum(
             1 for s in subdomain_objects if s.interesting
@@ -1974,6 +2042,63 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
+            )
+
+        # ── Katana web crawling (direct mode) ────────────────────────────
+        if self.katana_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            from .scanner.katana_scan import KatanaScanner as _KAT2
+            katana_targets = _KAT2.get_http_targets_from_nmap(self.result.nmap_results)
+
+            if katana_targets:
+                katana_output_dir = os.path.join(".", label.replace("/", "_"))
+                os.makedirs(katana_output_dir, exist_ok=True)
+
+                katana_results = self._safe_scan(
+                    "katana", self.katana_scanner.scan,
+                    sorted(katana_targets), output_dir=katana_output_dir,
+                )
+
+                if katana_results is not None:
+                    katana_stats = self.katana_scanner.stats
+
+                    self.result.katana_results = katana_results
+                    self.result.katana_stats = katana_stats.to_dict()
+                    self.result.katana_available = True
+                    self._save_phase("katana")
+
+                    total_urls = katana_stats.total_urls
+                    if total_urls > 0:
+                        parts = [f"\033[92m{total_urls} URLs\033[0m"]
+                        if katana_stats.js_files > 0:
+                            parts.append(f"\033[96m{katana_stats.js_files} JS\033[0m")
+                        if katana_stats.api_endpoints > 0:
+                            parts.append(f"\033[93m{katana_stats.api_endpoints} API\033[0m")
+                        print(
+                            f"\033[92m[+]\033[0m katana: {' | '.join(parts)} "
+                            f"from \033[96m{katana_stats.targets_crawled}\033[0m target(s) "
+                            f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m katana: \033[37m0 URLs\033[0m "
+                            f"from {katana_stats.targets_crawled} target(s) "
+                            f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m katana: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[\u00b7]\033[0m katana: no HTTP/HTTPS services found\n"
+                )
+        elif not self.katana_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m katana not found \u2013 skipping web crawling"
+            )
+            print(
+                f"\033[90m    Install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
             )
 
         # ── Statistics & Output ────────────────────────────────────────────

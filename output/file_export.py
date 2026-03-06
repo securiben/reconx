@@ -1561,3 +1561,52 @@ class FileExporter:
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_katana(self, outdir: str, result: ScanResult):
+        """
+        Export katana web crawl results.
+        The katana_urls.txt is already written by the scanner directly.
+        This exports a structured summary.
+        """
+        katana_stats = getattr(result, 'katana_stats', {})
+        katana_results = getattr(result, 'katana_results', [])
+        if not getattr(result, 'katana_available', False) or not katana_results:
+            return
+
+        domain = result.target_domain
+
+        # ── katana_summary.txt ── Human-readable summary ─────────────
+        filepath = os.path.join(outdir, "katana_summary.txt")
+        lines = [f"# ReconX - Katana Web Crawl for {domain}"]
+        lines.append(f"# Total URLs: {katana_stats.get('total_urls', 0)}")
+        lines.append(f"# Unique endpoints: {katana_stats.get('unique_endpoints', 0)}")
+        lines.append(f"# Targets crawled: {katana_stats.get('targets_crawled', 0)}")
+        lines.append(f"# JS files: {katana_stats.get('js_files', 0)}")
+        lines.append(f"# API endpoints: {katana_stats.get('api_endpoints', 0)}")
+        lines.append(f"# Scan time: {katana_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        # Extensions breakdown
+        extensions = katana_stats.get('extensions', {})
+        if extensions:
+            lines.append("── Extensions ──")
+            for ext, count in sorted(extensions.items(), key=lambda x: -x[1]):
+                lines.append(f"  .{ext}: {count}")
+            lines.append("")
+
+        # All URLs
+        lines.append(f"── All URLs ({len(katana_results)}) ──")
+        for url in katana_results:
+            lines.append(f"  {url}")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── katana_summary.json ── Structured JSON ────────────────────
+        filepath_json = os.path.join(outdir, "katana_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": katana_stats,
+            "total_urls": len(katana_results),
+            "urls": katana_results,
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

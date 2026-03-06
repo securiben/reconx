@@ -19,6 +19,7 @@ from .vnc_brute import VNCBruteScanner
 from .smb_brute import SMBBruteScanner
 from .wpscan import WPScanner
 from .smbclient_scan import SMBClientScanner
+from .katana_scan import KatanaScanner
 
 __all__ = [
     "InfrastructureScanner",
@@ -36,4 +37,5 @@ __all__ = [
     "SMBBruteScanner",
     "WPScanner",
     "SMBClientScanner",
+    "KatanaScanner",
 ]

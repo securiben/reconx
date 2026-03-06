@@ -374,6 +374,11 @@ class ScanResult:
     smbclient_stats: Dict = field(default_factory=dict)
     smbclient_available: bool = False
 
+    # Katana web crawler
+    katana_results: List = field(default_factory=list)
+    katana_stats: Dict = field(default_factory=dict)
+    katana_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -473,5 +478,11 @@ class ScanResult:
                     ip: r.to_dict() if hasattr(r, 'to_dict') else r
                     for ip, r in self.smbclient_results.items()
                 },
+            }
+        if self.katana_results:
+            d["katana"] = {
+                "stats": self.katana_stats,
+                "total_urls": len(self.katana_results),
+                "urls": self.katana_results[:500],  # cap to avoid huge JSON
             }
         return d
