@@ -341,7 +341,7 @@ class NucleiScanner:
                 "-sa",
                 "-nt",
                 "-as",
-                "-ue" "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
+                "-ue", "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
                 "-s", "info,low,medium,high,critical",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
