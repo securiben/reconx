@@ -343,9 +343,11 @@ class NucleiScanner:
                 "-as",
                 "-ue", "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
                 "-s", "info,low,medium,high,critical",
+                "-tags", "vuln, cve, vkev, panel, xss",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
+                
                 "-c", "30",
                 "-silent",
             ]

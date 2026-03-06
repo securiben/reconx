@@ -32,7 +32,9 @@ from .scanner import (
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
     MSFSMBBruteScanner, RDPBruteScanner, VNCBruteScanner, SMBBruteScanner, WPScanner, SMBClientScanner,
-    KatanaScanner,
+    KatanaScanner, SNMPLoginScanner, SNMPEnumScanner,
+    SSHLoginScanner,
+    MongoDBLoginScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -83,6 +85,10 @@ class ReconEngine:
         self.wpscan_scanner = WPScanner(config.scanner)
         self.smbclient_scanner = SMBClientScanner(config.scanner)
         self.katana_scanner = KatanaScanner(config.scanner)
+        self.snmp_login_scanner = SNMPLoginScanner(config.scanner)
+        self.snmp_enum_scanner = SNMPEnumScanner(config.scanner)
+        self.ssh_login_scanner = SSHLoginScanner(config.scanner)
+        self.mongodb_login_scanner = MongoDBLoginScanner(config.scanner)
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -242,6 +248,14 @@ class ReconEngine:
                 fe._export_smbclient(d, r)
             elif phase == "katana":
                 fe._export_katana(d, r)
+            elif phase == "snmp_login":
+                fe._export_snmp_login(d, r)
+            elif phase == "snmp_enum":
+                fe._export_snmp_enum(d, r)
+            elif phase == "ssh_login":
+                fe._export_ssh_login(d, r)
+            elif phase == "mongodb_login":
+                fe._export_mongodb_login(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
         except Exception:
@@ -740,7 +754,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=smb_brute_output_dir,
             )
 
-            if smb_brute_results is not None:
+            if smb_brute_results:
                 smb_brute_stats = self.smb_brute_scanner.stats
 
                 self.result.smb_brute_results = smb_brute_results
@@ -820,7 +834,7 @@ class ReconEngine:
                         f"(lockout/connection errors)"
                     )
                 print()
-            else:
+            elif smb_brute_results is None:
                 print(
                     f"\033[93m[!]\033[0m smb-brute: skipped by user\n"
                 )
@@ -848,7 +862,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=vnc_output_dir,
             )
 
-            if vnc_results is not None:
+            if vnc_results:
                 vnc_stats = self.vnc_scanner.stats
 
                 self.result.vnc_results = vnc_results
@@ -904,7 +918,7 @@ class ReconEngine:
                         f"with NO AUTHENTICATION\033[0m (open VNC access!)"
                     )
                 print()
-            else:
+            elif vnc_results is None:
                 print(
                     f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
                 )
@@ -922,6 +936,289 @@ class ReconEngine:
                     f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
                 )
 
+        # ── Phase 9b-3: SNMP login brute-force (msfconsole) ─────────────────
+        if self.snmp_login_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            snmp_output_dir = os.path.join(".", domain)
+            os.makedirs(snmp_output_dir, exist_ok=True)
+
+            snmp_login_results = self._safe_scan(
+                "snmp-login", self.snmp_login_scanner.scan,
+                self.result.nmap_results, output_dir=snmp_output_dir,
+            )
+
+            if snmp_login_results:
+                snmp_login_stats = self.snmp_login_scanner.stats
+
+                self.result.snmp_login_results = snmp_login_results
+                self.result.snmp_login_stats = snmp_login_stats.to_dict()
+                self.result.snmp_login_available = True
+                self._save_phase("snmp_login")
+
+                if snmp_login_stats.credentials_found > 0:
+                    rw_str = ""
+                    if snmp_login_stats.read_write_found > 0:
+                        rw_str = (
+                            f" | \033[1;91m{snmp_login_stats.read_write_found} READ-WRITE\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m snmp-login: "
+                        f"\033[1;92m{snmp_login_stats.credentials_found} community string(s) found!\033[0m | "
+                        f"{snmp_login_stats.hosts_tested} hosts tested"
+                        f"{rw_str} "
+                        f"\033[90m({snmp_login_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.snmp_login_scanner.get_all_credentials():
+                        rw_tag = ""
+                        if "write" in cred.access_level.lower():
+                            rw_tag = " \033[1;91m[READ-WRITE!]\033[0m"
+                        proof_str = f" — {cred.proof}" if cred.proof else ""
+                        print(
+                            f"\033[1;92m[+]\033[0m snmp-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.community}\033[0m "
+                            f"(\033[93m{cred.access_level}\033[0m){rw_tag}"
+                            f"\033[90m{proof_str}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m snmp-login: "
+                        f"\033[37mno valid community strings\033[0m | "
+                        f"{snmp_login_stats.hosts_tested}/{snmp_login_stats.total_snmp_hosts} hosts tested "
+                        f"\033[90m({snmp_login_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if snmp_login_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m snmp-login: "
+                        f"{snmp_login_stats.hosts_skipped} host(s) skipped "
+                        f"(rate limit/connection errors)"
+                    )
+                rw_hosts = self.snmp_login_scanner.get_read_write_hosts()
+                if rw_hosts:
+                    print(
+                        f"\033[1;91m[!]\033[0m snmp-login: \033[1;91m{len(rw_hosts)} host(s) "
+                        f"with READ-WRITE community\033[0m (config modification possible!)"
+                    )
+                print()
+            elif snmp_login_results is None:
+                print(
+                    f"\033[93m[!]\033[0m snmp-login: skipped by user\n"
+                )
+
+            # ── Phase 9b-4: SNMP enumeration (msfconsole) ───────────────────
+            if (self.snmp_enum_scanner.available
+                    and self.result.snmp_login_available
+                    and snmp_login_results):
+                community_map = self.snmp_login_scanner.get_community_strings()
+                if community_map:
+                    snmp_enum_results = self._safe_scan(
+                        "snmp-enum", self.snmp_enum_scanner.scan,
+                        self.result.nmap_results,
+                        community_map=community_map,
+                        output_dir=snmp_output_dir,
+                    )
+
+                    if snmp_enum_results is not None:
+                        snmp_enum_stats = self.snmp_enum_scanner.stats
+
+                        self.result.snmp_enum_results = snmp_enum_results
+                        self.result.snmp_enum_stats = snmp_enum_stats.to_dict()
+                        self.result.snmp_enum_available = True
+                        self._save_phase("snmp_enum")
+
+                        if snmp_enum_stats.hosts_with_sysinfo > 0:
+                            parts = [
+                                f"\033[92m{snmp_enum_stats.hosts_with_sysinfo} system(s)\033[0m"
+                            ]
+                            if snmp_enum_stats.hosts_with_netinfo > 0:
+                                parts.append(
+                                    f"\033[96m{snmp_enum_stats.hosts_with_netinfo} network\033[0m"
+                                )
+                            if snmp_enum_stats.hosts_with_users > 0:
+                                parts.append(
+                                    f"\033[93m{snmp_enum_stats.hosts_with_users} users\033[0m"
+                                )
+                            if snmp_enum_stats.hosts_with_processes > 0:
+                                parts.append(
+                                    f"\033[36m{snmp_enum_stats.hosts_with_processes} processes\033[0m"
+                                )
+                            print(
+                                f"\033[92m[+]\033[0m snmp-enum: "
+                                f"{' | '.join(parts)} enumerated "
+                                f"\033[90m({snmp_enum_stats.scan_time:.1f}s)\033[0m"
+                            )
+                            for si in self.snmp_enum_scanner.get_all_system_info():
+                                desc_str = f" — {si.description}" if si.description else ""
+                                print(
+                                    f"\033[92m[+]\033[0m snmp-enum: "
+                                    f"\033[96m{si.host_ip}\033[0m → "
+                                    f"\033[1;92m{si.hostname}\033[0m"
+                                    f"\033[90m{desc_str}\033[0m"
+                                )
+                        else:
+                            print(
+                                f"\033[92m[+]\033[0m snmp-enum: "
+                                f"\033[37mno data retrieved\033[0m | "
+                                f"{snmp_enum_stats.hosts_enumerated}/{snmp_enum_stats.total_snmp_hosts} hosts "
+                                f"\033[90m({snmp_enum_stats.scan_time:.1f}s)\033[0m"
+                            )
+                        fwd_hosts = self.snmp_enum_scanner.get_hosts_with_forwarding()
+                        if fwd_hosts:
+                            print(
+                                f"\033[93m[!]\033[0m snmp-enum: \033[93m{len(fwd_hosts)} host(s) "
+                                f"with IP forwarding enabled\033[0m (potential router/gateway)"
+                            )
+                        print()
+                    else:
+                        print(
+                            f"\033[93m[!]\033[0m snmp-enum: skipped by user\n"
+                        )
+
+        elif (not self.snmp_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.snmp_login import SNMPLoginScanner as _SNMP2
+            snmp_check = _SNMP2(self.config.scanner)._get_snmp_hosts(self.result.nmap_results)
+            if snmp_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping SNMP login/enum "
+                    f"({len(snmp_check)} SNMP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
+        # ── Phase 9b-2: SSH login brute-force (msfconsole) ──────────────────
+        if (self.ssh_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results):
+            ssh_output_dir = os.path.join(".", domain)
+            os.makedirs(ssh_output_dir, exist_ok=True)
+
+            ssh_results = self._safe_scan(
+                "ssh-login", self.ssh_login_scanner.scan,
+                self.result.nmap_results, output_dir=ssh_output_dir,
+            )
+
+            if ssh_results:
+                ssh_stats = self.ssh_login_scanner.stats
+
+                self.result.ssh_login_results = ssh_results
+                self.result.ssh_login_stats = ssh_stats.to_dict()
+                self.result.ssh_login_available = True
+                self._save_phase("ssh_login")
+
+                if ssh_stats.credentials_found > 0:
+                    print(
+                        f"\033[1;92m[+]\033[0m ssh-login: "
+                        f"\033[1;92m{ssh_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{ssh_stats.hosts_tested} hosts tested | "
+                        f"{ssh_stats.hosts_skipped} skipped "
+                        f"\033[90m({ssh_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.ssh_login_scanner.get_all_credentials():
+                        print(
+                            f"\033[1;92m[+]\033[0m ssh-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{cred.password}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m ssh-login: no valid credentials | "
+                        f"{ssh_stats.hosts_tested}/{ssh_stats.total_ssh_hosts} hosts tested | "
+                        f"{ssh_stats.hosts_skipped} skipped "
+                        f"\033[90m({ssh_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif ssh_results is None:
+                print(
+                    f"\033[93m[!]\033[0m ssh-login: skipped by user\n"
+                )
+        elif (not self.ssh_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.ssh_login import SSHLoginScanner as _SSH2
+            ssh_check = _SSH2(self.config.scanner)._get_ssh_hosts(self.result.nmap_results)
+            if ssh_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping SSH login "
+                    f"({len(ssh_check)} SSH host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
+        # ── Phase 9b-3: MongoDB login/info/enum (msfconsole) ────────────────
+        if (self.mongodb_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results):
+            mongo_output_dir = os.path.join(".", domain)
+            os.makedirs(mongo_output_dir, exist_ok=True)
+
+            mongo_results = self._safe_scan(
+                "mongodb-login", self.mongodb_login_scanner.scan,
+                self.result.nmap_results, output_dir=mongo_output_dir,
+            )
+
+            if mongo_results:
+                mongo_stats = self.mongodb_login_scanner.stats
+
+                self.result.mongodb_login_results = mongo_results
+                self.result.mongodb_login_stats = mongo_stats.to_dict()
+                self.result.mongodb_login_available = True
+                self._save_phase("mongodb_login")
+
+                parts = []
+                if mongo_stats.credentials_found > 0:
+                    parts.append(
+                        f"\033[1;92m{mongo_stats.credentials_found} credential(s)\033[0m"
+                    )
+                if mongo_stats.hosts_with_info > 0:
+                    parts.append(
+                        f"{mongo_stats.hosts_with_info} server info"
+                    )
+                if mongo_stats.databases_found > 0:
+                    parts.append(
+                        f"\033[96m{mongo_stats.databases_found} database(s)\033[0m"
+                    )
+                if parts:
+                    print(
+                        f"\033[92m[+]\033[0m mongodb-login: "
+                        f"{' | '.join(parts)} | "
+                        f"{mongo_stats.hosts_tested}/{mongo_stats.total_mongodb_hosts} hosts "
+                        f"\033[90m({mongo_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.mongodb_login_scanner.get_all_credentials():
+                        print(
+                            f"\033[1;92m[+]\033[0m mongodb-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{cred.password}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m mongodb-login: no data | "
+                        f"{mongo_stats.hosts_tested}/{mongo_stats.total_mongodb_hosts} hosts | "
+                        f"{mongo_stats.hosts_skipped} skipped "
+                        f"\033[90m({mongo_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif mongo_results is None:
+                print(
+                    f"\033[93m[!]\033[0m mongodb-login: skipped by user\n"
+                )
+        elif (not self.mongodb_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.mongodb_login import MongoDBLoginScanner as _Mongo2
+            mongo_check = _Mongo2(self.config.scanner)._get_mongodb_hosts(self.result.nmap_results)
+            if mongo_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping MongoDB login/info/enum "
+                    f"({len(mongo_check)} MongoDB host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
         # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
         if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
             rdp_output_dir = os.path.join(".", domain)
@@ -932,7 +1229,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=rdp_output_dir,
             )
 
-            if rdp_results is not None:
+            if rdp_results:
                 rdp_stats = self.rdp_scanner.stats
 
                 self.result.rdp_results = rdp_results
@@ -968,7 +1265,7 @@ class ReconEngine:
                         f"(lockout/connection errors)"
                     )
                 print()
-            else:
+            elif rdp_results is None:
                 print(
                     f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
                 )
@@ -1068,7 +1365,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=cme_output_dir,
             )
 
-            if cme_results is not None:
+            if cme_results:
                 cme_stats = self.cme_scanner.stats
 
                 self.result.cme_results = cme_results
@@ -1104,7 +1401,7 @@ class ReconEngine:
                     print(
                         f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
                     )
-            else:
+            elif cme_results is None:
                 print(
                     f"\033[93m[!]\033[0m CME: skipped by user\n"
                 )
@@ -1563,7 +1860,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=smb_brute_output_dir,
             )
 
-            if smb_brute_results is not None:
+            if smb_brute_results:
                 smb_brute_stats = self.smb_brute_scanner.stats
 
                 self.result.smb_brute_results = smb_brute_results
@@ -1639,7 +1936,7 @@ class ReconEngine:
                         f"(lockout/connection errors)"
                     )
                 print()
-            else:
+            elif smb_brute_results is None:
                 print(
                     f"\033[93m[!]\033[0m smb-brute: skipped by user\n"
                 )
@@ -1667,7 +1964,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=vnc_output_dir,
             )
 
-            if vnc_results is not None:
+            if vnc_results:
                 vnc_stats = self.vnc_scanner.stats
 
                 self.result.vnc_results = vnc_results
@@ -1721,7 +2018,7 @@ class ReconEngine:
                         f"with NO AUTHENTICATION\033[0m (open VNC access!)"
                     )
                 print()
-            else:
+            elif vnc_results is None:
                 print(
                     f"\033[93m[!]\033[0m vnc-brute: skipped by user\n"
                 )
@@ -1739,6 +2036,287 @@ class ReconEngine:
                     f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
                 )
 
+        # ── SNMP login brute-force (direct mode) ──────────────────────────
+        if self.snmp_login_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            snmp_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(snmp_output_dir, exist_ok=True)
+
+            snmp_login_results = self._safe_scan(
+                "snmp-login", self.snmp_login_scanner.scan,
+                self.result.nmap_results, output_dir=snmp_output_dir,
+            )
+
+            if snmp_login_results:
+                snmp_login_stats = self.snmp_login_scanner.stats
+
+                self.result.snmp_login_results = snmp_login_results
+                self.result.snmp_login_stats = snmp_login_stats.to_dict()
+                self.result.snmp_login_available = True
+                self._save_phase("snmp_login")
+
+                if snmp_login_stats.credentials_found > 0:
+                    rw_str = ""
+                    if snmp_login_stats.read_write_found > 0:
+                        rw_str = (
+                            f" | \033[1;91m{snmp_login_stats.read_write_found} READ-WRITE\033[0m"
+                        )
+                    print(
+                        f"\033[1;92m[+]\033[0m snmp-login: "
+                        f"\033[1;92m{snmp_login_stats.credentials_found} community string(s) found!\033[0m | "
+                        f"{snmp_login_stats.hosts_tested} hosts tested"
+                        f"{rw_str} "
+                        f"\033[90m({snmp_login_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.snmp_login_scanner.get_all_credentials():
+                        rw_tag = ""
+                        if "write" in cred.access_level.lower():
+                            rw_tag = " \033[1;91m[READ-WRITE!]\033[0m"
+                        proof_str = f" — {cred.proof}" if cred.proof else ""
+                        print(
+                            f"\033[1;92m[+]\033[0m snmp-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.community}\033[0m "
+                            f"(\033[93m{cred.access_level}\033[0m){rw_tag}"
+                            f"\033[90m{proof_str}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[92m[+]\033[0m snmp-login: "
+                        f"\033[37mno valid community strings\033[0m | "
+                        f"{snmp_login_stats.hosts_tested}/{snmp_login_stats.total_snmp_hosts} hosts tested "
+                        f"\033[90m({snmp_login_stats.scan_time:.1f}s)\033[0m"
+                    )
+                if snmp_login_stats.hosts_skipped > 0:
+                    print(
+                        f"\033[93m[!]\033[0m snmp-login: "
+                        f"{snmp_login_stats.hosts_skipped} host(s) skipped "
+                        f"(rate limit/connection errors)"
+                    )
+                rw_hosts = self.snmp_login_scanner.get_read_write_hosts()
+                if rw_hosts:
+                    print(
+                        f"\033[1;91m[!]\033[0m snmp-login: \033[1;91m{len(rw_hosts)} host(s) "
+                        f"with READ-WRITE community\033[0m (config modification possible!)"
+                    )
+                print()
+
+                # ── SNMP enumeration (direct mode) ─────────────────────────
+                if (self.snmp_enum_scanner.available
+                        and snmp_login_results):
+                    community_map = self.snmp_login_scanner.get_community_strings()
+                    if community_map:
+                        snmp_enum_results = self._safe_scan(
+                            "snmp-enum", self.snmp_enum_scanner.scan,
+                            self.result.nmap_results,
+                            community_map=community_map,
+                            output_dir=snmp_output_dir,
+                        )
+
+                        if snmp_enum_results is not None:
+                            snmp_enum_stats = self.snmp_enum_scanner.stats
+
+                            self.result.snmp_enum_results = snmp_enum_results
+                            self.result.snmp_enum_stats = snmp_enum_stats.to_dict()
+                            self.result.snmp_enum_available = True
+                            self._save_phase("snmp_enum")
+
+                            if snmp_enum_stats.hosts_with_sysinfo > 0:
+                                parts = [
+                                    f"\033[92m{snmp_enum_stats.hosts_with_sysinfo} system(s)\033[0m"
+                                ]
+                                if snmp_enum_stats.hosts_with_netinfo > 0:
+                                    parts.append(
+                                        f"\033[96m{snmp_enum_stats.hosts_with_netinfo} network\033[0m"
+                                    )
+                                if snmp_enum_stats.hosts_with_users > 0:
+                                    parts.append(
+                                        f"\033[93m{snmp_enum_stats.hosts_with_users} users\033[0m"
+                                    )
+                                if snmp_enum_stats.hosts_with_processes > 0:
+                                    parts.append(
+                                        f"\033[36m{snmp_enum_stats.hosts_with_processes} processes\033[0m"
+                                    )
+                                print(
+                                    f"\033[92m[+]\033[0m snmp-enum: "
+                                    f"{' | '.join(parts)} enumerated "
+                                    f"\033[90m({snmp_enum_stats.scan_time:.1f}s)\033[0m"
+                                )
+                                for si in self.snmp_enum_scanner.get_all_system_info():
+                                    desc_str = f" — {si.description}" if si.description else ""
+                                    print(
+                                        f"\033[92m[+]\033[0m snmp-enum: "
+                                        f"\033[96m{si.host_ip}\033[0m → "
+                                        f"\033[1;92m{si.hostname}\033[0m"
+                                        f"\033[90m{desc_str}\033[0m"
+                                    )
+                            else:
+                                print(
+                                    f"\033[92m[+]\033[0m snmp-enum: "
+                                    f"\033[37mno data retrieved\033[0m | "
+                                    f"{snmp_enum_stats.hosts_enumerated}/{snmp_enum_stats.total_snmp_hosts} hosts "
+                                    f"\033[90m({snmp_enum_stats.scan_time:.1f}s)\033[0m"
+                                )
+                            fwd_hosts = self.snmp_enum_scanner.get_hosts_with_forwarding()
+                            if fwd_hosts:
+                                print(
+                                    f"\033[93m[!]\033[0m snmp-enum: \033[93m{len(fwd_hosts)} host(s) "
+                                    f"with IP forwarding enabled\033[0m (potential router/gateway)"
+                                )
+                            print()
+                        else:
+                            print(
+                                f"\033[93m[!]\033[0m snmp-enum: skipped by user\n"
+                            )
+            elif snmp_login_results is None:
+                print(
+                    f"\033[93m[!]\033[0m snmp-login: skipped by user\n"
+                )
+        elif (not self.snmp_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.snmp_login import SNMPLoginScanner as _SNMP3
+            snmp_check = _SNMP3(self.config.scanner)._get_snmp_hosts(self.result.nmap_results)
+            if snmp_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping SNMP login/enum "
+                    f"({len(snmp_check)} SNMP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
+        # ── SSH login brute-force (direct mode) ───────────────────────────
+        if (self.ssh_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results):
+            ssh_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(ssh_output_dir, exist_ok=True)
+
+            ssh_results = self._safe_scan(
+                "ssh-login", self.ssh_login_scanner.scan,
+                self.result.nmap_results, output_dir=ssh_output_dir,
+            )
+
+            if ssh_results:
+                ssh_stats = self.ssh_login_scanner.stats
+
+                self.result.ssh_login_results = ssh_results
+                self.result.ssh_login_stats = ssh_stats.to_dict()
+                self.result.ssh_login_available = True
+                self._save_phase("ssh_login")
+
+                if ssh_stats.credentials_found > 0:
+                    print(
+                        f"\033[1;92m[+]\033[0m ssh-login: "
+                        f"\033[1;92m{ssh_stats.credentials_found} credential(s) found!\033[0m | "
+                        f"{ssh_stats.hosts_tested} hosts tested | "
+                        f"{ssh_stats.hosts_skipped} skipped "
+                        f"\033[90m({ssh_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.ssh_login_scanner.get_all_credentials():
+                        print(
+                            f"\033[1;92m[+]\033[0m ssh-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{cred.password}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m ssh-login: no valid credentials | "
+                        f"{ssh_stats.hosts_tested}/{ssh_stats.total_ssh_hosts} hosts tested | "
+                        f"{ssh_stats.hosts_skipped} skipped "
+                        f"\033[90m({ssh_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif ssh_results is None:
+                print(
+                    f"\033[93m[!]\033[0m ssh-login: skipped by user\n"
+                )
+        elif (not self.ssh_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.ssh_login import SSHLoginScanner as _SSH3
+            ssh_check = _SSH3(self.config.scanner)._get_ssh_hosts(self.result.nmap_results)
+            if ssh_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping SSH login "
+                    f"({len(ssh_check)} SSH host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
+        # ── MongoDB login/info/enum (direct mode) ─────────────────────────
+        if (self.mongodb_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results):
+            mongo_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(mongo_output_dir, exist_ok=True)
+
+            mongo_results = self._safe_scan(
+                "mongodb-login", self.mongodb_login_scanner.scan,
+                self.result.nmap_results, output_dir=mongo_output_dir,
+            )
+
+            if mongo_results:
+                mongo_stats = self.mongodb_login_scanner.stats
+
+                self.result.mongodb_login_results = mongo_results
+                self.result.mongodb_login_stats = mongo_stats.to_dict()
+                self.result.mongodb_login_available = True
+                self._save_phase("mongodb_login")
+
+                parts = []
+                if mongo_stats.credentials_found > 0:
+                    parts.append(
+                        f"\033[1;92m{mongo_stats.credentials_found} credential(s)\033[0m"
+                    )
+                if mongo_stats.hosts_with_info > 0:
+                    parts.append(
+                        f"{mongo_stats.hosts_with_info} server info"
+                    )
+                if mongo_stats.databases_found > 0:
+                    parts.append(
+                        f"\033[96m{mongo_stats.databases_found} database(s)\033[0m"
+                    )
+                if parts:
+                    print(
+                        f"\033[92m[+]\033[0m mongodb-login: "
+                        f"{' | '.join(parts)} | "
+                        f"{mongo_stats.hosts_tested}/{mongo_stats.total_mongodb_hosts} hosts "
+                        f"\033[90m({mongo_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.mongodb_login_scanner.get_all_credentials():
+                        print(
+                            f"\033[1;92m[+]\033[0m mongodb-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{cred.password}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m mongodb-login: no data | "
+                        f"{mongo_stats.hosts_tested}/{mongo_stats.total_mongodb_hosts} hosts | "
+                        f"{mongo_stats.hosts_skipped} skipped "
+                        f"\033[90m({mongo_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif mongo_results is None:
+                print(
+                    f"\033[93m[!]\033[0m mongodb-login: skipped by user\n"
+                )
+        elif (not self.mongodb_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.mongodb_login import MongoDBLoginScanner as _Mongo3
+            mongo_check = _Mongo3(self.config.scanner)._get_mongodb_hosts(self.result.nmap_results)
+            if mongo_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping MongoDB login/info/enum "
+                    f"({len(mongo_check)} MongoDB host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
         # ── RDP brute-force (direct mode) ──────────────────────────────────
         if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
             rdp_output_dir = os.path.join(".", label.replace("/", "_"))
@@ -1749,7 +2327,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=rdp_output_dir,
             )
 
-            if rdp_results is not None:
+            if rdp_results:
                 rdp_stats = self.rdp_scanner.stats
 
                 self.result.rdp_results = rdp_results
@@ -1785,7 +2363,7 @@ class ReconEngine:
                         f"(lockout/connection errors)"
                     )
                 print()
-            else:
+            elif rdp_results is None:
                 print(
                     f"\033[93m[!]\033[0m rdp-brute: skipped by user\n"
                 )
@@ -1880,7 +2458,7 @@ class ReconEngine:
                 self.result.nmap_results, output_dir=cme_output_dir,
             )
 
-            if cme_results is not None:
+            if cme_results:
                 cme_stats = self.cme_scanner.stats
 
                 self.result.cme_results = cme_results
@@ -1912,7 +2490,7 @@ class ReconEngine:
                     print(
                         f"\033[92m[+]\033[0m CME: no matching protocols found in nmap results\n"
                     )
-            else:
+            elif cme_results is None:
                 print(
                     f"\033[93m[!]\033[0m CME: skipped by user\n"
                 )

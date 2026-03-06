@@ -379,6 +379,26 @@ class ScanResult:
     katana_stats: Dict = field(default_factory=dict)
     katana_available: bool = False
 
+    # SNMP login (msfconsole)
+    snmp_login_results: Dict = field(default_factory=dict)
+    snmp_login_stats: Dict = field(default_factory=dict)
+    snmp_login_available: bool = False
+
+    # SNMP enumeration (msfconsole)
+    snmp_enum_results: Dict = field(default_factory=dict)
+    snmp_enum_stats: Dict = field(default_factory=dict)
+    snmp_enum_available: bool = False
+
+    # SSH login brute-force (msfconsole)
+    ssh_login_results: Dict = field(default_factory=dict)
+    ssh_login_stats: Dict = field(default_factory=dict)
+    ssh_login_available: bool = False
+
+    # MongoDB login/info/enum (msfconsole)
+    mongodb_login_results: Dict = field(default_factory=dict)
+    mongodb_login_stats: Dict = field(default_factory=dict)
+    mongodb_login_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -484,5 +504,37 @@ class ScanResult:
                 "stats": self.katana_stats,
                 "total_urls": len(self.katana_results),
                 "urls": self.katana_results[:500],  # cap to avoid huge JSON
+            }
+        if self.snmp_login_results:
+            d["snmp_login"] = {
+                "stats": self.snmp_login_stats,
+                "hosts": {
+                    ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for ip, r in self.snmp_login_results.items()
+                },
+            }
+        if self.snmp_enum_results:
+            d["snmp_enum"] = {
+                "stats": self.snmp_enum_stats,
+                "hosts": {
+                    ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for ip, r in self.snmp_enum_results.items()
+                },
+            }
+        if self.ssh_login_results:
+            d["ssh_login"] = {
+                "stats": self.ssh_login_stats,
+                "hosts": {
+                    key: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for key, r in self.ssh_login_results.items()
+                },
+            }
+        if self.mongodb_login_results:
+            d["mongodb_login"] = {
+                "stats": self.mongodb_login_stats,
+                "hosts": {
+                    key: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for key, r in self.mongodb_login_results.items()
+                },
             }
         return d

@@ -4,11 +4,11 @@ Uses NetExec (nxc) to test default credentials against RDP services
 discovered by nmap port scanning.
 
 For each host with RDP port (3389) open, tests:
-  - Administrator with kamus-pass.txt
-  - Guest with kamus-pass.txt
+  - Administrator with wordlists/enum-pass.txt
+  - Guest with wordlists/enum-pass.txt
 
 Command:
-  netexec rdp <IP> -u <user> -p kamus-pass.txt
+  netexec rdp <IP> -u <user> -p wordlists/enum-pass.txt
 
 Successful line example:
   RDP  192.168.101.15  3389  WIN-P9P4RUTL8EQ  [+] WIN-P9P4RUTL8EQ\\Administrator:P@ssw0rd (Pwn3d!)
@@ -163,10 +163,10 @@ class RDPBruteScanner:
     RDP brute-force scanner using NetExec (nxc).
 
     After nmap discovers hosts with RDP port open,
-    tests default usernames (Administrator, Guest) with kamus-pass.txt.
+    tests default usernames (Administrator, Guest) with wordlists/enum-pass.txt.
     """
 
-    DEFAULT_PASS_FILE = "kamus-pass.txt"
+    DEFAULT_PASS_FILE = os.path.join("wordlists", "enum-pass.txt")
 
     def __init__(self, config: ScannerConfig, pass_file: str = ""):
         self.config = config

@@ -8,7 +8,7 @@ For each IP that has discovered users from enum4linux:
   2. Run auxiliary/scanner/smb/smb_login with:
      - RHOSTS = target IP
      - SMBUser = username
-     - PASS_FILE = kamus-pass.txt
+     - PASS_FILE = wordlists/enum-pass.txt
      - STOP_ON_SUCCESS = true
   3. Parse output for successful logins
   4. On rate limit / account lockout / timeout → skip to next IP
@@ -150,7 +150,7 @@ class MSFSMBBruteScanner:
       4. On lockout/rate limit → skip remaining users and move to next IP
     """
 
-    DEFAULT_PASS_FILE = "kamus-pass.txt"
+    DEFAULT_PASS_FILE = os.path.join("wordlists", "enum-pass.txt")
 
     def __init__(self, config: ScannerConfig, pass_file: str = ""):
         self.config = config

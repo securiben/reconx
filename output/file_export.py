@@ -81,6 +81,10 @@ class FileExporter:
         self._export_vnc(domain_dir, result)
         self._export_smb_brute(domain_dir, result)
         self._export_smbclient(domain_dir, result)
+        self._export_snmp_login(domain_dir, result)
+        self._export_snmp_enum(domain_dir, result)
+        self._export_ssh_login(domain_dir, result)
+        self._export_mongodb_login(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -1608,5 +1612,372 @@ class FileExporter:
             "stats": katana_stats,
             "total_urls": len(katana_results),
             "urls": katana_results,
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_snmp_login(self, outdir: str, result: ScanResult):
+        """
+        Export SNMP login brute-force results.
+        Creates community strings file and structured JSON summary.
+        """
+        snmp_login_stats = getattr(result, 'snmp_login_stats', {})
+        snmp_login_results = getattr(result, 'snmp_login_results', {})
+        if not getattr(result, 'snmp_login_available', False) or not snmp_login_results:
+            return
+
+        domain = result.target_domain
+
+        # ── snmp_communities.txt ── Human-readable community list ─────
+        filepath = os.path.join(outdir, "snmp_communities.txt")
+        lines = [f"# ReconX - SNMP Login Results for {domain}"]
+        lines.append(f"# Hosts tested: {snmp_login_stats.get('hosts_tested', 0)}/{snmp_login_stats.get('total_snmp_hosts', 0)}")
+        lines.append(f"# Hosts skipped: {snmp_login_stats.get('hosts_skipped', 0)}")
+        lines.append(f"# Community strings found: {snmp_login_stats.get('credentials_found', 0)}")
+        lines.append(f"# Read-write found: {snmp_login_stats.get('read_write_found', 0)}")
+        lines.append(f"# Scan time: {snmp_login_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for key in sorted(snmp_login_results.keys()):
+            host_result = snmp_login_results[key]
+            creds = []
+            if hasattr(host_result, 'credentials'):
+                creds = host_result.credentials
+            elif isinstance(host_result, dict):
+                creds = host_result.get('credentials', [])
+
+            host_ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 161)
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+
+            lines.append(f"── {host_ip}:{port} ──")
+            if skipped:
+                lines.append(f"  SKIPPED: {skip_reason}")
+
+            if creds:
+                for cred in creds:
+                    community = cred.community if hasattr(cred, 'community') else cred.get('community', '')
+                    access = cred.access_level if hasattr(cred, 'access_level') else cred.get('access_level', '')
+                    proof = cred.proof if hasattr(cred, 'proof') else cred.get('proof', '')
+                    proof_str = f" — {proof}" if proof else ""
+                    lines.append(f"  [+] {community} ({access}){proof_str}")
+            else:
+                lines.append("  No valid community strings found")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── snmp_read_write.txt ── Hosts with read-write access ───────
+        rw_hosts = []
+        for key in sorted(snmp_login_results.keys()):
+            host_result = snmp_login_results[key]
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            host_ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 161)
+            for cred in creds:
+                access = cred.access_level if hasattr(cred, 'access_level') else cred.get('access_level', '')
+                community = cred.community if hasattr(cred, 'community') else cred.get('community', '')
+                if "write" in access.lower():
+                    rw_hosts.append(f"{host_ip}:{port} → {community}")
+
+        if rw_hosts:
+            rw_filepath = os.path.join(outdir, "snmp_read_write.txt")
+            rw_lines = [f"# ReconX - SNMP Hosts with Read-Write Community Strings for {domain}"]
+            rw_lines.append(f"# Total: {len(rw_hosts)} host(s)")
+            rw_lines.append("")
+            rw_lines.extend(rw_hosts)
+            self._write(rw_filepath, "\n".join(rw_lines) + "\n")
+
+        # ── snmp_login_summary.json ── Structured JSON ────────────────
+        filepath_json = os.path.join(outdir, "snmp_login_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": snmp_login_stats,
+            "hosts": {
+                ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                for ip, r in snmp_login_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_snmp_enum(self, outdir: str, result: ScanResult):
+        """
+        Export SNMP enumeration results.
+        Creates system info summary and structured JSON.
+        """
+        snmp_enum_stats = getattr(result, 'snmp_enum_stats', {})
+        snmp_enum_results = getattr(result, 'snmp_enum_results', {})
+        if not getattr(result, 'snmp_enum_available', False) or not snmp_enum_results:
+            return
+
+        domain = result.target_domain
+
+        # ── snmp_enum_systems.txt ── Human-readable system info ───────
+        filepath = os.path.join(outdir, "snmp_enum_systems.txt")
+        lines = [f"# ReconX - SNMP Enumeration Results for {domain}"]
+        lines.append(f"# Hosts enumerated: {snmp_enum_stats.get('hosts_enumerated', 0)}/{snmp_enum_stats.get('total_snmp_hosts', 0)}")
+        lines.append(f"# Hosts with sysinfo: {snmp_enum_stats.get('hosts_with_sysinfo', 0)}")
+        lines.append(f"# Hosts with netinfo: {snmp_enum_stats.get('hosts_with_netinfo', 0)}")
+        lines.append(f"# Hosts with users: {snmp_enum_stats.get('hosts_with_users', 0)}")
+        lines.append(f"# Scan time: {snmp_enum_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for key in sorted(snmp_enum_results.keys()):
+            r = snmp_enum_results[key]
+            host_ip = r.ip if hasattr(r, 'ip') else r.get('ip', key)
+            port = r.port if hasattr(r, 'port') else r.get('port', 161)
+            community = r.community if hasattr(r, 'community') else r.get('community', '')
+
+            lines.append(f"── {host_ip}:{port} (community: {community}) ──")
+
+            # System info
+            si = r.system_info if hasattr(r, 'system_info') else r.get('system_info')
+            if si:
+                hostname = si.hostname if hasattr(si, 'hostname') else si.get('hostname', '')
+                description = si.description if hasattr(si, 'description') else si.get('description', '')
+                contact = si.contact if hasattr(si, 'contact') else si.get('contact', '')
+                location = si.location if hasattr(si, 'location') else si.get('location', '')
+                uptime = si.uptime_snmp if hasattr(si, 'uptime_snmp') else si.get('uptime_snmp', '')
+                sysdate = si.system_date if hasattr(si, 'system_date') else si.get('system_date', '')
+
+                if hostname:
+                    lines.append(f"  Hostname    : {hostname}")
+                if description:
+                    lines.append(f"  Description : {description}")
+                if contact:
+                    lines.append(f"  Contact     : {contact}")
+                if location:
+                    lines.append(f"  Location    : {location}")
+                if uptime:
+                    lines.append(f"  Uptime SNMP : {uptime}")
+                if sysdate:
+                    lines.append(f"  System Date : {sysdate}")
+
+            # Network info
+            ni = r.network_info if hasattr(r, 'network_info') else r.get('network_info')
+            if ni:
+                ip_fwd = ni.ip_forwarding if hasattr(ni, 'ip_forwarding') else ni.get('ip_forwarding', '')
+                if ip_fwd:
+                    lines.append(f"  IP Fwd      : {ip_fwd}")
+
+            # User accounts
+            users = r.user_accounts if hasattr(r, 'user_accounts') else r.get('user_accounts', [])
+            if users:
+                lines.append(f"  Users ({len(users)}):")
+                for u in users[:20]:
+                    lines.append(f"    - {u}")
+                if len(users) > 20:
+                    lines.append(f"    ... and {len(users) - 20} more")
+
+            # Processes count
+            procs = r.processes if hasattr(r, 'processes') else r.get('processes', [])
+            if procs:
+                lines.append(f"  Processes   : {len(procs)}")
+
+            # Software
+            sw = r.software if hasattr(r, 'software') else r.get('software', [])
+            if sw:
+                lines.append(f"  Software ({len(sw)}):")
+                for s in sw[:10]:
+                    lines.append(f"    - {s}")
+                if len(sw) > 10:
+                    lines.append(f"    ... and {len(sw) - 10} more")
+
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── snmp_enum_summary.json ── Structured JSON ─────────────────
+        filepath_json = os.path.join(outdir, "snmp_enum_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": snmp_enum_stats,
+            "hosts": {
+                ip: r.to_dict() if hasattr(r, 'to_dict') else r
+                for ip, r in snmp_enum_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_ssh_login(self, outdir: str, result: ScanResult):
+        """Export SSH login brute-force results."""
+        ssh_login_stats = getattr(result, 'ssh_login_stats', {})
+        ssh_login_results = getattr(result, 'ssh_login_results', {})
+        if not getattr(result, 'ssh_login_available', False) or not ssh_login_results:
+            return
+
+        domain = result.target_domain
+
+        # ── ssh_login.txt ── Human-readable report ────────────────────
+        filepath = os.path.join(outdir, "ssh_login.txt")
+        lines = [
+            f"# SSH Login Brute-Force — {domain}",
+            f"# Hosts tested: {ssh_login_stats.get('hosts_tested', 0)}/{ssh_login_stats.get('total_ssh_hosts', 0)}",
+            f"# Hosts skipped: {ssh_login_stats.get('hosts_skipped', 0)}",
+            f"# Credentials found: {ssh_login_stats.get('credentials_found', 0)}",
+            f"# Scan time: {ssh_login_stats.get('scan_time', 0.0):.1f}s",
+            "",
+        ]
+
+        # Valid credentials section
+        all_creds = []
+        for key in sorted(ssh_login_results.keys()):
+            host_result = ssh_login_results[key]
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            for cred in creds:
+                if hasattr(cred, 'to_dict'):
+                    all_creds.append(cred.to_dict())
+                elif isinstance(cred, dict):
+                    all_creds.append(cred)
+
+        if all_creds:
+            lines.append("## Valid Credentials")
+            lines.append("")
+            for cred in all_creds:
+                ip = cred.get('ip', '?')
+                port = cred.get('port', 22)
+                user = cred.get('username', '?')
+                passwd = cred.get('password', '?')
+                lines.append(f"  {ip}:{port} → {user}:{passwd}")
+            lines.append("")
+
+        # Per-host summary
+        lines.append("## Per-Host Summary")
+        lines.append("")
+        for key in sorted(ssh_login_results.keys()):
+            host_result = ssh_login_results[key]
+            ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 22)
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            scan_time = host_result.scan_time if hasattr(host_result, 'scan_time') else host_result.get('scan_time', 0)
+
+            status = "SKIPPED" if skipped else f"{len(creds)} credential(s)"
+            lines.append(f"  [{ip}:{port}] {status}")
+            if skipped and skip_reason:
+                lines.append(f"    Reason: {skip_reason}")
+            for cred in creds:
+                if hasattr(cred, 'username'):
+                    lines.append(f"    → {cred.username}:{cred.password}")
+                elif isinstance(cred, dict):
+                    lines.append(f"    → {cred.get('username', '?')}:{cred.get('password', '?')}")
+            lines.append(f"    Time: {scan_time:.1f}s")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── ssh_login_summary.json ── Structured JSON ─────────────────
+        filepath_json = os.path.join(outdir, "ssh_login_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": ssh_login_stats,
+            "hosts": {
+                key: r.to_dict() if hasattr(r, 'to_dict') else r
+                for key, r in ssh_login_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_mongodb_login(self, outdir: str, result: ScanResult):
+        """Export MongoDB login/info/enum results."""
+        mongo_stats = getattr(result, 'mongodb_login_stats', {})
+        mongo_results = getattr(result, 'mongodb_login_results', {})
+        if not getattr(result, 'mongodb_login_available', False) or not mongo_results:
+            return
+
+        domain = result.target_domain
+
+        # ── mongodb_login.txt ── Human-readable report ────────────────
+        filepath = os.path.join(outdir, "mongodb_login.txt")
+        lines = [
+            f"# MongoDB Login / Info / Enum — {domain}",
+            f"# Hosts tested: {mongo_stats.get('hosts_tested', 0)}/{mongo_stats.get('total_mongodb_hosts', 0)}",
+            f"# Hosts skipped: {mongo_stats.get('hosts_skipped', 0)}",
+            f"# Credentials found: {mongo_stats.get('credentials_found', 0)}",
+            f"# Hosts with info: {mongo_stats.get('hosts_with_info', 0)}",
+            f"# Databases found: {mongo_stats.get('databases_found', 0)}",
+            f"# Scan time: {mongo_stats.get('scan_time', 0.0):.1f}s",
+            "",
+        ]
+
+        # Valid credentials section
+        all_creds = []
+        for key in sorted(mongo_results.keys()):
+            host_result = mongo_results[key]
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            for cred in creds:
+                if hasattr(cred, 'to_dict'):
+                    all_creds.append(cred.to_dict())
+                elif isinstance(cred, dict):
+                    all_creds.append(cred)
+
+        if all_creds:
+            lines.append("## Valid Credentials")
+            lines.append("")
+            for cred in all_creds:
+                ip = cred.get('ip', '?')
+                port = cred.get('port', 27017)
+                user = cred.get('username', '?')
+                passwd = cred.get('password', '?')
+                lines.append(f"  {ip}:{port} → {user}:{passwd}")
+            lines.append("")
+
+        # Per-host summary
+        lines.append("## Per-Host Summary")
+        lines.append("")
+        for key in sorted(mongo_results.keys()):
+            host_result = mongo_results[key]
+            ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 27017)
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            scan_time = host_result.scan_time if hasattr(host_result, 'scan_time') else host_result.get('scan_time', 0)
+
+            status = "SKIPPED" if skipped else f"{len(creds)} credential(s)"
+            lines.append(f"  [{ip}:{port}] {status}")
+            if skipped and skip_reason:
+                lines.append(f"    Reason: {skip_reason}")
+            for cred in creds:
+                if hasattr(cred, 'username'):
+                    lines.append(f"    → {cred.username}:{cred.password}")
+                elif isinstance(cred, dict):
+                    lines.append(f"    → {cred.get('username', '?')}:{cred.get('password', '?')}")
+
+            # Server info
+            server_info = host_result.server_info if hasattr(host_result, 'server_info') else host_result.get('server_info')
+            if server_info:
+                ver = server_info.version if hasattr(server_info, 'version') else server_info.get('version', '')
+                os_name = server_info.os_name if hasattr(server_info, 'os_name') else server_info.get('os_name', '')
+                if ver:
+                    lines.append(f"    Version: {ver}")
+                if os_name:
+                    lines.append(f"    OS: {os_name}")
+
+            # Enum info
+            enum_info = host_result.enum_info if hasattr(host_result, 'enum_info') else host_result.get('enum_info')
+            if enum_info:
+                dbs = enum_info.databases if hasattr(enum_info, 'databases') else enum_info.get('databases', [])
+                if dbs:
+                    lines.append(f"    Databases: {', '.join(dbs)}")
+                users = enum_info.users if hasattr(enum_info, 'users') else enum_info.get('users', [])
+                if users:
+                    lines.append(f"    Users: {', '.join(users)}")
+
+            lines.append(f"    Time: {scan_time:.1f}s")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── mongodb_login_summary.json ── Structured JSON ─────────────
+        filepath_json = os.path.join(outdir, "mongodb_login_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": mongo_stats,
+            "hosts": {
+                key: r.to_dict() if hasattr(r, 'to_dict') else r
+                for key, r in mongo_results.items()
+            },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

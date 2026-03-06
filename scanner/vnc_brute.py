@@ -8,7 +8,7 @@ For each IP that has VNC port(s) open (5900-5910):
   2. Run auxiliary/scanner/vnc/vnc_login with:
      - RHOSTS = target IP
      - RPORT  = VNC port
-     - PASS_FILE = kamus-pass.txt
+     - PASS_FILE = wordlists/enum-pass.txt
      - STOP_ON_SUCCESS = true
      - ANONYMOUS_LOGIN = true
   3. Parse output for successful logins
@@ -167,7 +167,7 @@ class VNCBruteScanner:
       4. On lockout/rate limit → skip to next IP
     """
 
-    DEFAULT_PASS_FILE = "kamus-pass.txt"
+    DEFAULT_PASS_FILE = os.path.join("wordlists", "enum-pass.txt")
 
     def __init__(self, config: ScannerConfig, pass_file: str = ""):
         self.config = config
