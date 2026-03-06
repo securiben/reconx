@@ -9,6 +9,7 @@ import sys
 import time
 import random
 import signal
+import subprocess
 import threading
 from typing import Dict, List, Optional
 from collections import defaultdict
@@ -35,6 +36,7 @@ from .scanner import (
     KatanaScanner, SNMPLoginScanner, SNMPEnumScanner,
     SSHLoginScanner,
     MongoDBLoginScanner,
+    FTPLoginScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -89,6 +91,7 @@ class ReconEngine:
         self.snmp_enum_scanner = SNMPEnumScanner(config.scanner)
         self.ssh_login_scanner = SSHLoginScanner(config.scanner)
         self.mongodb_login_scanner = MongoDBLoginScanner(config.scanner)
+        self.ftp_login_scanner = FTPLoginScanner(config.scanner)
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -256,6 +259,8 @@ class ReconEngine:
                 fe._export_ssh_login(d, r)
             elif phase == "mongodb_login":
                 fe._export_mongodb_login(d, r)
+            elif phase == "ftp_login":
+                fe._export_ftp_login(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
         except Exception:
@@ -1219,6 +1224,75 @@ class ReconEngine:
                     f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
                 )
 
+        # ── Phase 9b-4: FTP login brute-force (msfconsole) ──────────────────
+        if (self.ftp_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results):
+            ftp_output_dir = os.path.join(".", domain)
+            os.makedirs(ftp_output_dir, exist_ok=True)
+
+            ftp_results = self._safe_scan(
+                "ftp-login", self.ftp_login_scanner.scan,
+                self.result.nmap_results, output_dir=ftp_output_dir,
+            )
+
+            if ftp_results:
+                ftp_stats = self.ftp_login_scanner.stats
+
+                self.result.ftp_login_results = ftp_results
+                self.result.ftp_login_stats = ftp_stats.to_dict()
+                self.result.ftp_login_available = True
+                self._save_phase("ftp_login")
+
+                parts = []
+                if ftp_stats.anonymous_hosts > 0:
+                    parts.append(
+                        f"\033[1;91m{ftp_stats.anonymous_hosts} anonymous access!\033[0m"
+                    )
+                if ftp_stats.credentials_found > 0:
+                    parts.append(
+                        f"\033[1;92m{ftp_stats.credentials_found} credential(s)\033[0m"
+                    )
+                if parts:
+                    print(
+                        f"\033[92m[+]\033[0m ftp-login: "
+                        f"{' | '.join(parts)} | "
+                        f"{ftp_stats.hosts_tested}/{ftp_stats.total_ftp_hosts} hosts "
+                        f"\033[90m({ftp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.ftp_login_scanner.get_all_credentials():
+                        anon_tag = " \033[1;91m[ANON]\033[0m" if cred.anonymous else ""
+                        print(
+                            f"\033[1;92m[+]\033[0m ftp-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{cred.password}\033[0m{anon_tag}"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m ftp-login: no valid credentials | "
+                        f"{ftp_stats.hosts_tested}/{ftp_stats.total_ftp_hosts} hosts tested | "
+                        f"{ftp_stats.hosts_skipped} skipped "
+                        f"\033[90m({ftp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif ftp_results is None:
+                print(
+                    f"\033[93m[!]\033[0m ftp-login: skipped by user\n"
+                )
+        elif (not self.ftp_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.ftp_login import FTPLoginScanner as _FTP2
+            ftp_check = _FTP2(self.config.scanner)._get_ftp_hosts(self.result.nmap_results)
+            if ftp_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping FTP login "
+                    f"({len(ftp_check)} FTP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
         # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
         if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
             rdp_output_dir = os.path.join(".", domain)
@@ -1420,6 +1494,14 @@ class ReconEngine:
             if not nuclei_targets:
                 nuclei_targets = [s.hostname for s in subdomain_objects]
 
+            # Also add IPs from nmap results
+            if self.result.nmap_available and self.result.nmap_results:
+                existing = set(nuclei_targets)
+                for ip in self.result.nmap_results.keys():
+                    if ip not in existing:
+                        nuclei_targets.append(ip)
+                        existing.add(ip)
+
             if nuclei_targets:
                 nuclei_output_dir = os.path.join(".", domain)
                 os.makedirs(nuclei_output_dir, exist_ok=True)
@@ -1530,7 +1612,7 @@ class ReconEngine:
             )
 
         # ── Katana web crawling (domain mode) ─────────────────────────────
-        if self.katana_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if self.katana_scanner.available:
             from .scanner.katana_scan import KatanaScanner as _KAT
             katana_targets: set = set()
 
@@ -1539,7 +1621,15 @@ class ReconEngine:
                 katana_targets |= _KAT.get_http_targets_from_httpx(self.result.httpx_results)
 
             # Also gather from nmap HTTP/HTTPS services
-            katana_targets |= _KAT.get_http_targets_from_nmap(self.result.nmap_results)
+            if self.result.nmap_available and self.result.nmap_results:
+                katana_targets |= _KAT.get_http_targets_from_nmap(self.result.nmap_results)
+
+            # Add alive subdomains as targets (domain mode)
+            if hasattr(self.result, 'subdomains') and self.result.subdomains:
+                for sub in self.result.subdomains:
+                    if sub.is_alive:
+                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
+                        katana_targets.add(f"{scheme}://{sub.hostname}")
 
             if katana_targets:
                 katana_output_dir = os.path.join(".", domain)
@@ -1577,6 +1667,51 @@ class ReconEngine:
                             f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
                         )
                     print()
+
+                    # Run httpx on katana URLs for enriched output
+                    if total_urls > 0 and self.httpx_probe.available:
+                        katana_urls_file = os.path.join(katana_output_dir, "katana_urls.txt")
+                        if os.path.isfile(katana_urls_file):
+                            katana_httpx_file = os.path.join(katana_output_dir, "katana_httpx.txt")
+                            try:
+                                httpx_cmd = [
+                                    self.httpx_probe.httpx_path,
+                                    "-l", katana_urls_file,
+                                    "-sc", "-title", "-location",
+                                    "-silent", "-no-color",
+                                    "-follow-redirects",
+                                    "-o", katana_httpx_file,
+                                ]
+                                print(
+                                    f"\033[36m[>]\033[0m katana-httpx: probing "
+                                    f"\033[96m{total_urls}\033[0m katana URLs with httpx ..."
+                                )
+                                proc = subprocess.Popen(
+                                    httpx_cmd,
+                                    stdout=sys.stderr,
+                                    stderr=sys.stderr,
+                                )
+                                proc.wait(timeout=max(600, total_urls * 2))
+                                if os.path.isfile(katana_httpx_file) and os.path.getsize(katana_httpx_file) > 0:
+                                    line_count = sum(1 for _ in open(katana_httpx_file, encoding="utf-8", errors="replace"))
+                                    print(
+                                        f"\033[92m[+]\033[0m katana-httpx: "
+                                        f"\033[92m{line_count} alive URLs\033[0m "
+                                        f"saved to \033[96mkatana_httpx.txt\033[0m"
+                                    )
+                                else:
+                                    print(
+                                        f"\033[37m[-]\033[0m katana-httpx: no alive URLs"
+                                    )
+                                print()
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
+                                proc.wait()
+                                print(
+                                    f"\033[93m[!]\033[0m katana-httpx: timed out\n"
+                                )
+                            except Exception:
+                                pass
                 else:
                     print(
                         f"\033[93m[!]\033[0m katana: skipped by user\n"
@@ -1585,7 +1720,7 @@ class ReconEngine:
                 print(
                     f"\033[90m[\u00b7]\033[0m katana: no HTTP/HTTPS targets found\n"
                 )
-        elif not self.katana_scanner.available and self.result.nmap_available:
+        elif not self.katana_scanner.available:
             print(
                 f"\033[93m[!]\033[0m katana not found \u2013 skipping web crawling"
             )
@@ -2317,6 +2452,75 @@ class ReconEngine:
                     f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
                 )
 
+        # ── FTP login brute-force (direct mode) ───────────────────────────
+        if (self.ftp_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results):
+            ftp_output_dir = os.path.join(".", label.replace("/", "_"))
+            os.makedirs(ftp_output_dir, exist_ok=True)
+
+            ftp_results = self._safe_scan(
+                "ftp-login", self.ftp_login_scanner.scan,
+                self.result.nmap_results, output_dir=ftp_output_dir,
+            )
+
+            if ftp_results:
+                ftp_stats = self.ftp_login_scanner.stats
+
+                self.result.ftp_login_results = ftp_results
+                self.result.ftp_login_stats = ftp_stats.to_dict()
+                self.result.ftp_login_available = True
+                self._save_phase("ftp_login")
+
+                parts = []
+                if ftp_stats.anonymous_hosts > 0:
+                    parts.append(
+                        f"\033[1;91m{ftp_stats.anonymous_hosts} anonymous access!\033[0m"
+                    )
+                if ftp_stats.credentials_found > 0:
+                    parts.append(
+                        f"\033[1;92m{ftp_stats.credentials_found} credential(s)\033[0m"
+                    )
+                if parts:
+                    print(
+                        f"\033[92m[+]\033[0m ftp-login: "
+                        f"{' | '.join(parts)} | "
+                        f"{ftp_stats.hosts_tested}/{ftp_stats.total_ftp_hosts} hosts "
+                        f"\033[90m({ftp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.ftp_login_scanner.get_all_credentials():
+                        anon_tag = " \033[1;91m[ANON]\033[0m" if cred.anonymous else ""
+                        print(
+                            f"\033[1;92m[+]\033[0m ftp-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{cred.password}\033[0m{anon_tag}"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m ftp-login: no valid credentials | "
+                        f"{ftp_stats.hosts_tested}/{ftp_stats.total_ftp_hosts} hosts tested | "
+                        f"{ftp_stats.hosts_skipped} skipped "
+                        f"\033[90m({ftp_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif ftp_results is None:
+                print(
+                    f"\033[93m[!]\033[0m ftp-login: skipped by user\n"
+                )
+        elif (not self.ftp_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.ftp_login import FTPLoginScanner as _FTP3
+            ftp_check = _FTP3(self.config.scanner)._get_ftp_hosts(self.result.nmap_results)
+            if ftp_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping FTP login "
+                    f"({len(ftp_check)} FTP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
         # ── RDP brute-force (direct mode) ──────────────────────────────────
         if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
             rdp_output_dir = os.path.join(".", label.replace("/", "_"))
@@ -2663,6 +2867,51 @@ class ReconEngine:
                             f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
                         )
                     print()
+
+                    # Run httpx on katana URLs for enriched output
+                    if total_urls > 0 and self.httpx_probe.available:
+                        katana_urls_file = os.path.join(katana_output_dir, "katana_urls.txt")
+                        if os.path.isfile(katana_urls_file):
+                            katana_httpx_file = os.path.join(katana_output_dir, "katana_httpx.txt")
+                            try:
+                                httpx_cmd = [
+                                    self.httpx_probe.httpx_path,
+                                    "-l", katana_urls_file,
+                                    "-sc", "-title", "-location",
+                                    "-silent", "-no-color",
+                                    "-follow-redirects",
+                                    "-o", katana_httpx_file,
+                                ]
+                                print(
+                                    f"\033[36m[>]\033[0m katana-httpx: probing "
+                                    f"\033[96m{total_urls}\033[0m katana URLs with httpx ..."
+                                )
+                                proc = subprocess.Popen(
+                                    httpx_cmd,
+                                    stdout=sys.stderr,
+                                    stderr=sys.stderr,
+                                )
+                                proc.wait(timeout=max(600, total_urls * 2))
+                                if os.path.isfile(katana_httpx_file) and os.path.getsize(katana_httpx_file) > 0:
+                                    line_count = sum(1 for _ in open(katana_httpx_file, encoding="utf-8", errors="replace"))
+                                    print(
+                                        f"\033[92m[+]\033[0m katana-httpx: "
+                                        f"\033[92m{line_count} alive URLs\033[0m "
+                                        f"saved to \033[96mkatana_httpx.txt\033[0m"
+                                    )
+                                else:
+                                    print(
+                                        f"\033[37m[-]\033[0m katana-httpx: no alive URLs"
+                                    )
+                                print()
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
+                                proc.wait()
+                                print(
+                                    f"\033[93m[!]\033[0m katana-httpx: timed out\n"
+                                )
+                            except Exception:
+                                pass
                 else:
                     print(
                         f"\033[93m[!]\033[0m katana: skipped by user\n"

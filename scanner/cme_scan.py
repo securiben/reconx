@@ -344,8 +344,8 @@ class CMEScanner:
                     if line:
                         print(f"    {line}")
 
-            # Save output to file
-            if output_dir:
+            # Save output to file only when there are actual results
+            if output_dir and result.host_results:
                 out_file = os.path.join(output_dir, f"cme_{protocol}.txt")
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(output)

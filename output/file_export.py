@@ -85,6 +85,7 @@ class FileExporter:
         self._export_snmp_enum(domain_dir, result)
         self._export_ssh_login(domain_dir, result)
         self._export_mongodb_login(domain_dir, result)
+        self._export_ftp_login(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -966,10 +967,26 @@ class FileExporter:
         """
         Export CrackMapExec scan results.
         Creates per-protocol target files and a summary.
+        Only writes files when there are actual discovered hosts.
         """
         cme_stats = getattr(result, 'cme_stats', {})
         cme_results = getattr(result, 'cme_results', {})
         if not getattr(result, 'cme_available', False) or not cme_results:
+            return
+
+        # Check if any protocol actually has host results
+        has_any_hosts = False
+        for proto, proto_result in cme_results.items():
+            host_results = []
+            if hasattr(proto_result, 'host_results'):
+                host_results = proto_result.host_results
+            elif isinstance(proto_result, dict):
+                host_results = proto_result.get('host_results', [])
+            if host_results:
+                has_any_hosts = True
+                break
+
+        if not has_any_hosts:
             return
 
         domain = result.target_domain
@@ -1978,6 +1995,109 @@ class FileExporter:
             "hosts": {
                 key: r.to_dict() if hasattr(r, 'to_dict') else r
                 for key, r in mongo_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_ftp_login(self, outdir: str, result: ScanResult):
+        """Export FTP login brute-force results (anonymous + credentials)."""
+        ftp_stats = getattr(result, 'ftp_login_stats', {})
+        ftp_results = getattr(result, 'ftp_login_results', {})
+        if not getattr(result, 'ftp_login_available', False) or not ftp_results:
+            return
+
+        domain = result.target_domain
+
+        # ── ftp_login.txt ── Human-readable report ────────────────────
+        filepath = os.path.join(outdir, "ftp_login.txt")
+        lines = [
+            f"# FTP Login Brute-Force — {domain}",
+            f"# Hosts tested: {ftp_stats.get('hosts_tested', 0)}/{ftp_stats.get('total_ftp_hosts', 0)}",
+            f"# Hosts skipped: {ftp_stats.get('hosts_skipped', 0)}",
+            f"# Anonymous hosts: {ftp_stats.get('anonymous_hosts', 0)}",
+            f"# Credentials found: {ftp_stats.get('credentials_found', 0)}",
+            f"# Scan time: {ftp_stats.get('scan_time', 0.0):.1f}s",
+            "",
+        ]
+
+        # Anonymous access section
+        anon_hosts = []
+        for key in sorted(ftp_results.keys()):
+            host_result = ftp_results[key]
+            anon = host_result.anonymous_access if hasattr(host_result, 'anonymous_access') else host_result.get('anonymous_access', False)
+            if anon:
+                ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
+                port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 21)
+                anon_hosts.append(f"  {ip}:{port}")
+
+        if anon_hosts:
+            lines.append("## Anonymous Access")
+            lines.append("")
+            for h in anon_hosts:
+                lines.append(h)
+            lines.append("")
+
+        # Valid credentials section
+        all_creds = []
+        for key in sorted(ftp_results.keys()):
+            host_result = ftp_results[key]
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            for cred in creds:
+                if hasattr(cred, 'to_dict'):
+                    all_creds.append(cred.to_dict())
+                elif isinstance(cred, dict):
+                    all_creds.append(cred)
+
+        if all_creds:
+            lines.append("## Valid Credentials")
+            lines.append("")
+            for cred in all_creds:
+                ip = cred.get('ip', '?')
+                port = cred.get('port', 21)
+                user = cred.get('username', '?')
+                passwd = cred.get('password', '?')
+                anon_tag = " [ANONYMOUS]" if cred.get('anonymous', False) else ""
+                lines.append(f"  {ip}:{port} → {user}:{passwd}{anon_tag}")
+            lines.append("")
+
+        # Per-host summary
+        lines.append("## Per-Host Summary")
+        lines.append("")
+        for key in sorted(ftp_results.keys()):
+            host_result = ftp_results[key]
+            ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 21)
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            scan_time = host_result.scan_time if hasattr(host_result, 'scan_time') else host_result.get('scan_time', 0)
+            anon = host_result.anonymous_access if hasattr(host_result, 'anonymous_access') else host_result.get('anonymous_access', False)
+
+            status = "SKIPPED" if skipped else f"{len(creds)} credential(s)"
+            anon_str = " [ANON]" if anon else ""
+            lines.append(f"  [{ip}:{port}] {status}{anon_str}")
+            if skipped and skip_reason:
+                lines.append(f"    Reason: {skip_reason}")
+            for cred in creds:
+                if hasattr(cred, 'username'):
+                    a = " [ANONYMOUS]" if getattr(cred, 'anonymous', False) else ""
+                    lines.append(f"    → {cred.username}:{cred.password}{a}")
+                elif isinstance(cred, dict):
+                    a = " [ANONYMOUS]" if cred.get('anonymous', False) else ""
+                    lines.append(f"    → {cred.get('username', '?')}:{cred.get('password', '?')}{a}")
+            lines.append(f"    Time: {scan_time:.1f}s")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── ftp_login_summary.json ── Structured JSON ─────────────────
+        filepath_json = os.path.join(outdir, "ftp_login_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": ftp_stats,
+            "hosts": {
+                key: r.to_dict() if hasattr(r, 'to_dict') else r
+                for key, r in ftp_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
