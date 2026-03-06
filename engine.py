@@ -240,10 +240,6 @@ class ReconEngine:
                 fe._export_smbclient(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
-
-            print(
-                f"\033[38;5;75m    \U0001f4be {phase} → saved to {d}/\033[0m"
-            )
         except Exception:
             pass  # Don't let a save failure crash the pipeline
 
@@ -442,128 +438,6 @@ class ReconEngine:
         # ── Phase 5b: Reconcile infra stats with httpx CDN/server data ────
         if self.httpx_probe.available:
             self._reconcile_infra_from_httpx(subdomain_objects)
-
-        # ── Phase 5c: WPScan WordPress scanning ──────────────────────────
-        if self.wpscan_scanner.available:
-            from .scanner.wpscan import WPScanner as _WPS
-            wp_targets = set()
-
-            # Detect WordPress from httpx results (technology detection)
-            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
-                wp_targets |= _WPS.detect_wordpress_from_httpx(self.result.httpx_results)
-
-            # Also detect from nuclei results if already available
-            if self.result.nuclei_available and self.result.nuclei_results:
-                wp_targets |= _WPS.detect_wordpress_targets(self.result.nuclei_results)
-
-            if wp_targets:
-                wpscan_output_dir = os.path.join(".", domain)
-                os.makedirs(wpscan_output_dir, exist_ok=True)
-
-                wpscan_results = self._safe_scan(
-                    "wpscan", self.wpscan_scanner.scan,
-                    sorted(wp_targets), output_dir=wpscan_output_dir,
-                )
-
-                if wpscan_results is not None:
-                    wpscan_stats = self.wpscan_scanner.stats
-
-                    self.result.wpscan_results = wpscan_results
-                    self.result.wpscan_stats = wpscan_stats.to_dict()
-                    self.result.wpscan_available = True
-                    self._save_phase("wpscan")
-
-                    total_vulns = wpscan_stats.total_vulns
-                    if total_vulns > 0:
-                        print(
-                            f"\033[92m[+]\033[0m wpscan: \033[92m{total_vulns} vulnerability/ies\033[0m "
-                            f"on \033[96m{wpscan_stats.targets_scanned}\033[0m WordPress target(s) "
-                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m wpscan: \033[37m0 vulnerabilities\033[0m "
-                            f"on {wpscan_stats.targets_scanned} WordPress target(s) "
-                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    print()
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m wpscan: skipped by user\n"
-                    )
-            else:
-                print(
-                    f"\033[90m[·]\033[0m wpscan: no WordPress targets detected from httpx\n"
-                )
-        else:
-            print(
-                f"\033[93m[!]\033[0m wpscan not found – skipping WordPress scan"
-            )
-            print(
-                f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
-            )
-
-        # ── Phase 5d: Nuclei vulnerability scanning (last) ───────────────
-        if self.nuclei_scanner.available:
-            # Collect alive hostnames for nuclei
-            nuclei_targets = [s.hostname for s in subdomain_objects if s.is_alive]
-            if not nuclei_targets:
-                nuclei_targets = [s.hostname for s in subdomain_objects]
-
-            if nuclei_targets:
-                nuclei_output_dir = os.path.join(".", domain)
-                os.makedirs(nuclei_output_dir, exist_ok=True)
-
-                nuclei_results = self._safe_scan(
-                    "nuclei", self.nuclei_scanner.scan,
-                    nuclei_targets, output_dir=nuclei_output_dir,
-                )
-
-                if nuclei_results is not None:
-                    nuclei_stats = self.nuclei_scanner.stats
-
-                    self.result.nuclei_results = nuclei_results
-                    self.result.nuclei_stats = nuclei_stats.to_dict()
-                    self.result.nuclei_available = True
-
-                    # Print nuclei summary
-                    total = nuclei_stats.total_findings
-                    if total > 0:
-                        sev_parts = []
-                        if nuclei_stats.critical > 0:
-                            sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
-                        if nuclei_stats.high > 0:
-                            sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
-                        if nuclei_stats.medium > 0:
-                            sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
-                        if nuclei_stats.low > 0:
-                            sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
-                        if nuclei_stats.info > 0:
-                            sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
-                        print(
-                            f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
-                            f"{' | '.join(sev_parts)} "
-                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m "
-                            f"on {nuclei_stats.hosts_scanned} hosts "
-                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    print()
-                    self._save_phase("nuclei")
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m nuclei: skipped by user\n"
-                    )
-        else:
-            print(
-                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
-            )
-            print(
-                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
-            )
 
         # ── Phase 6: Pattern collapse ──────────────────────────────────────
         all_hostnames = [s.hostname for s in subdomain_objects]
@@ -1236,6 +1110,122 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Install: pip install crackmapexec | or: https://github.com/byt3bl33d3r/CrackMapExec\033[0m\n"
+            )
+
+        # ── Phase 5d: Nuclei vulnerability scanning (last) ───────────────
+        if self.nuclei_scanner.available:
+            # Collect alive hostnames for nuclei
+            nuclei_targets = [s.hostname for s in subdomain_objects if s.is_alive]
+            if not nuclei_targets:
+                nuclei_targets = [s.hostname for s in subdomain_objects]
+
+            if nuclei_targets:
+                nuclei_output_dir = os.path.join(".", domain)
+                os.makedirs(nuclei_output_dir, exist_ok=True)
+
+                nuclei_results = self._safe_scan(
+                    "nuclei", self.nuclei_scanner.scan,
+                    nuclei_targets, output_dir=nuclei_output_dir,
+                )
+
+                if nuclei_results is not None:
+                    nuclei_stats = self.nuclei_scanner.stats
+
+                    self.result.nuclei_results = nuclei_results
+                    self.result.nuclei_stats = nuclei_stats.to_dict()
+                    self.result.nuclei_available = True
+
+                    # Print nuclei summary
+                    total = nuclei_stats.total_findings
+                    if total > 0:
+                        sev_parts = []
+                        if nuclei_stats.critical > 0:
+                            sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
+                        if nuclei_stats.high > 0:
+                            sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
+                        if nuclei_stats.medium > 0:
+                            sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
+                        if nuclei_stats.low > 0:
+                            sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
+                        if nuclei_stats.info > 0:
+                            sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
+                            f"{' | '.join(sev_parts)} "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m "
+                            f"on {nuclei_stats.hosts_scanned} hosts "
+                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                    self._save_phase("nuclei")
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m nuclei: skipped by user\n"
+                    )
+        else:
+            print(
+                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
+            )
+            print(
+                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
+            )
+
+        # ── Phase 5c: WPScan WordPress scanning ──────────────────────────
+        if self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results:
+            from .scanner.wpscan import WPScanner as _WPS
+
+            # Detect WordPress targets from nuclei results
+            wp_targets = _WPS.detect_wordpress_targets(self.result.nuclei_results)
+
+            if wp_targets:
+                wpscan_output_dir = os.path.join(".", domain)
+                os.makedirs(wpscan_output_dir, exist_ok=True)
+
+                wpscan_results = self._safe_scan(
+                    "wpscan", self.wpscan_scanner.scan,
+                    sorted(wp_targets), output_dir=wpscan_output_dir,
+                )
+
+                if wpscan_results is not None:
+                    wpscan_stats = self.wpscan_scanner.stats
+
+                    self.result.wpscan_results = wpscan_results
+                    self.result.wpscan_stats = wpscan_stats.to_dict()
+                    self.result.wpscan_available = True
+                    self._save_phase("wpscan")
+
+                    total_vulns = wpscan_stats.total_vulns
+                    if total_vulns > 0:
+                        print(
+                            f"\033[92m[+]\033[0m wpscan: \033[92m{total_vulns} vulnerability/ies\033[0m "
+                            f"on \033[96m{wpscan_stats.targets_scanned}\033[0m WordPress target(s) "
+                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    else:
+                        print(
+                            f"\033[92m[+]\033[0m wpscan: \033[37m0 vulnerabilities\033[0m "
+                            f"on {wpscan_stats.targets_scanned} WordPress target(s) "
+                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
+                        )
+                    print()
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m wpscan: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[·]\033[0m wpscan: no WordPress targets detected by nuclei\n"
+                )
+        elif not self.wpscan_scanner.available and self.result.nuclei_available:
+            print(
+                f"\033[93m[!]\033[0m wpscan not found – skipping WordPress scan"
+            )
+            print(
+                f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
             )
 
         # ── Phase 10: Statistics ───────────────────────────────────────────

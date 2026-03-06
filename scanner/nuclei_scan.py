@@ -335,16 +335,18 @@ class NucleiScanner:
                     f.write(clean + "\n")
 
             # Exact command:
-            #   cat alive.txt | nuclei -s info,low,medium,high,critical -o nuclei_results.txt -no-color -silent
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
+                "-sa",
+                "-nt",
+                "-as",
+                "-ue" "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
                 "-s", "info,low,medium,high,critical",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
                 "-c", "30",
-                "-no-color",
                 "-silent",
             ]
 
@@ -352,7 +354,6 @@ class NucleiScanner:
             timeout_secs = max(600, len(alive_hostnames) * 10)
             print(
                 f"\033[36m[>]\033[0m nuclei: running "
-                f"\033[96m-s info,low,medium,high,critical -bs 50 -c 30-silent\033[0m "
                 f"on \033[92m{len(alive_hostnames)}\033[0m targets ..."
             )
             proc = subprocess.Popen(
