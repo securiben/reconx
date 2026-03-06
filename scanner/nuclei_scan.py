@@ -338,16 +338,13 @@ class NucleiScanner:
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-sa",
-                "-nt",
-                "-as",
+                "-sa",                     # scan all IPs per host
+                "-as",                     # auto-scan based on wappalyzer
                 "-ue", "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
                 "-s", "info,low,medium,high,critical",
-                "-tags", "vuln, cve, vkev, panel, xss",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
-                
                 "-c", "30",
                 "-silent",
             ]
