@@ -119,6 +119,13 @@ class KatanaScanner:
             if self._verify_katana(path):
                 return path
 
+        # Auto-install katana if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("katana"):
+            found = shutil.which("katana")
+            if found and self._verify_katana(found):
+                return found
+
         return None
 
     def _verify_katana(self, path: str) -> bool:

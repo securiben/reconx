@@ -11,7 +11,7 @@ Examples:
     python main.py 10.10.0.5                # Single IP → nmap + CME
     python main.py 10.10.0.0/24             # CIDR range → nmap + CME
     python main.py 'a.txt,"file 2.txt",c.txt'  # Multiple files (comma-separated)
-    python main.py example.com --demo
+    python main.py example.com --Pn         # Skip host discovery (ICMP dead)
     python main.py example.com -o results.json
 """
 
@@ -19,6 +19,7 @@ import sys
 import os
 import argparse
 import time
+import platform
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -57,10 +58,9 @@ def print_banner():
     ))
 
 
-def print_scan_start(label: str, demo: bool, direct: bool = False):
+def print_scan_start(label: str, direct: bool = False):
     """Print scan initialization info."""
-    mode = "\033[93m[DEMO MODE]\033[0m " if demo else ""
-    print(f"\033[1;97m[»]\033[0m {mode}Target: \033[1;96m{label}\033[0m")
+    print(f"\033[1;97m[»]\033[0m Target: \033[1;96m{label}\033[0m")
     if direct:
         print(f"\033[1;97m[»]\033[0m Mode: \033[93mDirect scan\033[0m (IP/CIDR — skipping subdomain enumeration)")
         print(f"\033[1;97m[»]\033[0m Initializing nmap, smbclient, RDP-brute, enum4linux, MSF-brute, CME, Nuclei & WPScan ...\n")
@@ -76,7 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="reconx",
         description="ReconX - Automated Reconnaissance & Intelligence Gathering Tool",
-        epilog="Example: python main.py example.com --demo",
+        epilog="Example: python main.py example.com --Pn",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -92,9 +92,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--demo",
+        "--Pn",
         action="store_true",
-        help="Run in demo mode with simulated data",
+        help="Nmap: skip host discovery (treat all hosts as online)",
     )
 
     parser.add_argument(
@@ -139,23 +139,44 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# ─── Kali Linux Check ─────────────────────────────────────────────────────────
+
+def _is_kali_linux() -> bool:
+    """Check if the current OS is Kali Linux (native, VM, or WSL)."""
+    if platform.system() != "Linux":
+        return False
+    # Check /etc/os-release for Kali
+    try:
+        with open("/etc/os-release", "r") as f:
+            content = f.read().lower()
+            return "kali" in content
+    except FileNotFoundError:
+        pass
+    # Fallback: check /etc/issue
+    try:
+        with open("/etc/issue", "r") as f:
+            return "kali" in f.read().lower()
+    except FileNotFoundError:
+        pass
+    return False
+
+
 # ─── Main Entry Point ────────────────────────────────────────────────────────
 
 def main():
     """Main entry point for ReconX CLI."""
+    # ── Enforce Kali Linux ─────────────────────────────────────────────
+    if not _is_kali_linux():
+        print(
+            "\033[91m[✗] ReconX hanya bisa dijalankan di Kali Linux.\033[0m\n"
+            "\033[90m    Gunakan Kali Linux (VM, bare-metal, atau WSL).\n"
+            "    WSL: wsl --install kali-linux\n"
+            "    VM : https://www.kali.org/get-kali/#kali-virtual-machines\033[0m"
+        )
+        sys.exit(1)
+
     parser = build_parser()
     args = parser.parse_args()
-
-    # Enable Windows ANSI support
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            kernel32.SetConsoleMode(
-                kernel32.GetStdHandle(-11), 0x0001 | 0x0002 | 0x0004
-            )
-        except Exception:
-            os.system("")  # Fallback: triggers ANSI support on Win10+
 
     # Banner
     if not args.no_banner:
@@ -198,7 +219,6 @@ def _run_single_target(target: str, args):
     config = ReconConfig(
         target_domain=target if not is_direct else label,
         output_file=args.output,
-        demo_mode=args.demo,
         verbose=args.verbose,
     )
     if is_direct:
@@ -209,9 +229,10 @@ def _run_single_target(target: str, args):
     config.scanner.concurrency = args.concurrency
     config.scanner.timeout = args.timeout
     config.scanner.collapse_threshold = args.collapse_threshold
+    config.scanner.nmap_pn = args.Pn
 
     # Print scan start info
-    print_scan_start(label, args.demo, direct=is_direct)
+    print_scan_start(label, direct=is_direct)
 
     # Create and run engine
     engine = ReconEngine(config)

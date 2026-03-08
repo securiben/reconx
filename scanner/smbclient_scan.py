@@ -146,6 +146,11 @@ class SMBClientScanner:
             if os.path.isfile(path):
                 return path
 
+        # Auto-install smbclient if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("smbclient"):
+            return shutil.which("smbclient")
+
         return None
 
     @staticmethod

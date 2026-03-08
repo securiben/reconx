@@ -274,9 +274,6 @@ class ReconEngine:
         start_time = time.time()
         domain = self.config.target_domain
 
-        if self.config.demo_mode:
-            return self._run_demo()
-
         # ── Direct mode: IP / CIDR / file-of-IPs → skip enum ──────────────
         if self.config.input_mode == "direct":
             return self._run_direct(start_time)
@@ -285,8 +282,13 @@ class ReconEngine:
         all_subdomains_by_source: Dict[str, List[str]] = {}
 
         # Print source start messages
-        max_name_len = max(len(s.name) for s in self.sources.values()) if self.sources else 7
-        for key, source in self.sources.items():
+        max_name_len = max(
+            max((len(s.name) for s in self.sources.values()), default=7),
+            len("crt.sh"),
+        )
+        source_order = list(self.sources.keys())
+        for key in source_order:
+            source = self.sources[key]
             desc = getattr(source, 'SOURCE_DESC', source.config.description or f'querying {source.name}')
             print(f"\033[36m[>]\033[0m {source.name + ':':<{max_name_len + 1}} {desc} ...")
 
@@ -297,21 +299,22 @@ class ReconEngine:
             }
             for future in as_completed(futures):
                 key = futures[future]
-                source = self.sources[key]
                 try:
                     subs = future.result()
                     all_subdomains_by_source[key] = subs
                 except Exception:
                     all_subdomains_by_source[key] = []
 
-                # Print result message
-                count = len(all_subdomains_by_source[key])
-                elapsed_ms = int(source.elapsed * 1000)
-                print(
-                    f"\033[92m[+]\033[0m {source.name + ':':<{max_name_len + 1}} "
-                    f"\033[92m{count:>4}\033[0m subdomains "
-                    f"\033[90m({elapsed_ms}ms)\033[0m"
-                )
+        # Print results in the same order as queries
+        for key in source_order:
+            source = self.sources[key]
+            count = len(all_subdomains_by_source.get(key, []))
+            elapsed_ms = int(source.elapsed * 1000)
+            print(
+                f"\033[92m[+]\033[0m {source.name + ':':<{max_name_len + 1}} "
+                f"\033[92m{count:>4}\033[0m subdomains "
+                f"\033[90m({elapsed_ms}ms)\033[0m"
+            )
 
         # ── Phase 2: Deduplicate and aggregate ─────────────────────────────
         unique_hostnames = set()
@@ -325,7 +328,10 @@ class ReconEngine:
             )
 
         # ── Phase 3: CT Log triage (before dedup so CT subs are included) ──
+        print(f"\033[36m[>]\033[0m {'crt.sh:':<{max_name_len + 1}} querying CT log triage ...")
+        ct_start = time.time()
         ct_entries, ct_subs = self.ct_scanner.scan(domain)
+        ct_elapsed_ms = int((time.time() - ct_start) * 1000)
         self.result.ct_entries = ct_entries
         stale, aged, no_date = self.ct_scanner.triage(ct_entries)
         self.result.ct_stale = stale
@@ -345,6 +351,11 @@ class ReconEngine:
             name="crt.sh",
             count=len(ct_subs),
             subdomains=ct_subs,
+        )
+        print(
+            f"\033[92m[+]\033[0m {'crt.sh:':<{max_name_len + 1}} "
+            f"\033[92m{len(ct_subs):>4}\033[0m subdomains "
+            f"\033[90m({ct_elapsed_ms}ms)\033[0m"
         )
 
         # Print takeover candidates warning if any

@@ -1,0 +1,658 @@
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] elk.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astranautsapi.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astranautsapi.astradigital.id
+[hashicorp-consul-version] [http] [info] https://docs-loyalty.astradigital.id/v1/agent/self [""]
+[dns-waf-detect:cloudflare] [dns] [info] elk.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] adisti.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] adisti.astradigital.id
+[hashicorp-consul-version] [http] [info] https://docs-loyalty.astradigital.id/v1/agent/self [""]
+[hashicorp-consul-version] [http] [info] https://astranautsapi.astradigital.id/v1/agent/self [""]
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[hashicorp-consul-version] [http] [info] https://astranautsapi.astradigital.id/v1/agent/self [""]
+[hashicorp-consul-version] [http] [info] https://adisti.astradigital.id/v1/agent/self [""]
+[hashicorp-consul-version] [http] [info] https://adisti.astradigital.id/v1/agent/self [""]
+[cluster-def8c24686eb6f92f53cdb8b3d96664ef68f94d9213ed16c6db2dea9b06e493e] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[cluster-3d9c294b8413adcabe9a838e887d493594d1b19b62831faff477aa5288a67ee1] [http] [info] https://adisti.astradigital.id/healthz
+[cluster-3d9c294b8413adcabe9a838e887d493594d1b19b62831faff477aa5288a67ee1] [http] [info] https://adisti.astradigital.id/healthz
+[cluster-def8c24686eb6f92f53cdb8b3d96664ef68f94d9213ed16c6db2dea9b06e493e] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[dns-waf-detect:cloudflare] [dns] [info] admin-astraku.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] dash.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] auth-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] admin-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] auth-astraku.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] archive.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] auth-astraku.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] admin-astraku.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] archive.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] admin-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] auth-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astraloyalty-u.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] dash.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astraloyalty-u.astradigital.id
+[cluster-34ab058f02f3b688068b9c8c92b3225cf9048842f984d57d2bd53b40f4c47fa6] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[tech-detect:font-awesome] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:google-font-api] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:cloudflare] [http] [info] http://104.21.73.212
+[cluster-34ab058f02f3b688068b9c8c92b3225cf9048842f984d57d2bd53b40f4c47fa6] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[tech-detect:cloudflare] [http] [info] http://172.67.166.120
+[waf-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[tech-detect:font-awesome] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:google-font-api] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[tech-detect:next.js] [http] [info] https://astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astradigital.id
+[waf-detect:cloudflare] [http] [info] http://104.21.73.212
+[waf-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://172.67.166.120
+[tech-detect:next.js] [http] [info] https://astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astradigital.id
+[waf-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://astradigital.id
+[waf-detect:ats] [http] [info] https://astradigital.id
+[waf-detect:ats] [http] [info] https://astradigital.id
+[waf-detect:cloudflare] [http] [info] https://astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://ahm-medical-claim.radiance.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://dash.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://astraloyalty-u.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://archive.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://dash.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://ahm-medical-claim.radiance.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://archive.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://astraloyalty-u.astradigital.id
+[waf-detect:ats] [http] [info] http://faas-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-loyalty.astradigital.id
+[azure-blob-core-detect] [http] [info] https://astranautsapi.astradigital.id
+[azure-blob-core-detect] [http] [info] https://astranautsapi.astradigital.id
+[kube-api-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[kube-api-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[kubelet-healthz] [http] [info] https://adisti.astradigital.id/healthz
+[kubelet-healthz] [http] [info] https://adisti.astradigital.id/healthz
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[tech-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[strapi-cms-detect] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[tech-detect:cloudflare] [http] [info] http://104.21.73.212
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[strapi-cms-detect] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[tech-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] http://172.67.166.120
+[tech-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[tech-detect:font-awesome] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:google-font-api] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[tech-detect:font-awesome] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:google-font-api] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://104.21.73.212
+[waf-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://172.67.166.120
+[tech-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://docs-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://docs-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://authorization-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://elk.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astradigital.id
+[tech-detect:next.js] [http] [info] https://astradigital.id
+[tech-detect:next.js] [http] [info] https://astradigital.id
+[tech-detect:cloudflare] [http] [info] https://astradigital.id
+[waf-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://adisti.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://astradigital.id
+[waf-detect:cloudflare] [http] [info] https://astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://faas-loyaltysit.astradigital.id
+[aaaa-fingerprint] [dns] [info] docs-loyaltydev.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] docs-loyaltydev.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] authorization-loyaltyuat.astradigital.id
+[caa-fingerprint] [dns] [info] docs-loyaltydev.astradigital.id
+[aaaa-fingerprint] [dns] [info] authorization-loyaltydev.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[caa-fingerprint] [dns] [info] authorization-loyaltyuat.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] authorization-loyaltydev.astradigital.id
+[aaaa-fingerprint] [dns] [info] authorization-loyaltyuat.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] authorization-loyaltydev.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] astradigital.id
+[aaaa-fingerprint] [dns] [info] authorization-loyaltydev.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] authorization-loyaltyuat.astradigital.id
+[caa-fingerprint] [dns] [info] authorization-loyaltyuat.astradigital.id
+[aaaa-fingerprint] [dns] [info] astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[caa-fingerprint] [dns] [info] authorization-loyaltydev.astradigital.id
+[nameserver-fingerprint] [dns] [info] astradigital.id ["lila.ns.cloudflare.com.","jobs.ns.cloudflare.com."]
+[nameserver-detection:cloudflare] [dns] [info] authorization-loyaltysit.astradigital.id
+[caa-fingerprint] [dns] [info] authorization-loyaltydev.astradigital.id
+[cluster-1565a4edad3ac1c99a9b4fa5090414cd16f2df122db24d5f801029627870a3f8] [dns] [info] astradigital.id ["0 au-smtp-inbound-2.mimecast.com.","0 au-smtp-inbound-1.mimecast.com."]
+[aaaa-fingerprint] [dns] [info] authorization-loyaltyuat.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[aaaa-fingerprint] [dns] [info] authorization-loyaltysit.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[aaaa-fingerprint] [dns] [info] docs-loyaltydev.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[aaaa-fingerprint] [dns] [info] docs-loyalty.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] docs-loyalty.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] docs-loyaltydev.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] authorization-loyaltysit.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] docs-loyalty.astradigital.id
+[caa-fingerprint] [dns] [info] docs-loyaltydev.astradigital.id
+[aaaa-fingerprint] [dns] [info] authorization-loyaltysit.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[aaaa-fingerprint] [dns] [info] docs-loyalty.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[txt-fingerprint] [dns] [info] astradigital.id [""g6b6qpqg3ng1pm76nw1t3pczcvzm6nqt"",""google-site-verification=ytbHofzP8DzlsSXtjztK69-jDJ2qmEAp_MwnnjV7f20"",""v=spf1 include:au._netblocks.mimecast.com include:spf.mandrillapp.com -all"",""MS=ms16325275"",""google-site-verification=Ve5LuJtk6BBdjNSSJAoaSVe_P3wfR7hljxjTKXDjqds"",""astradigital-homepage.azurewebsites.net""]
+[caa-fingerprint] [dns] [info] authorization-loyaltysit.astradigital.id
+[hashicorp-consul-version] [http] [info] https://docs-loyalty.astradigital.id/v1/agent/self [""]
+[hashicorp-consul-version] [http] [info] https://docs-loyalty.astradigital.id/v1/agent/self [""]
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltydev.astradigital.id
+[caa-fingerprint] [dns] [info] authorization-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltyuat.astradigital.id
+[caa-fingerprint] [dns] [info] docs-loyalty.astradigital.id
+[dmarc-detect] [dns] [info] _dmarc.astradigital.id [""v=DMARC1; p=quarantine; rua=mailto:dmarc_agg@vali.email""]
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltyuat.astradigital.id
+[caa-fingerprint] [dns] [info] astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[txt-fingerprint] [dns] [info] astradigital.id [""MS=ms16325275"",""astradigital-homepage.azurewebsites.net"",""g6b6qpqg3ng1pm76nw1t3pczcvzm6nqt"",""google-site-verification=Ve5LuJtk6BBdjNSSJAoaSVe_P3wfR7hljxjTKXDjqds"",""google-site-verification=ytbHofzP8DzlsSXtjztK69-jDJ2qmEAp_MwnnjV7f20"",""v=spf1 include:au._netblocks.mimecast.com include:spf.mandrillapp.com -all""]
+[caa-fingerprint] [dns] [info] docs-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltydev.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] astranautsapi.astradigital.id
+[spf-record-detect] [dns] [info] astradigital.id ["v=spf1 include:au._netblocks.mimecast.com include:spf.mandrillapp.com -all""]
+[dns-waf-detect:cloudflare] [dns] [info] authorization-loyaltydev.astradigital.id
+[mx-fingerprint] [dns] [info] astradigital.id ["0 au-smtp-inbound-1.mimecast.com.","0 au-smtp-inbound-2.mimecast.com."]
+[nameserver-fingerprint] [dns] [info] astradigital.id ["jobs.ns.cloudflare.com.","lila.ns.cloudflare.com."]
+[mx-service-detector:Mimecast] [dns] [info] astradigital.id
+[hashicorp-consul-version] [http] [info] https://astranautsapi.astradigital.id/v1/agent/self [""]
+[aaaa-fingerprint] [dns] [info] elk.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[caa-fingerprint] [dns] [info] elk.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] elk.astradigital.id
+[hashicorp-consul-version] [http] [info] https://adisti.astradigital.id/v1/agent/self [""]
+[nameserver-detection:cloudflare] [dns] [info] astranautsapi.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astranautsapi.astradigital.id
+[caa-fingerprint] [dns] [info] astranautsapi.astradigital.id
+[aaaa-fingerprint] [dns] [info] astranautsapi.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[strapi-page] [http] [info] https://astranautsapi.astradigital.id
+[cluster-34ab058f02f3b688068b9c8c92b3225cf9048842f984d57d2bd53b40f4c47fa6] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[hashicorp-consul-version] [http] [info] https://astranautsapi.astradigital.id/v1/agent/self [""]
+[aaaa-fingerprint] [dns] [info] elk.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] elk.astradigital.id
+[caa-fingerprint] [dns] [info] elk.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] adisti.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] elk.astradigital.id
+[cluster-3d9c294b8413adcabe9a838e887d493594d1b19b62831faff477aa5288a67ee1] [http] [info] https://adisti.astradigital.id/healthz
+[cluster-def8c24686eb6f92f53cdb8b3d96664ef68f94d9213ed16c6db2dea9b06e493e] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[nameserver-detection:cloudflare] [dns] [info] adisti.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astranautsapi.astradigital.id
+[cluster-34ab058f02f3b688068b9c8c92b3225cf9048842f984d57d2bd53b40f4c47fa6] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[strapi-page] [http] [info] https://astranautsapi.astradigital.id
+[hashicorp-consul-version] [http] [info] https://adisti.astradigital.id/v1/agent/self [""]
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[aaaa-fingerprint] [dns] [info] astranautsapi.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[caa-fingerprint] [dns] [info] astranautsapi.astradigital.id
+[aaaa-fingerprint] [dns] [info] adisti.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[dns-waf-detect:cloudflare] [dns] [info] elk.astradigital.id
+[cluster-1565a4edad3ac1c99a9b4fa5090414cd16f2df122db24d5f801029627870a3f8] [dns] [info] astradigital.id ["0 au-smtp-inbound-1.mimecast.com.","0 au-smtp-inbound-2.mimecast.com."]
+[aaaa-fingerprint] [dns] [info] astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-fingerprint] [dns] [info] astradigital.id ["jobs.ns.cloudflare.com.","lila.ns.cloudflare.com."]
+[nameserver-detection:cloudflare] [dns] [info] astradigital.id
+[caa-fingerprint] [dns] [info] adisti.astradigital.id
+[txt-fingerprint] [dns] [info] astradigital.id [""g6b6qpqg3ng1pm76nw1t3pczcvzm6nqt"",""google-site-verification=ytbHofzP8DzlsSXtjztK69-jDJ2qmEAp_MwnnjV7f20"",""astradigital-homepage.azurewebsites.net"",""google-site-verification=Ve5LuJtk6BBdjNSSJAoaSVe_P3wfR7hljxjTKXDjqds"",""v=spf1 include:au._netblocks.mimecast.com include:spf.mandrillapp.com -all"",""MS=ms16325275""]
+[dns-waf-detect:cloudflare] [dns] [info] adisti.astradigital.id
+[cluster-3d9c294b8413adcabe9a838e887d493594d1b19b62831faff477aa5288a67ee1] [http] [info] https://adisti.astradigital.id/healthz
+[cluster-def8c24686eb6f92f53cdb8b3d96664ef68f94d9213ed16c6db2dea9b06e493e] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[nameserver-detection:cloudflare] [dns] [info] adisti.astradigital.id
+[aaaa-fingerprint] [dns] [info] adisti.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[txt-fingerprint] [dns] [info] astradigital.id [""google-site-verification=Ve5LuJtk6BBdjNSSJAoaSVe_P3wfR7hljxjTKXDjqds"",""google-site-verification=ytbHofzP8DzlsSXtjztK69-jDJ2qmEAp_MwnnjV7f20"",""v=spf1 include:au._netblocks.mimecast.com include:spf.mandrillapp.com -all"",""MS=ms16325275"",""astradigital-homepage.azurewebsites.net"",""g6b6qpqg3ng1pm76nw1t3pczcvzm6nqt""]
+[caa-fingerprint] [dns] [info] adisti.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[spf-record-detect] [dns] [info] astradigital.id ["v=spf1 include:au._netblocks.mimecast.com include:spf.mandrillapp.com -all""]
+[mx-fingerprint] [dns] [info] astradigital.id ["0 au-smtp-inbound-1.mimecast.com.","0 au-smtp-inbound-2.mimecast.com."]
+[mx-service-detector:Mimecast] [dns] [info] astradigital.id
+[nameserver-fingerprint] [dns] [info] astradigital.id ["lila.ns.cloudflare.com.","jobs.ns.cloudflare.com."]
+[dmarc-detect] [dns] [info] _dmarc.astradigital.id [""v=DMARC1; p=quarantine; rua=mailto:dmarc_agg@vali.email""]
+[caa-fingerprint] [dns] [info] astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astradigital.id
+[kube-api-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[kubelet-healthz] [http] [info] https://adisti.astradigital.id/healthz
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyaltyuat.astradigital.id
+[kubelet-healthz] [http] [info] https://adisti.astradigital.id/healthz
+[kube-api-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyaltyuat.astradigital.id
+[kubernetes-version] [http] [info] https://adisti.astradigital.id/version ["v1.33.5-gke.2469000"]
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://dash.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://ahm-medical-claim.radiance.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://archive.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://dash.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://ahm-medical-claim.radiance.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://astraloyalty-u.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://auth-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://archive.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://appsupport-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://astraloyalty-u.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://admin-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://docs-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] integration-uat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] integration-uat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] git.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] git.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[waf-detect:nginxgeneric] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[waf-detect:nginxgeneric] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://integration-uat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://integration-uat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://git.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://git.astradigital.id
+[strapi-page] [http] [info] https://astranautsapi.astradigital.id
+[strapi-page] [http] [info] https://astranautsapi.astradigital.id
+[azure-blob-core-detect] [http] [info] https://astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://loyalty.astradigital.id
+[azure-blob-core-detect] [http] [info] https://astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyalty.astradigital.id
+[strapi-cms-detect] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[strapi-cms-detect] [http] [info] https://astranautsapi.astradigital.id/admin/init
+[aaaa-fingerprint] [dns] [info] faas-loyaltysit.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] faas-loyaltysit.astradigital.id
+[caa-fingerprint] [dns] [info] faas-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[waf-detect:nginxgeneric] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[waf-detect:nginxgeneric] [http] [info] https://gateway-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://m-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyaltyuat.astradigital.id
+[caa-fingerprint] [dns] [info] auth-astraku.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] docs-loyaltysit.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] docs-loyaltyuat.astradigital.id
+[aaaa-fingerprint] [dns] [info] docs-loyaltyuat.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] auth-astraku.astradigital.id
+[aaaa-fingerprint] [dns] [info] docs-loyaltysit.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[caa-fingerprint] [dns] [info] docs-loyaltysit.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] auth-astraku.astradigital.id
+[aaaa-fingerprint] [dns] [info] auth-astraku.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[caa-fingerprint] [dns] [info] docs-loyaltyuat.astradigital.id
+[aaaa-fingerprint] [dns] [info] admin-astraku.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[caa-fingerprint] [dns] [info] admin-astraku.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] admin-astraku.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] admin-astraku.astradigital.id
+[caa-fingerprint] [dns] [info] auth-astraku.astradigital.id
+[aaaa-fingerprint] [dns] [info] auth-astraku.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[aaaa-fingerprint] [dns] [info] admin-astraku.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[aaaa-fingerprint] [dns] [info] ahm-medical-claim.radiance.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[caa-fingerprint] [dns] [info] admin-astraku.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[aaaa-fingerprint] [dns] [info] dash.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] dash.astradigital.id
+[caa-fingerprint] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[aaaa-fingerprint] [dns] [info] ahm-medical-claim.radiance.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] docs-loyaltyuat.astradigital.id
+[caa-fingerprint] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[caa-fingerprint] [dns] [info] dash.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[aaaa-fingerprint] [dns] [info] docs-loyaltyuat.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] auth-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] appsupport-loyaltysit.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[aaaa-fingerprint] [dns] [info] dash.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] appsupport-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] auth-loyalty.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[caa-fingerprint] [dns] [info] docs-loyaltysit.astradigital.id
+[caa-fingerprint] [dns] [info] docs-loyaltyuat.astradigital.id
+[caa-fingerprint] [dns] [info] dash.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] docs-loyaltysit.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] dash.astradigital.id
+[caa-fingerprint] [dns] [info] appsupport-loyaltysit.astradigital.id
+[caa-fingerprint] [dns] [info] auth-loyalty.astradigital.id
+[caa-fingerprint] [dns] [info] appsupport-loyalty.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] appsupport-loyaltysit.astradigital.id
+[aaaa-fingerprint] [dns] [info] appsupport-loyalty.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[aaaa-fingerprint] [dns] [info] docs-loyaltysit.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltyuat.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] appsupport-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] auth-astraku.astradigital.id
+[aaaa-fingerprint] [dns] [info] auth-loyalty.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[caa-fingerprint] [dns] [info] auth-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] appsupport-loyaltysit.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltysit.astradigital.id
+[caa-fingerprint] [dns] [info] appsupport-loyaltysit.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] auth-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] appsupport-loyalty.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[dns-waf-detect:cloudflare] [dns] [info] auth-astraku.astradigital.id
+[caa-fingerprint] [dns] [info] appsupport-loyalty.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] appsupport-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] admin-astraku.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] admin-astraku.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] ahm-medical-claim.radiance.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] auth-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] dash.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] dash.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] docs-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltysit.astradigital.id
+[caa-fingerprint] [dns] [info] archive.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] archive.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] auth-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] archive.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] archive.astradigital.id
+[caa-fingerprint] [dns] [info] archive.astradigital.id
+[aaaa-fingerprint] [dns] [info] archive.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] faas-loyalty.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[caa-fingerprint] [dns] [info] faas-loyalty.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] faas-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] faas-loyalty.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] faas-loyalty.astradigital.id
+[caa-fingerprint] [dns] [info] faas-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] archive.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] archive.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyalty.astradigital.id
+[caa-fingerprint] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyalty.astradigital.id
+[caa-fingerprint] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[aaaa-fingerprint] [dns] [info] appsupport-loyaltyuat.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[aaaa-fingerprint] [dns] [info] appsupport-loyaltyuat.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] astraloyalty-u.astradigital.id
+[caa-fingerprint] [dns] [info] astraloyalty-u.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] astraloyalty-u.astradigital.id
+[caa-fingerprint] [dns] [info] astraloyalty-u.astradigital.id
+[aaaa-fingerprint] [dns] [info] astraloyalty-u.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[aaaa-fingerprint] [dns] [info] astraloyalty-u.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] appsupport-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astraloyalty-u.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] astraloyalty-u.astradigital.id
+[caa-fingerprint] [dns] [info] admin-loyalty.astradigital.id
+[caa-fingerprint] [dns] [info] admin-loyalty.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] admin-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] admin-loyalty.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[nameserver-detection:cloudflare] [dns] [info] admin-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] admin-loyalty.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[dns-waf-detect:cloudflare] [dns] [info] admin-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] admin-loyalty.astradigital.id
+[aaaa-fingerprint] [dns] [info] faas-loyaltysit.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[caa-fingerprint] [dns] [info] faas-loyaltysit.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] faas-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] faas-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyaltysit.astradigital.id
+[caa-fingerprint] [dns] [info] gateway-loyaltyuat.astradigital.id
+[aaaa-fingerprint] [dns] [info] gateway-loyaltyuat.astradigital.id ["2606:4700:3033::6815:49d4","2606:4700:3033::ac43:a678"]
+[caa-fingerprint] [dns] [info] gateway-loyaltyuat.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] gateway-loyaltyuat.astradigital.id
+[aaaa-fingerprint] [dns] [info] gateway-loyaltyuat.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] gateway-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] gateway-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] sa-loyaltyuat.astradigital.id
+[nameserver-detection:cloudflare] [dns] [info] m-loyaltydev.astradigital.id
+[aaaa-fingerprint] [dns] [info] m-loyaltydev.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[caa-fingerprint] [dns] [info] m-loyaltydev.astradigital.id
+[caa-fingerprint] [dns] [info] m-loyaltydev.astradigital.id
+[aaaa-fingerprint] [dns] [info] m-loyaltydev.astradigital.id ["2606:4700:3033::ac43:a678","2606:4700:3033::6815:49d4"]
+[nameserver-detection:cloudflare] [dns] [info] m-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] splashchat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] o1800.noreply.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[cluster-74706ab4d15f32c722ae3a9152f88842d2bb06f00ff880b0e20718bc64529848] [http] [info] https://splashchat.astradigital.id ["SPLASH Team"]
+[dns-waf-detect:cloudflare] [dns] [info] middleware-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] middleware-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] middleware-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] oldprod.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] oldprod.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] m-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] middleware-astraku.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] prodlike.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] qa-astranautsapi.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] qa-astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] prodlike.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] qa.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] qa.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] tools.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] tools.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyalty.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyaltysit.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id
+[dns-waf-detect:cloudflare] [dns] [info] webhook-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://middleware-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://middleware-astraku.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://middleware-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://middleware-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://oldprod.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://oldprod.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://prodlike.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://prodlike.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://qa.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://qa-astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://qa.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://qa-astranautsapi.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://tools.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://tools.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://webhook-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://webhook-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://webhook-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://webhook-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://webhook-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://webhook-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://faas-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://gateway-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://git.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://integration-uat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://git.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://integration-uat.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyalty.astradigital.id
+[metatag-cms] [http] [info] https://splashchat.astradigital.id ["SPLASH Team"]
+[tech-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] http://m-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyalty.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[tech-detect:next.js] [http] [info] https://splashchat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltysit.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://sa-loyaltyuat.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id
+[tech-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id
+[waf-detect:cloudflare] [http] [info] https://webhook-loyaltydev.astradigital.id

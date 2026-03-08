@@ -1,0 +1,26 @@
+# ReconX - CDN Detection for astradigital.id
+# 19 subdomains behind CDN
+
+[cloudflare] (18 hosts)
+  adisti.astradigital.id
+  astradigital.id
+  astranautsapi.astradigital.id
+  authorization-loyaltydev.astradigital.id
+  authorization-loyaltysit.astradigital.id
+  authorization-loyaltyuat.astradigital.id
+  docs-loyalty.astradigital.id
+  docs-loyaltydev.astradigital.id
+  elk.astradigital.id
+  faas-loyaltysit.astradigital.id
+  gateway-loyaltyuat.astradigital.id
+  m-loyaltydev.astradigital.id
+  sa-loyalty.astradigital.id
+  sa-loyaltydev.astradigital.id
+  sa-loyaltysit.astradigital.id
+  sa-loyaltyuat.astradigital.id
+  webhook-loyaltydev.astradigital.id
+  www.astradigital.id
+
+[google] (1 hosts)
+  splashchat.astradigital.id
+

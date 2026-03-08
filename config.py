@@ -80,6 +80,7 @@ class ScannerConfig:
     aged_days: int = 730        # 2 years
     concurrency: int = 50       # max concurrent workers
     timeout: int = 8            # per-request timeout in seconds (fast default)
+    nmap_pn: bool = False        # pass -Pn to nmap (skip host discovery)
 
 
 @dataclass
@@ -89,7 +90,6 @@ class ReconConfig:
     output_file: Optional[str] = None
     output_format: str = "json"
     verbose: bool = False
-    demo_mode: bool = False  # Use simulated data for demo
 
     # ── Direct target mode (IP / CIDR / file-of-IPs) ──────────────────────
     # When input_mode is "direct", subdomain enum is skipped entirely;

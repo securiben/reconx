@@ -22,10 +22,13 @@ Requires: nuclei from ProjectDiscovery installed in PATH
 
 import os
 import json
+import re
 import sys
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from collections import Counter, defaultdict
@@ -225,6 +228,13 @@ class NucleiScanner:
             if self._verify_nuclei(path):
                 return path
 
+        # Auto-install nuclei if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("nuclei"):
+            found = shutil.which("nuclei")
+            if found and self._verify_nuclei(found):
+                return found
+
         return None
 
     def _verify_nuclei(self, path: str) -> bool:
@@ -334,6 +344,10 @@ class NucleiScanner:
                     clean = h.replace("https://", "").replace("http://", "").rstrip("/")
                     f.write(clean + "\n")
 
+            # Custom templates directory (prv8_nuclei_templates at repo root)
+            _pkg_dir = os.path.dirname(os.path.abspath(__file__))
+            _custom_tpl_dir = os.path.join(os.path.dirname(_pkg_dir), "prv8_nuclei_templates")
+
             # Exact command:
             cmd = [
                 self.nuclei_path,
@@ -341,7 +355,7 @@ class NucleiScanner:
                 "-sa",                     # scan all IPs per host
                 "-as",                     # auto-scan based on wappalyzer
                 "-ue", "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
-                "-s", "info,low,medium,high,critical",
+                "-s", "critical,high,low,medium,info",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
@@ -349,23 +363,104 @@ class NucleiScanner:
                 "-silent",
             ]
 
-            # Run nuclei — stdout/stderr shown on terminal in real-time
+            # Append custom template directory if it exists
+            if os.path.isdir(_custom_tpl_dir):
+                cmd.extend(["-t", _custom_tpl_dir])
+
+            # Run nuclei with live findings log
             timeout_secs = max(600, len(alive_hostnames) * 10)
-            print(
-                f"\033[36m[>]\033[0m nuclei: running "
-                f"on \033[92m{len(alive_hostnames)}\033[0m targets ..."
-            )
             proc = subprocess.Popen(
                 cmd,
-                stdout=sys.stderr,        # Show findings live on terminal
-                stderr=sys.stderr,        # Show progress on terminal
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
 
-            try:
-                proc.wait(timeout=timeout_secs)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
+            # Severity colors for log output
+            sev_colors = {
+                "critical": "\033[1;91m",
+                "high": "\033[91m",
+                "medium": "\033[93m",
+                "low": "\033[36m",
+                "info": "\033[37m",
+            }
+            # [template-id] [protocol] [severity] matched-url
+            finding_re = re.compile(
+                r'\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)'
+            )
+            findings = [0]
+            lock = threading.Lock()
+            bar_width = 30
+            spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+            spinner_idx = [0]
+
+            scan_label = f"nuclei: \033[92m{len(alive_hostnames)}\033[0m targets"
+
+            def _draw_status():
+                si = spinner_chars[spinner_idx[0] % len(spinner_chars)]
+                spinner_idx[0] += 1
+                f_count = findings[0]
+                bar = "\033[92m━\033[0m" * bar_width
+                sys.stdout.write(
+                    f"\r\033[96m[{si}]\033[0m {scan_label} [{bar}] "
+                    f"\033[92m{f_count}\033[0m findings\033[K"
+                )
+                sys.stdout.flush()
+
+            def _reader():
+                buf = ""
+                while True:
+                    chunk = proc.stdout.read(256)
+                    if not chunk:
+                        break
+                    text = chunk.decode("utf-8", errors="replace")
+                    buf += text
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        m = finding_re.search(line)
+                        if m:
+                            with lock:
+                                findings[0] += 1
+                                tmpl = m.group(1)
+                                sev = m.group(3).lower()
+                                url = m.group(4)
+                                color = sev_colors.get(sev, "\033[37m")
+                                # Clear status line, print finding, redraw status
+                                sys.stdout.write(f"\r\033[K")
+                                sys.stdout.write(
+                                    f"    {color}[{sev}]\033[0m "
+                                    f"\033[97m{tmpl}\033[0m → "
+                                    f"\033[96m{url}\033[0m\n"
+                                )
+                                _draw_status()
+
+            reader_t = threading.Thread(target=_reader, daemon=True)
+            reader_t.start()
+
+            # Animate spinner while running
+            _draw_status()
+            while proc.poll() is None:
+                time.sleep(0.15)
+                with lock:
+                    _draw_status()
+
+            reader_t.join(timeout=5)
+
+            # Final state
+            f_count = findings[0]
+            success = proc.returncode == 0
+            if success:
+                bar = "\033[92m━\033[0m" * bar_width
+                sys.stdout.write(
+                    f"\r\033[92m[✓]\033[0m {scan_label} [{bar}] "
+                    f"\033[92m{f_count}\033[0m findings\033[K\n"
+                )
+            else:
+                bar = "\033[91m━\033[0m" * bar_width
+                sys.stdout.write(
+                    f"\r\033[91m[✗]\033[0m {scan_label} [{bar}] "
+                    f"\033[91m{f_count}\033[0m findings\033[K\n"
+                )
+            sys.stdout.flush()
 
             # Parse JSONL results for structured data
             if os.path.isfile(jsonl_file) and os.path.getsize(jsonl_file) > 0:

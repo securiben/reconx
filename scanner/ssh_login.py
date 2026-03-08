@@ -217,6 +217,11 @@ class SSHLoginScanner:
             if path and os.path.isfile(path):
                 return path
 
+        # Auto-install metasploit if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("msfconsole"):
+            return shutil.which("msfconsole")
+
         return None
 
     def _find_file(self, filename: str, output_dir: str = "") -> Optional[str]:

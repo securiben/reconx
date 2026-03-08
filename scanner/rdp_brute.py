@@ -201,6 +201,11 @@ class RDPBruteScanner:
             if os.path.isfile(path):
                 return path
 
+        # Auto-install netexec if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("nxc"):
+            return shutil.which("nxc") or shutil.which("netexec")
+
         return None
 
     def _find_pass_file(self, output_dir: str = "") -> Optional[str]:

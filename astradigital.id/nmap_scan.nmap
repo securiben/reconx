@@ -1,0 +1,139 @@
+# Nmap 7.95 scan initiated Sun Mar  8 07:02:21 2026 as: /usr/lib/nmap/nmap -iL /tmp/reconx_nmap_0860eg8_/targets_nmap_scan.txt -sCV --top-ports 1000 -T3 --stats-every 3s -oA ./astradigital.id/nmap_scan
+Nmap scan report for 104.21.73.212
+Host is up (0.028s latency).
+Not shown: 996 filtered tcp ports (no-response)
+PORT     STATE SERVICE       VERSION
+80/tcp   open  http          Cloudflare http proxy
+|_http-title: Site doesn't have a title (text/plain; charset=UTF-8).
+|_http-server-header: cloudflare
+443/tcp  open  ssl/https     cloudflare
+|_http-server-header: cloudflare
+|_http-title: 400 The plain HTTP request was sent to HTTPS port
+8080/tcp open  http          Cloudflare http proxy
+|_http-server-header: cloudflare
+|_http-title: Site doesn't have a title (text/plain; charset=UTF-8).
+8443/tcp open  ssl/https-alt cloudflare
+|_http-title: 400 The plain HTTP request was sent to HTTPS port
+|_http-server-header: cloudflare
+
+Nmap scan report for wrqvpnxf.outbound-mail.sendgrid.net (149.72.50.175)
+Host is up (0.25s latency).
+All 1000 scanned ports on wrqvpnxf.outbound-mail.sendgrid.net (149.72.50.175) are in ignored states.
+Not shown: 1000 filtered tcp ports (no-response)
+
+Nmap scan report for 172.67.166.120
+Host is up (0.031s latency).
+Not shown: 996 filtered tcp ports (no-response)
+PORT     STATE SERVICE       VERSION
+80/tcp   open  http          Cloudflare http proxy
+|_http-title: Site doesn't have a title (text/plain; charset=UTF-8).
+|_http-server-header: cloudflare
+443/tcp  open  ssl/https     cloudflare
+|_http-title: 400 The plain HTTP request was sent to HTTPS port
+|_http-server-header: cloudflare
+8080/tcp open  http          Cloudflare http proxy
+|_http-title: Site doesn't have a title (text/plain; charset=UTF-8).
+|_http-server-header: cloudflare
+8443/tcp open  ssl/https-alt cloudflare
+|_http-title: 400 The plain HTTP request was sent to HTTPS port
+|_http-server-header: cloudflare
+
+Nmap scan report for 63.200.219.35.bc.googleusercontent.com (35.219.200.63)
+Host is up (0.032s latency).
+Not shown: 998 filtered tcp ports (no-response)
+PORT    STATE SERVICE    VERSION
+80/tcp  open  http
+|_http-title: Did not follow redirect to https://63.200.219.35.bc.googleusercontent.com:443/
+| fingerprint-strings: 
+|   DNSStatusRequestTCP, DNSVersionBindReqTCP: 
+|     HTTP/1.0 400 Bad Request
+|     Content-Length: 54
+|     Content-Type: text/html; charset=UTF-8
+|     Date: Sun, 08 Mar 2026 00:03:27 GMT
+|     <html><title>Error 400 (Bad Request)!!1</title></html>
+|   FourOhFourRequest: 
+|     HTTP/1.0 301 Moved Permanently
+|     Cache-Control: private
+|     Location: https://35.219.200.63:443/nice%20ports%2C/Trinity.txt.bak
+|     Content-Length: 0
+|     Date: Sun, 08 Mar 2026 00:03:17 GMT
+|     Content-Type: text/html; charset=UTF-8
+|   GetRequest, HTTPOptions: 
+|     HTTP/1.0 301 Moved Permanently
+|     Cache-Control: private
+|     Location: https://35.219.200.63:443/
+|     Content-Length: 0
+|     Date: Sun, 08 Mar 2026 00:03:12 GMT
+|     Content-Type: text/html; charset=UTF-8
+|   Help: 
+|     HTTP/1.0 400 Bad Request
+|     Content-Type: text/html; charset=UTF-8
+|     Referrer-Policy: no-referrer
+|     Content-Length: 273
+|     Date: Sun, 08 Mar 2026 00:03:27 GMT
+|     <html><head>
+|     <meta http-equiv="content-type" content="text/html;charset=utf-8">
+|     <title>400 Bad Request</title>
+|     </head>
+|     <body text=#000000 bgcolor=#ffffff>
+|     <h1>Error: Bad Request</h1>
+|     <h2>Your client has issued a malformed or illegal request.</h2>
+|     <h2></h2>
+|     </body></html>
+|   RTSPRequest: 
+|     HTTP/1.0 400 Bad Request
+|     Content-Type: text/html; charset=UTF-8
+|     Referrer-Policy: no-referrer
+|     Content-Length: 273
+|     Date: Sun, 08 Mar 2026 00:03:12 GMT
+|     <html><head>
+|     <meta http-equiv="content-type" content="text/html;charset=utf-8">
+|     <title>400 Bad Request</title>
+|     </head>
+|     <body text=#000000 bgcolor=#ffffff>
+|     <h1>Error: Bad Request</h1>
+|     <h2>Your client has issued a malformed or illegal request.</h2>
+|     <h2></h2>
+|_    </body></html>
+443/tcp open  ssl/https?
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port80-TCP:V=7.95%I=7%D=3/8%Time=69ACBCC0%P=x86_64-pc-linux-gnu%r(GetRe
+SF:quest,C0,"HTTP/1\.0\x20301\x20Moved\x20Permanently\r\nCache-Control:\x2
+SF:0private\r\nLocation:\x20https://35\.219\.200\.63:443/\r\nContent-Lengt
+SF:h:\x200\r\nDate:\x20Sun,\x2008\x20Mar\x202026\x2000:03:12\x20GMT\r\nCon
+SF:tent-Type:\x20text/html;\x20charset=UTF-8\r\n\r\n")%r(HTTPOptions,C0,"H
+SF:TTP/1\.0\x20301\x20Moved\x20Permanently\r\nCache-Control:\x20private\r\
+SF:nLocation:\x20https://35\.219\.200\.63:443/\r\nContent-Length:\x200\r\n
+SF:Date:\x20Sun,\x2008\x20Mar\x202026\x2000:03:12\x20GMT\r\nContent-Type:\
+SF:x20text/html;\x20charset=UTF-8\r\n\r\n")%r(RTSPRequest,1AD,"HTTP/1\.0\x
+SF:20400\x20Bad\x20Request\r\nContent-Type:\x20text/html;\x20charset=UTF-8
+SF:\r\nReferrer-Policy:\x20no-referrer\r\nContent-Length:\x20273\r\nDate:\
+SF:x20Sun,\x2008\x20Mar\x202026\x2000:03:12\x20GMT\r\n\r\n\n<html><head>\n
+SF:<meta\x20http-equiv=\"content-type\"\x20content=\"text/html;charset=utf
+SF:-8\">\n<title>400\x20Bad\x20Request</title>\n</head>\n<body\x20text=#00
+SF:0000\x20bgcolor=#ffffff>\n<h1>Error:\x20Bad\x20Request</h1>\n<h2>Your\x
+SF:20client\x20has\x20issued\x20a\x20malformed\x20or\x20illegal\x20request
+SF:\.</h2>\n<h2></h2>\n</body></html>\n")%r(FourOhFourRequest,DF,"HTTP/1\.
+SF:0\x20301\x20Moved\x20Permanently\r\nCache-Control:\x20private\r\nLocati
+SF:on:\x20https://35\.219\.200\.63:443/nice%20ports%2C/Trinity\.txt\.bak\r
+SF:\nContent-Length:\x200\r\nDate:\x20Sun,\x2008\x20Mar\x202026\x2000:03:1
+SF:7\x20GMT\r\nContent-Type:\x20text/html;\x20charset=UTF-8\r\n\r\n")%r(DN
+SF:SVersionBindReqTCP,B3,"HTTP/1\.0\x20400\x20Bad\x20Request\r\nContent-Le
+SF:ngth:\x2054\r\nContent-Type:\x20text/html;\x20charset=UTF-8\r\nDate:\x2
+SF:0Sun,\x2008\x20Mar\x202026\x2000:03:27\x20GMT\r\n\r\n<html><title>Error
+SF:\x20400\x20\(Bad\x20Request\)!!1</title></html>")%r(DNSStatusRequestTCP
+SF:,B3,"HTTP/1\.0\x20400\x20Bad\x20Request\r\nContent-Length:\x2054\r\nCon
+SF:tent-Type:\x20text/html;\x20charset=UTF-8\r\nDate:\x20Sun,\x2008\x20Mar
+SF:\x202026\x2000:03:27\x20GMT\r\n\r\n<html><title>Error\x20400\x20\(Bad\x
+SF:20Request\)!!1</title></html>")%r(Help,1AD,"HTTP/1\.0\x20400\x20Bad\x20
+SF:Request\r\nContent-Type:\x20text/html;\x20charset=UTF-8\r\nReferrer-Pol
+SF:icy:\x20no-referrer\r\nContent-Length:\x20273\r\nDate:\x20Sun,\x2008\x2
+SF:0Mar\x202026\x2000:03:27\x20GMT\r\n\r\n\n<html><head>\n<meta\x20http-eq
+SF:uiv=\"content-type\"\x20content=\"text/html;charset=utf-8\">\n<title>40
+SF:0\x20Bad\x20Request</title>\n</head>\n<body\x20text=#000000\x20bgcolor=
+SF:#ffffff>\n<h1>Error:\x20Bad\x20Request</h1>\n<h2>Your\x20client\x20has\
+SF:x20issued\x20a\x20malformed\x20or\x20illegal\x20request\.</h2>\n<h2></h
+SF:2>\n</body></html>\n");
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Sun Mar  8 07:04:13 2026 -- 4 IP addresses (4 hosts up) scanned in 112.26 seconds

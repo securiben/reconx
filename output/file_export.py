@@ -19,31 +19,39 @@ class FileExporter:
     """
     Exports scan findings into a per-domain output folder
     with separate files for each category.
+    Files are auto-routed to txt/ and json/ subfolders.
+    Empty results are skipped (no file created).
 
     Output structure:
         results/<domain>/
-        ├── scan_summary.json        # Full scan summary
-        ├── all_subdomains.txt       # All unique subdomains
-        ├── alive_subdomains.txt     # Only alive (resolvable) subdomains
-        ├── ip_addresses.txt         # All discovered IP addresses
-        ├── ip_subdomain_map.txt     # IP → subdomain mapping
-        ├── takeover_vulnerable.txt  # Subdomain takeover vulnerabilities
-        ├── dangling_cnames.txt      # Dangling CNAME records
-        ├── tech_detected.txt        # Technology detections by severity
-        ├── flagged_interesting.txt  # Interesting/flagged subdomains
-        ├── ct_aged.txt              # Aged CT log entries (2yr+)
-        ├── ct_stale.txt             # Stale CT log entries (1-2yr)
-        ├── collapsed_patterns.txt   # Collapsed pattern groups
-        ├── infrastructure.txt       # Infrastructure provider classification
-        ├── sources_stats.txt        # Source statistics
-        ├── httpx_probe.txt          # Full httpx probe results per host
-        ├── httpx_technologies.txt   # Wappalyzer tech detection grouped
-        ├── httpx_cdn.txt            # CDN-backed subdomains
-        ├── httpx_favicon.txt        # Favicon hash → subdomain mapping
-        ├── httpx_servers.txt        # Server header distribution
-        ├── httpx_titles.txt         # HTTP page titles
-        ├── httpx_redirects.txt      # Redirecting subdomains + locations
-        └── nmap_summary.txt         # Nmap scan statistics
+        ├── txt/
+        │   ├── all_subdomains.txt
+        │   ├── alive_subdomains.txt
+        │   ├── ip_addresses.txt
+        │   ├── ip_subdomain_map.txt
+        │   ├── takeover_vulnerable.txt
+        │   ├── dangling_cnames.txt
+        │   ├── tech_detected.txt
+        │   ├── flagged_interesting.txt
+        │   ├── ct_aged.txt
+        │   ├── ct_stale.txt
+        │   ├── collapsed_patterns.txt
+        │   ├── infrastructure.txt
+        │   ├── sources_stats.txt
+        │   ├── httpx_probe.txt
+        │   ├── httpx_technologies.txt
+        │   ├── httpx_cdn.txt
+        │   ├── httpx_favicon.txt
+        │   ├── httpx_servers.txt
+        │   ├── httpx_titles.txt
+        │   ├── httpx_redirects.txt
+        │   ├── nmap_summary.txt
+        │   └── ...
+        └── json/
+            ├── scan_summary.json
+            ├── nuclei_summary.json
+            ├── nmap_summary.json
+            └── ...
     """
 
     def __init__(self, base_dir: str = "results"):
@@ -90,8 +98,19 @@ class FileExporter:
         return os.path.abspath(domain_dir)
 
     def _write(self, filepath: str, content: str):
-        """Write content to file."""
-        with open(filepath, "w", encoding="utf-8") as f:
+        """Write content to file, auto-routing to txt/ or json/ subfolder."""
+        dirpath = os.path.dirname(filepath)
+        filename = os.path.basename(filepath)
+        ext = os.path.splitext(filename)[1].lower()
+        if ext == '.json':
+            subdir = os.path.join(dirpath, 'json')
+        elif ext == '.txt':
+            subdir = os.path.join(dirpath, 'txt')
+        else:
+            subdir = dirpath
+        os.makedirs(subdir, exist_ok=True)
+        final_path = os.path.join(subdir, filename)
+        with open(final_path, "w", encoding="utf-8") as f:
             f.write(content)
 
     def _export_summary(self, outdir: str, result: ScanResult):
@@ -134,12 +153,13 @@ class FileExporter:
             "subdomains": [s.to_dict() for s in result.subdomains],
         }
         filepath = os.path.join(outdir, "scan_summary.json")
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+        self._write(filepath, json.dumps(data, indent=2, ensure_ascii=False, default=str))
 
     def _export_all_subdomains(self, outdir: str, result: ScanResult):
         """Export all unique subdomains, one per line."""
         subs = sorted(set(s.hostname for s in result.subdomains))
+        if not subs:
+            return
         filepath = os.path.join(outdir, "all_subdomains.txt")
         lines = [f"# ReconX - All Subdomains for {result.target_domain}"]
         lines.append(f"# Total: {len(subs)} unique subdomains")
@@ -154,6 +174,8 @@ class FileExporter:
             s.hostname for s in result.subdomains
             if s.is_alive or s.ip_addresses
         )
+        if not alive:
+            return
         filepath = os.path.join(outdir, "alive_subdomains.txt")
         lines = [f"# ReconX - Alive Subdomains for {result.target_domain}"]
         lines.append(f"# Total: {len(alive)} alive subdomains")
@@ -172,6 +194,9 @@ class FileExporter:
                 if ip not in ip_to_subs:
                     ip_to_subs[ip] = []
                 ip_to_subs[ip].append(sub.hostname)
+
+        if not all_ips:
+            return
 
         # ip_addresses.txt - just IPs
         filepath_ips = os.path.join(outdir, "ip_addresses.txt")
@@ -420,6 +445,8 @@ class FileExporter:
 
     def _export_infrastructure(self, outdir: str, result: ScanResult):
         """Export infrastructure classification."""
+        if not result.subdomains:
+            return
         filepath = os.path.join(outdir, "infrastructure.txt")
         lines = [f"# ReconX - Infrastructure Classification for {result.target_domain}"]
         infra = result.infra
@@ -455,6 +482,8 @@ class FileExporter:
 
     def _export_sources(self, outdir: str, result: ScanResult):
         """Export source statistics."""
+        if not result.source_stats:
+            return
         filepath = os.path.join(outdir, "sources_stats.txt")
         lines = [f"# ReconX - Source Statistics for {result.target_domain}"]
         lines.append(f"# Scan time: {result.scan_time:.1f}s")

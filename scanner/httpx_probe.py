@@ -1,6 +1,7 @@
 """
 HTTPX Probe Scanner for ReconX.
 Uses ProjectDiscovery's httpx CLI tool for comprehensive HTTP probing.
+Auto-installs httpx if not found.
 
 Features:
   - Status code, page title, redirect location
@@ -231,8 +232,9 @@ class HttpxProbe:
         if found:
             candidates.append(found)
 
-        # Check common Go binary locations
+        # Check common Go / pdtm binary locations (PD paths first)
         common_paths = [
+            os.path.expanduser("~/.pdtm/go/bin/httpx"),
             os.path.expanduser("~/go/bin/httpx"),
             os.path.expanduser("~/go/bin/httpx.exe"),
             os.path.expanduser("~/.local/bin/httpx"),
@@ -254,6 +256,13 @@ class HttpxProbe:
         for path in candidates:
             if self._is_projectdiscovery_httpx(path):
                 return path
+
+        # Auto-install httpx if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("httpx"):
+            found = shutil.which("httpx")
+            if found and self._is_projectdiscovery_httpx(found):
+                return found
 
         return None
 

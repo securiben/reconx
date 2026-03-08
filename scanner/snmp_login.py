@@ -179,6 +179,11 @@ class SNMPLoginScanner:
             if path and os.path.isfile(path):
                 return path
 
+        # Auto-install metasploit if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("msfconsole"):
+            return shutil.which("msfconsole")
+
         return None
 
     def _get_snmp_hosts(self, nmap_results: Dict) -> List[tuple]:

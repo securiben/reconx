@@ -188,6 +188,11 @@ class CMEScanner:
             if path and os.path.isfile(path):
                 return path
 
+        # Auto-install crackmapexec/netexec if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("nxc"):
+            return shutil.which("nxc") or shutil.which("netexec") or shutil.which("crackmapexec")
+
         return None
 
     def group_hosts_by_protocol(self, nmap_results: Dict) -> Dict[str, Set[str]]:

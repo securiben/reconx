@@ -1,0 +1,10 @@
+# Nmap 7.95 scan initiated Sun Mar  8 07:02:21 2026 as: /usr/lib/nmap/nmap -iL /tmp/reconx_nmap_0860eg8_/targets_nmap_scan.txt -sCV --top-ports 1000 -T3 --stats-every 3s -oA ./astradigital.id/nmap_scan
+Host: 104.21.73.212 ()	Status: Up
+Host: 104.21.73.212 ()	Ports: 80/open/tcp//http//Cloudflare http proxy/, 443/open/tcp//ssl|https//cloudflare/, 8080/open/tcp//http//Cloudflare http proxy/, 8443/open/tcp//ssl|https-alt//cloudflare/	Ignored State: filtered (996)
+Host: 149.72.50.175 (wrqvpnxf.outbound-mail.sendgrid.net)	Status: Up
+Host: 149.72.50.175 (wrqvpnxf.outbound-mail.sendgrid.net)	Ports: 	Ignored State: filtered (1000)
+Host: 172.67.166.120 ()	Status: Up
+Host: 172.67.166.120 ()	Ports: 80/open/tcp//http//Cloudflare http proxy/, 443/open/tcp//ssl|https//cloudflare/, 8080/open/tcp//http//Cloudflare http proxy/, 8443/open/tcp//ssl|https-alt//cloudflare/	Ignored State: filtered (996)
+Host: 35.219.200.63 (63.200.219.35.bc.googleusercontent.com)	Status: Up
+Host: 35.219.200.63 (63.200.219.35.bc.googleusercontent.com)	Ports: 80/open/tcp//http///, 443/open/tcp//ssl|https?///	Ignored State: filtered (998)
+# Nmap done at Sun Mar  8 07:04:13 2026 -- 4 IP addresses (4 hosts up) scanned in 112.26 seconds

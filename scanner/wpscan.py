@@ -250,6 +250,13 @@ class WPScanner:
             if self._verify_wpscan(path):
                 return path
 
+        # Auto-install wpscan if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("wpscan"):
+            found = shutil.which("wpscan")
+            if found and self._verify_wpscan(found):
+                return found
+
         return None
 
     def _verify_wpscan(self, path: str) -> bool:

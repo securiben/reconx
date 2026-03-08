@@ -1,0 +1,14 @@
+# ReconX - Technology Detections for astradigital.id
+# 1 technology match(es)
+
+============================================================
+🔵 [LOW] - 1 match(es)
+============================================================
+
+  Subdomain:   gateway-loyaltyuat.astradigital.id
+  Technology:  Nginx
+  Category:    server
+  Location:    Header
+  Description: Web server – check version disclosure, misconfigurations
+  Evidence:    Matched 'nginx' in response body
+

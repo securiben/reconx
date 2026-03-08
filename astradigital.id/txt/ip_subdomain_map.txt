@@ -1,0 +1,115 @@
+# ReconX - IP to Subdomain Mapping for astradigital.id
+# Total: 4 unique IPs
+
+104.21.73.212
+  └─ adisti.astradigital.id
+  └─ admin-astraku.astradigital.id
+  └─ admin-loyalty.astradigital.id
+  └─ ahm-medical-claim.radiance.astradigital.id
+  └─ appsupport-loyalty.astradigital.id
+  └─ appsupport-loyaltysit.astradigital.id
+  └─ appsupport-loyaltyuat.astradigital.id
+  └─ archive.astradigital.id
+  └─ astradigital.id
+  └─ astraloyalty-u.astradigital.id
+  └─ astranautsapi.astradigital.id
+  └─ auth-astraku.astradigital.id
+  └─ auth-loyalty.astradigital.id
+  └─ authorization-loyaltydev.astradigital.id
+  └─ authorization-loyaltysit.astradigital.id
+  └─ authorization-loyaltyuat.astradigital.id
+  └─ dash.astradigital.id
+  └─ docs-loyalty.astradigital.id
+  └─ docs-loyaltydev.astradigital.id
+  └─ docs-loyaltysit.astradigital.id
+  └─ docs-loyaltyuat.astradigital.id
+  └─ elk.astradigital.id
+  └─ faas-loyalty.astradigital.id
+  └─ faas-loyaltysit.astradigital.id
+  └─ faas-loyaltyuat.astradigital.id
+  └─ gateway-loyalty.astradigital.id
+  └─ gateway-loyaltysit.astradigital.id
+  └─ gateway-loyaltyuat.astradigital.id
+  └─ git.astradigital.id
+  └─ integration-uat.astradigital.id
+  └─ loyalty.astradigital.id
+  └─ m-loyalty.astradigital.id
+  └─ m-loyaltydev.astradigital.id
+  └─ m-loyaltysit.astradigital.id
+  └─ m-loyaltyuat.astradigital.id
+  └─ middleware-astraku.astradigital.id
+  └─ middleware-loyalty.astradigital.id
+  └─ oldprod.astradigital.id
+  └─ prodlike.astradigital.id
+  └─ qa-astranautsapi.astradigital.id
+  └─ qa.astradigital.id
+  └─ sa-loyalty.astradigital.id
+  └─ sa-loyaltydev.astradigital.id
+  └─ sa-loyaltysit.astradigital.id
+  └─ sa-loyaltyuat.astradigital.id
+  └─ tools.astradigital.id
+  └─ webhook-loyalty.astradigital.id
+  └─ webhook-loyaltydev.astradigital.id
+  └─ webhook-loyaltysit.astradigital.id
+  └─ webhook-loyaltyuat.astradigital.id
+  └─ www.astradigital.id
+
+149.72.50.175
+  └─ o1800.noreply.astradigital.id
+
+172.67.166.120
+  └─ adisti.astradigital.id
+  └─ admin-astraku.astradigital.id
+  └─ admin-loyalty.astradigital.id
+  └─ ahm-medical-claim.radiance.astradigital.id
+  └─ appsupport-loyalty.astradigital.id
+  └─ appsupport-loyaltysit.astradigital.id
+  └─ appsupport-loyaltyuat.astradigital.id
+  └─ archive.astradigital.id
+  └─ astradigital.id
+  └─ astraloyalty-u.astradigital.id
+  └─ astranautsapi.astradigital.id
+  └─ auth-astraku.astradigital.id
+  └─ auth-loyalty.astradigital.id
+  └─ authorization-loyaltydev.astradigital.id
+  └─ authorization-loyaltysit.astradigital.id
+  └─ authorization-loyaltyuat.astradigital.id
+  └─ dash.astradigital.id
+  └─ docs-loyalty.astradigital.id
+  └─ docs-loyaltydev.astradigital.id
+  └─ docs-loyaltysit.astradigital.id
+  └─ docs-loyaltyuat.astradigital.id
+  └─ elk.astradigital.id
+  └─ faas-loyalty.astradigital.id
+  └─ faas-loyaltysit.astradigital.id
+  └─ faas-loyaltyuat.astradigital.id
+  └─ gateway-loyalty.astradigital.id
+  └─ gateway-loyaltysit.astradigital.id
+  └─ gateway-loyaltyuat.astradigital.id
+  └─ git.astradigital.id
+  └─ integration-uat.astradigital.id
+  └─ loyalty.astradigital.id
+  └─ m-loyalty.astradigital.id
+  └─ m-loyaltydev.astradigital.id
+  └─ m-loyaltysit.astradigital.id
+  └─ m-loyaltyuat.astradigital.id
+  └─ middleware-astraku.astradigital.id
+  └─ middleware-loyalty.astradigital.id
+  └─ oldprod.astradigital.id
+  └─ prodlike.astradigital.id
+  └─ qa-astranautsapi.astradigital.id
+  └─ qa.astradigital.id
+  └─ sa-loyalty.astradigital.id
+  └─ sa-loyaltydev.astradigital.id
+  └─ sa-loyaltysit.astradigital.id
+  └─ sa-loyaltyuat.astradigital.id
+  └─ tools.astradigital.id
+  └─ webhook-loyalty.astradigital.id
+  └─ webhook-loyaltydev.astradigital.id
+  └─ webhook-loyaltysit.astradigital.id
+  └─ webhook-loyaltyuat.astradigital.id
+  └─ www.astradigital.id
+
+35.219.200.63
+  └─ splashchat.astradigital.id
+

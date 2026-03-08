@@ -195,6 +195,11 @@ class Enum4linuxScanner:
             if path and os.path.isfile(path):
                 return path
 
+        # Auto-install enum4linux if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("enum4linux"):
+            return shutil.which("enum4linux") or shutil.which("enum4linux-ng")
+
         return None
 
     def scan(self, ip_addresses: Set[str], output_dir: str = "") -> Dict[str, Enum4linuxHostResult]:

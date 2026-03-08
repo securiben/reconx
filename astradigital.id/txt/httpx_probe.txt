@@ -1,0 +1,205 @@
+# ReconX - HTTPX Probe Results for astradigital.id
+# 19 alive hosts probed
+# Probed with: httpx -sc -title -td -favicon -cdn -server -efqdn
+
+──────────────────────────────────────────────────────────────────────
+  Host:        adisti.astradigital.id
+  URL:         https://adisti.astradigital.id
+  Status:      403
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 217
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        astradigital.id
+  URL:         https://astradigital.id
+  Status:      200
+  Title:       Beranda | Astra Digital
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, Cloudflare Browser Insights, HTTP/3, Next.js, Node.js, React, Webpack
+  Favicon:     1433583419
+  Content Len: 74147
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        astranautsapi.astradigital.id
+  URL:         https://astranautsapi.astradigital.id
+  Status:      200
+  Title:       Welcome to your Strapi app
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, Cloudflare Browser Insights, HSTS, HTTP/3, Strapi
+  Favicon:     -1144348573
+  Content Len: 3794
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        authorization-loyaltydev.astradigital.id
+  URL:         https://authorization-loyaltydev.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        authorization-loyaltysit.astradigital.id
+  URL:         https://authorization-loyaltysit.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        authorization-loyaltyuat.astradigital.id
+  URL:         https://authorization-loyaltyuat.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        docs-loyalty.astradigital.id
+  URL:         https://docs-loyalty.astradigital.id
+  Status:      400
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HSTS, HTTP/3
+  Content Len: 104
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        docs-loyaltydev.astradigital.id
+  URL:         https://docs-loyaltydev.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        elk.astradigital.id
+  URL:         https://elk.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        faas-loyaltysit.astradigital.id
+  URL:         https://faas-loyaltysit.astradigital.id
+  Status:      404
+  Title:       Microsoft Azure Web App - Error 404
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, Cloudflare Browser Insights, HTTP/3
+  Content Len: 3171
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        gateway-loyaltyuat.astradigital.id
+  URL:         https://gateway-loyaltyuat.astradigital.id
+  Status:      404
+  Title:       404 Not Found
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, Cloudflare Browser Insights, HSTS, HTTP/3
+  Content Len: 650
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        m-loyaltydev.astradigital.id
+  URL:         https://m-loyaltydev.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        sa-loyalty.astradigital.id
+  URL:         https://sa-loyalty.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        sa-loyaltydev.astradigital.id
+  URL:         https://sa-loyaltydev.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        sa-loyaltysit.astradigital.id
+  URL:         https://sa-loyaltysit.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        sa-loyaltyuat.astradigital.id
+  URL:         https://sa-loyaltyuat.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        splashchat.astradigital.id
+  URL:         https://splashchat.astradigital.id
+  Status:      200
+  Title:       SPLASHChat - Macroeconomics Chatbot
+  Server:      envoy
+  CDN:         Yes (google)
+  Tech:        Envoy, Google Cloud, Google Cloud CDN, Google Cloud Trace, HTTP/3, Next.js, Node.js, React, Webpack
+  Favicon:     1762205304
+  Content Len: 12874
+  IPs:         35.219.200.63
+
+──────────────────────────────────────────────────────────────────────
+  Host:        webhook-loyaltydev.astradigital.id
+  URL:         https://webhook-loyaltydev.astradigital.id
+  Status:      530
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, HTTP/3
+  Content Len: 16
+  IPs:         104.21.73.212, 172.67.166.120
+
+──────────────────────────────────────────────────────────────────────
+  Host:        www.astradigital.id
+  URL:         https://www.astradigital.id
+  Status:      200
+  Title:       Beranda | Astra Digital
+  Server:      cloudflare
+  CDN:         Yes (cloudflare)
+  Tech:        Cloudflare, Cloudflare Browser Insights, HTTP/3, Next.js, Node.js, React, Webpack
+  Favicon:     1433583419
+  Final URL:   https://astradigital.id/
+  Content Len: 74147
+  IPs:         104.21.73.212, 172.67.166.120
+

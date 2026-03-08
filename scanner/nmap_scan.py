@@ -16,10 +16,12 @@ Requires: nmap installed in PATH
 
 import os
 import sys
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+import threading
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
 from collections import defaultdict
@@ -126,6 +128,11 @@ class NmapScanner:
             if path and os.path.isfile(path):
                 return path
 
+        # Auto-install nmap if not found
+        from .auto_install import ensure_tool
+        if ensure_tool("nmap"):
+            return shutil.which("nmap")
+
         return None
 
     def scan(self, ip_addresses: Set[str], output_dir: str = "") -> Dict[str, NmapHostResult]:
@@ -163,9 +170,10 @@ class NmapScanner:
         output_prefix = os.path.join(output_dir or tmpdir, "nmap_scan")
 
         try:
+            extra = ["-Pn"] if getattr(self.config, 'nmap_pn', False) else []
             self._run_nmap_scan(
                 ip_addresses, output_prefix, tmpdir,
-                extra_flags=[], label="IPs",
+                extra_flags=extra, label="IPs",
             )
 
             # Copy output files to output_dir if needed
@@ -207,7 +215,7 @@ class NmapScanner:
         label: str = "",
     ):
         """
-        Run a full nmap scan on a set of IPs.
+        Run a full nmap scan on a set of IPs with a live progress bar.
 
         Args:
             ip_addresses: IPs to scan.
@@ -234,28 +242,77 @@ class NmapScanner:
             "-sCV",
             "--top-ports", "1000",
             "-T3",
+            "--stats-every", "3s",
             "-oA", output_prefix,
         ]
         if extra_flags:
             cmd.extend(extra_flags)
 
-        print(
-            f"\033[36m[>]\033[0m nmap: scanning \033[96m{len(ip_addresses)}\033[0m "
-            f"{label} with \033[96m-sCV --top-ports 1000 -T3{flag_display}\033[0m ..."
-        )
-
         timeout_secs = max(1800, len(ip_addresses) * 30)
         proc = subprocess.Popen(
             cmd,
-            stdout=sys.stderr,
-            stderr=sys.stderr,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
         )
 
-        try:
-            proc.wait(timeout=timeout_secs)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
+        # Shared state for progress
+        pct = [0.0]
+        bar_width = 30
+        pct_re = re.compile(r'About\s+([\d.]+)%\s+done')
+        hosts_up_re = re.compile(r'(\d+)\s+hosts?\s+completed.*\((\d+)\s+up\)')
+        done = threading.Event()
+
+        def _reader():
+            buf = ""
+            while True:
+                chunk = proc.stdout.read(256)
+                if not chunk:
+                    break
+                text = chunk.decode("utf-8", errors="replace")
+                buf += text
+                # Parse nmap stats lines
+                while "\n" in buf:
+                    line, buf = buf.split("\n", 1)
+                    m = pct_re.search(line)
+                    if m:
+                        pct[0] = float(m.group(1))
+            done.set()
+
+        reader_t = threading.Thread(target=_reader, daemon=True)
+        reader_t.start()
+
+        # Animate progress bar
+        scan_label = (
+            f"nmap: \033[96m{len(ip_addresses)}\033[0m {label} "
+            f"\033[90m-sCV --top-ports 1000 -T3{flag_display}\033[0m"
+        )
+        while proc.poll() is None:
+            p = pct[0]
+            filled = int(bar_width * p / 100)
+            bar = "\033[92m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
+            sys.stdout.write(
+                f"\r\033[96m[*]\033[0m {scan_label} [{bar}] \033[93m{p:5.1f}%\033[0m\033[K"
+            )
+            sys.stdout.flush()
+            time.sleep(0.3)
+
+        reader_t.join(timeout=5)
+
+        # Final state
+        success = proc.returncode == 0
+        if success:
+            bar = "\033[92m━\033[0m" * bar_width
+            sys.stdout.write(
+                f"\r\033[92m[✓]\033[0m {scan_label} [{bar}] \033[92m100.0%\033[0m\033[K\n"
+            )
+        else:
+            p = pct[0]
+            filled = int(bar_width * p / 100)
+            bar = "\033[91m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
+            sys.stdout.write(
+                f"\r\033[91m[✗]\033[0m {scan_label} [{bar}] \033[91m{p:5.1f}%\033[0m\033[K\n"
+            )
+        sys.stdout.flush()
 
         # Parse results
         gnmap_file = output_prefix + ".gnmap"
