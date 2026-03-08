@@ -44,7 +44,7 @@ from .scanner import (
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
 from .output.file_export import FileExporter
-from .utils import collapse_subdomains, is_interesting_subdomain
+from .utils import collapse_subdomains, is_interesting_subdomain, sanitize_hostname
 
 
 class ReconEngine:
@@ -216,6 +216,73 @@ class ReconEngine:
         target_dir = os.path.join(self.file_exporter.base_dir, target_name)
         os.makedirs(target_dir, exist_ok=True)
         return target_dir
+
+    def _run_katana_httpx_enrichment(self, katana_urls_file: str, katana_httpx_file: str,
+                                     target_count: int, total_urls: int) -> Optional[int]:
+        """Probe katana URLs with httpx using a compact combined progress line."""
+        httpx_cmd = [
+            self.httpx_probe.httpx_path,
+            "-l", katana_urls_file,
+            "-sc", "-cl", "-title", "-location",
+            "-silent",
+            "-follow-redirects",
+            "-o", katana_httpx_file,
+        ]
+        timeout_secs = max(600, total_urls * 2)
+        spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        spinner_idx = 0
+        line_count = 0
+        bar = "\033[92m━\033[0m" * 30
+        scan_label = f"katana+httpx crawling: \033[92m{target_count}\033[0m targets"
+
+        proc = subprocess.Popen(
+            httpx_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        started_at = time.time()
+        while proc.poll() is None:
+            if time.time() - started_at > timeout_secs:
+                proc.kill()
+                proc.wait()
+                sys.stdout.write(
+                    f"\r\033[93m[!]\033[0m {scan_label}: timed out\033[K\n"
+                )
+                sys.stdout.flush()
+                return None
+
+            time.sleep(0.15)
+            if os.path.isfile(katana_httpx_file):
+                try:
+                    line_count = sum(
+                        1 for _ in open(katana_httpx_file, encoding="utf-8", errors="replace")
+                    )
+                except Exception:
+                    pass
+
+            spinner = spinner_chars[spinner_idx % len(spinner_chars)]
+            spinner_idx += 1
+            sys.stdout.write(
+                f"\r\033[96m[{spinner}]\033[0m {scan_label} [{bar}] "
+                f"\033[92m{line_count}\033[0m urls\033[K"
+            )
+            sys.stdout.flush()
+
+        if os.path.isfile(katana_httpx_file):
+            try:
+                line_count = sum(
+                    1 for _ in open(katana_httpx_file, encoding="utf-8", errors="replace")
+                )
+            except Exception:
+                pass
+
+        sys.stdout.write(
+            f"\r\033[92m[✓]\033[0m {scan_label} [{bar}] "
+            f"\033[92m{line_count}\033[0m urls\033[K\n"
+        )
+        sys.stdout.flush()
+        return line_count
 
     # ─── Resume / checkpoint helpers ───────────────────────────────────────
 
@@ -392,8 +459,15 @@ class ReconEngine:
                 for future in as_completed(futures):
                     key = futures[future]
                     try:
-                        subs = future.result()
-                        all_subdomains_by_source[key] = subs
+                        raw_subs = future.result()
+                        cleaned_subs = []
+                        seen = set()
+                        for sub in raw_subs:
+                            hostname = sanitize_hostname(sub, domain)
+                            if hostname and hostname not in seen:
+                                seen.add(hostname)
+                                cleaned_subs.append(hostname)
+                        all_subdomains_by_source[key] = cleaned_subs
                     except Exception:
                         all_subdomains_by_source[key] = []
 
@@ -412,7 +486,9 @@ class ReconEngine:
             unique_hostnames = set()
             for key, subs in all_subdomains_by_source.items():
                 for sub in subs:
-                    unique_hostnames.add(sub.lower().strip())
+                    hostname = sanitize_hostname(sub, domain)
+                    if hostname:
+                        unique_hostnames.add(hostname)
                 self.result.source_stats[key] = SourceStats(
                     name=self.sources[key].name,
                     count=len(subs),
@@ -1769,42 +1845,25 @@ class ReconEngine:
                         if os.path.isfile(katana_urls_file):
                             katana_httpx_file = os.path.join(katana_output_dir, "txt", "katana_httpx.txt")
                             try:
-                                httpx_cmd = [
-                                    self.httpx_probe.httpx_path,
-                                    "-l", katana_urls_file,
-                                    "-sc", "-cl", "-title", "-location",
-                                    "-silent",
-                                    "-follow-redirects",
-                                    "-o", katana_httpx_file,
-                                ]
-                                print(
-                                    f"\033[36m[>]\033[0m katana-httpx: probing "
-                                    f"\033[96m{total_urls}\033[0m katana URLs with httpx ..."
+                                line_count = self._run_katana_httpx_enrichment(
+                                    katana_urls_file,
+                                    katana_httpx_file,
+                                    katana_stats.targets_crawled,
+                                    total_urls,
                                 )
-                                proc = subprocess.Popen(
-                                    httpx_cmd,
-                                    stdout=sys.stderr,
-                                    stderr=sys.stderr,
-                                )
-                                proc.wait(timeout=max(600, total_urls * 2))
-                                if os.path.isfile(katana_httpx_file) and os.path.getsize(katana_httpx_file) > 0:
-                                    line_count = sum(1 for _ in open(katana_httpx_file, encoding="utf-8", errors="replace"))
+                                if line_count is None:
+                                    print()
+                                elif line_count > 0:
                                     print(
-                                        f"\033[92m[+]\033[0m katana-httpx: "
+                                        f"\033[92m[+]\033[0m katana+httpx: "
                                         f"\033[92m{line_count} alive URLs\033[0m "
                                         f"saved to \033[96mkatana_httpx.txt\033[0m"
                                     )
                                 else:
                                     print(
-                                        f"\033[37m[-]\033[0m katana-httpx: no alive URLs"
+                                        f"\033[37m[-]\033[0m katana+httpx: no alive URLs"
                                     )
                                 print()
-                            except subprocess.TimeoutExpired:
-                                proc.kill()
-                                proc.wait()
-                                print(
-                                    f"\033[93m[!]\033[0m katana-httpx: timed out\n"
-                                )
                             except Exception:
                                 pass
                 else:
@@ -3105,42 +3164,25 @@ class ReconEngine:
                         if os.path.isfile(katana_urls_file):
                             katana_httpx_file = os.path.join(katana_output_dir, "txt", "katana_httpx.txt")
                             try:
-                                httpx_cmd = [
-                                    self.httpx_probe.httpx_path,
-                                    "-l", katana_urls_file,
-                                    "-sc", "-cl", "-title", "-location",
-                                    "-silent",
-                                    "-follow-redirects",
-                                    "-o", katana_httpx_file,
-                                ]
-                                print(
-                                    f"\033[36m[>]\033[0m katana-httpx: probing "
-                                    f"\033[96m{total_urls}\033[0m katana URLs with httpx ..."
+                                line_count = self._run_katana_httpx_enrichment(
+                                    katana_urls_file,
+                                    katana_httpx_file,
+                                    katana_stats.targets_crawled,
+                                    total_urls,
                                 )
-                                proc = subprocess.Popen(
-                                    httpx_cmd,
-                                    stdout=sys.stderr,
-                                    stderr=sys.stderr,
-                                )
-                                proc.wait(timeout=max(600, total_urls * 2))
-                                if os.path.isfile(katana_httpx_file) and os.path.getsize(katana_httpx_file) > 0:
-                                    line_count = sum(1 for _ in open(katana_httpx_file, encoding="utf-8", errors="replace"))
+                                if line_count is None:
+                                    print()
+                                elif line_count > 0:
                                     print(
-                                        f"\033[92m[+]\033[0m katana-httpx: "
+                                        f"\033[92m[+]\033[0m katana+httpx: "
                                         f"\033[92m{line_count} alive URLs\033[0m "
                                         f"saved to \033[96mkatana_httpx.txt\033[0m"
                                     )
                                 else:
                                     print(
-                                        f"\033[37m[-]\033[0m katana-httpx: no alive URLs"
+                                        f"\033[37m[-]\033[0m katana+httpx: no alive URLs"
                                     )
                                 print()
-                            except subprocess.TimeoutExpired:
-                                proc.kill()
-                                proc.wait()
-                                print(
-                                    f"\033[93m[!]\033[0m katana-httpx: timed out\n"
-                                )
                             except Exception:
                                 pass
                 else:

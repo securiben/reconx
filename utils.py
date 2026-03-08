@@ -43,6 +43,39 @@ def routed_path(output_dir: str, filename: str) -> str:
     return os.path.join(subdir, filename)
 
 
+def sanitize_hostname(value: str, domain: Optional[str] = None) -> Optional[str]:
+    """Extract and normalize a valid hostname from noisy source data."""
+    if not value:
+        return None
+
+    text = str(value).strip().lower().rstrip('.')
+    if not text:
+        return None
+
+    text = text.replace("dns:", " ")
+    text = text.replace("\r", " ").replace("\n", " ")
+
+    if domain:
+        domain = domain.lower().strip().rstrip('.')
+        pattern = re.compile(
+            rf"([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.{re.escape(domain)}|{re.escape(domain)})"
+        )
+        matches = pattern.findall(text)
+        if matches:
+            candidate = matches[-1]
+            return candidate[2:] if candidate.startswith("*.") else candidate
+
+    generic = re.findall(
+        r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+",
+        text,
+    )
+    if not generic:
+        return None
+
+    candidate = generic[-1]
+    return candidate[2:] if candidate.startswith("*.") else candidate
+
+
 # ─── DNS Utilities ────────────────────────────────────────────────────────────
 
 def resolve_cname(hostname: str, timeout: int = 5) -> List[str]:

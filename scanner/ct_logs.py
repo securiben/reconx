@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from ..models import CTEntry
 from ..config import ScannerConfig
+from ..utils import sanitize_hostname
 
 try:
     import requests
@@ -44,7 +45,7 @@ class CTLogScanner:
                         name = item.get("name_value", "")
                         # Handle wildcard and multi-line entries
                         for hostname in name.split("\n"):
-                            hostname = hostname.strip().lstrip("*.")
+                            hostname = sanitize_hostname(hostname, domain)
                             if hostname and hostname.endswith(domain):
                                 subdomains.add(hostname)
                                 entry = CTEntry(
