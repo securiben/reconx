@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from collections import Counter, defaultdict
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── Severity Mapping ────────────────────────────────────────────────────────
@@ -301,7 +302,7 @@ class NucleiScanner:
              output_dir: str = ".") -> List[NucleiResult]:
         """
         Run nuclei against alive subdomains.
-        Command: cat alive.txt | nuclei -s critical,high,medium,low -o nuclei_results.txt -no-color
+        Command: cat alive.txt | nuclei -s critical,high,medium,low -o nuclei_results.txt
 
         Args:
             alive_hostnames: List of alive subdomain hostnames / URLs.
@@ -335,7 +336,7 @@ class NucleiScanner:
 
         # Plain-text output in the domain results folder
         os.makedirs(output_dir, exist_ok=True)
-        txt_output = os.path.join(output_dir, "nuclei_results.txt")
+        txt_output = routed_path(output_dir, "nuclei_results.txt")
 
         try:
             with open(input_file, "w", encoding="utf-8") as f:
@@ -355,7 +356,7 @@ class NucleiScanner:
                 "-sa",                     # scan all IPs per host
                 "-as",                     # auto-scan based on wappalyzer
                 "-ue", "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
-                "-s", "critical,high,low,medium,info",
+                "-s", "critical,high,medium,low",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
@@ -424,10 +425,13 @@ class NucleiScanner:
                                 sev = m.group(3).lower()
                                 url = m.group(4)
                                 color = sev_colors.get(sev, "\033[37m")
+                                # Pad severity tag to align template names
+                                sev_tag = f"[{sev}]"
+                                sev_padded = sev_tag.ljust(10)
                                 # Clear status line, print finding, redraw status
                                 sys.stdout.write(f"\r\033[K")
                                 sys.stdout.write(
-                                    f"    {color}[{sev}]\033[0m "
+                                    f"    {color}{sev_padded}\033[0m "
                                     f"\033[97m{tmpl}\033[0m → "
                                     f"\033[96m{url}\033[0m\n"
                                 )

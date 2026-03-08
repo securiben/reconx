@@ -30,6 +30,7 @@ from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── SSH Ports ────────────────────────────────────────────────────────────────
@@ -475,7 +476,7 @@ class SSHLoginScanner:
         # Save per-host raw output
         if output_dir and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
-            out_file = os.path.join(output_dir, f"ssh_login_{safe_ip}_{port}.txt")
+            out_file = routed_path(output_dir, f"ssh_login_{safe_ip}_{port}.txt")
             try:
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(f"# Metasploit SSH login: {ip}:{port}\n")
@@ -678,7 +679,7 @@ class SSHLoginScanner:
                 all_creds.append(cred)
 
         if all_creds:
-            cred_file = os.path.join(output_dir, "ssh_credentials.txt")
+            cred_file = routed_path(output_dir, "ssh_credentials.txt")
             try:
                 with open(cred_file, "w", encoding="utf-8") as f:
                     f.write("# Metasploit SSH Login — Valid Credentials\n")
@@ -693,7 +694,7 @@ class SSHLoginScanner:
                 pass
 
         # Full summary JSON
-        summary_file = os.path.join(output_dir, "ssh_login_summary.json")
+        summary_file = routed_path(output_dir, "ssh_login_summary.json")
         try:
             summary = {
                 "stats": self.stats.to_dict(),

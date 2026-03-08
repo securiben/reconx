@@ -23,6 +23,7 @@ from collections import defaultdict
 import re
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── Data Models ──────────────────────────────────────────────────────────────
@@ -321,7 +322,7 @@ class Enum4linuxScanner:
             # Save raw output to file
             if output_dir and output.strip():
                 safe_ip = ip.replace(".", "_").replace(":", "_")
-                out_file = os.path.join(output_dir, f"enum4linux_{safe_ip}.txt")
+                out_file = routed_path(output_dir, f"enum4linux_{safe_ip}.txt")
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(f"# enum4linux -a {ip}\n")
                     f.write(f"# Scan time: {time.time() - host_start:.1f}s\n\n")

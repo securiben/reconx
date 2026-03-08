@@ -14,6 +14,11 @@ from .censys_source import CensysSource
 from .sectrails_source import SecurityTrailsSource
 from .urlscan_source import URLScanSource
 from .vt_siblings import VTSiblingsSource
+from .chaos_source import ChaosSource
+from .commoncrawl_source import CommonCrawlSource
+from .fofa_source import FOFASource
+from .zoomeye_source import ZoomEyeSource
+from .asn_source import ASNExpansionSource
 
 __all__ = [
     "AtlasSource",
@@ -27,4 +32,9 @@ __all__ = [
     "SecurityTrailsSource",
     "URLScanSource",
     "VTSiblingsSource",
+    "ChaosSource",
+    "CommonCrawlSource",
+    "FOFASource",
+    "ZoomEyeSource",
+    "ASNExpansionSource",
 ]

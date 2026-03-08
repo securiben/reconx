@@ -30,6 +30,7 @@ from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── WordPress detection keywords ────────────────────────────────────────────
@@ -490,7 +491,7 @@ class WPScanner:
         result = WPScanHostResult(url=url)
         target_start = _time.time()
 
-        txt_output = os.path.join(output_dir, "wpscan_summary.txt")
+        txt_output = routed_path(output_dir, "wpscan_summary.txt")
 
         # One-liner (shell=True so spaces after commas work like manual):
         #   wpscan --url <URL> --api-token <TOKEN>

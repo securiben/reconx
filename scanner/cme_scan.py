@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── Port to CME protocol mapping ───────────────────────────────────────────
@@ -351,7 +352,7 @@ class CMEScanner:
 
             # Save output to file only when there are actual results
             if output_dir and result.host_results:
-                out_file = os.path.join(output_dir, f"cme_{protocol}.txt")
+                out_file = routed_path(output_dir, f"cme_{protocol}.txt")
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(output)
 

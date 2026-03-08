@@ -20,7 +20,7 @@ class TorrentSource(BaseSource):
     Torrent data source - Wayback Machine CDX.
     Discovers subdomains from Internet Archive's CDX URL index.
     """
-    SOURCE_DESC = "querying RapidDNS passive DNS"
+    SOURCE_DESC = "querying Wayback Machine CDX index"
 
     def fetch(self, domain: str) -> List[str]:
         """Fetch subdomains from Wayback Machine CDX API."""

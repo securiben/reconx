@@ -19,9 +19,9 @@ A high-performance CLI reconnaissance tool that accepts **domains, IP addresses,
 
 | Category | Details |
 |----------|---------|
-| **Multi-Source Enumeration** | 11 data sources — Atlas (crt.sh), Sphinx (Certspotter), Oracle (AlienVault OTX), Radar (HackerTarget), Torrent (Wayback Machine), Venom (VT + ThreatMiner + Anubis + RapidDNS), VirusTotal (VT v3 subdomains), Shodan, Censys, SecurityTrails, URLScan.io |
+| **Multi-Source Enumeration** | 11 data sources — Crt.sh (Certificate Transparency), Sphinx (Certspotter), Oracle (AlienVault OTX), Radar (HackerTarget), Torrent (Wayback Machine), Venom (VT + ThreatMiner + Anubis + RapidDNS), VirusTotal (VT v3 subdomains), Shodan, Censys, SecurityTrails, URLScan.io |
 | **HTTPX HTTP Probing** | ProjectDiscovery httpx integration — status codes, titles, technologies (Wappalyzer), favicon hashes, CDN detection, server headers, FQDNs from response bodies |
-| **Nmap Port Scanning** | Nmap integration — `-sCV --top-ports 1000 -T3` service/version detection on all discovered IP addresses with `.nmap`, `.xml`, `.gnmap` output |
+| **Nmap Port Scanning** | Nmap integration — `-sCV --top-ports 1000 -T3` service/version detection on all discovered IP addresses with `.txt` output (tcpwrapped/closed ports auto-filtered) |
 | **Enum4linux Enumeration** | enum4linux integration — `-a` full SMB/Windows enumeration (shares, users, groups, password policy, null sessions) on all discovered IPs after nmap |
 | **CrackMapExec Protocol Enum** | CME/NetExec integration — protocol-based enumeration (SMB, SSH, RDP, WinRM, MSSQL, LDAP, etc.) grouped by open ports from nmap |
 | **Multi-Target Input** | Accepts domain names, single IPs (`10.10.0.5`), CIDR ranges (`10.10.0.0/24`), or target files (`targets.txt`) — IPs/CIDRs skip enumeration and go straight to nmap + enum4linux + CME |
@@ -31,8 +31,11 @@ A high-performance CLI reconnaissance tool that accepts **domains, IP addresses,
 | **Tech Stack Profiling** | 15+ technology signatures — Spring Boot Actuator, Tomcat, Jenkins, Grafana, WordPress, Laravel, Django, etc. with CRITICAL/High/Medium/Low/Info severity |
 | **Pattern Collapse** | Groups repetitive subdomains into wildcard patterns (e.g., `app-*.example.com`) |
 | **Concurrent Execution** | ThreadPoolExecutor with configurable worker count (default: 50) — optimized timeouts for fast enumeration |
-| **Structured Export** | JSON export + 25+ per-domain output files (alive hosts, IPs, tech, takeover, httpx data, nmap results, enum4linux users/shares, CME protocols, etc.) |
+| **Structured Export** | JSON export + 25+ per-domain output files (alive hosts, IPs, tech, takeover, httpx data, nmap results, enum4linux users/shares, CME protocols, etc.) — scanner outputs saved only when findings exist |
 | **Rich Terminal Output** | ANSI-colored box-drawn summary matching professional security tooling |
+| **Resume from Checkpoint** | Interrupted scans can be resumed from the last completed phase — progress is saved automatically via pickle checkpoints |
+| **Nuclei Vulnerability Scan** | ProjectDiscovery Nuclei integration — severity-aligned output, Ctrl+C stops nuclei cleanly without skip prompt |
+| **Katana + HTTPX Crawling** | ProjectDiscovery Katana crawling piped through httpx with `-sc -cl -title -location` flags for enriched output |
 
 ## Quick Start
 
@@ -160,9 +163,7 @@ Each scan creates a domain-specific folder with categorized output files:
 ├── httpx_servers.txt          # Server header distribution
 ├── httpx_titles.txt           # HTTP page titles
 ├── httpx_redirects.txt        # Redirect chains
-├── nmap_scan.nmap             # Nmap normal output
-├── nmap_scan.xml              # Nmap XML output
-├── nmap_scan.gnmap            # Nmap greppable output
+├── nmap_scan.txt              # Nmap scan output (tcpwrapped/closed filtered)
 ├── nmap_summary.txt           # Nmap human-readable summary
 ├── nmap_summary.json          # Nmap structured JSON results
 ├── enum4linux_summary.txt     # Enum4linux human-readable summary
@@ -191,7 +192,7 @@ reconx/
     ├── engine.py                # Multi-phase pipeline orchestrator + direct-target mode
     ├── sources/                 # 11 data source modules
     │   ├── base.py              # Abstract base class
-    │   ├── atlas.py             # crt.sh Certificate Transparency
+    │   ├── atlas.py             # Crt.sh Certificate Transparency
     │   ├── sphinx.py            # Certspotter CT logs
     │   ├── oracle.py            # AlienVault OTX passive DNS
     │   ├── radar.py             # HackerTarget hostsearch
@@ -312,7 +313,7 @@ When the input is an IP address, CIDR range, or a file containing only IPs/CIDRs
 │     Protocols: smb(8), ssh(5), rdp(3), mssql(2)
 │     !! 3 host(s) SMB signing disabled (relay targets)
 │ Time: 229.5s | Total: 790 unique | TakeoverDB: 11 services | TechDB: 15 signatures
-│ Sources: Atlas 191 | Sphinx 40 | Oracle 7 | Radar 50 | Torrent 40 | Venom 85 | ...
+│ Sources: Crt.sh 191 | Sphinx 40 | Oracle 7 | Radar 50 | Torrent 40 | Venom 85 | ...
 └──────────────────────────────────────────────────────────────────────────────────
 ```
 

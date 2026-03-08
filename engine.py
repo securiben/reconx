@@ -7,6 +7,7 @@ Manages concurrent execution and result aggregation.
 import os
 import sys
 import time
+import pickle
 import random
 import signal
 import subprocess
@@ -26,6 +27,8 @@ from .sources import (
     RadarSource, TorrentSource, VenomSource,
     ShodanSource, CensysSource, SecurityTrailsSource, URLScanSource,
     VTSiblingsSource,
+    ChaosSource, CommonCrawlSource, FOFASource, ZoomEyeSource,
+    ASNExpansionSource,
 )
 from .sources.base import BaseSource
 from .scanner import (
@@ -33,7 +36,7 @@ from .scanner import (
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
     MSFSMBBruteScanner, RDPBruteScanner, VNCBruteScanner, SMBBruteScanner, WPScanner, SMBClientScanner,
-    KatanaScanner, SNMPLoginScanner, SNMPEnumScanner,
+    KatanaScanner, ChameleonScanner, DirsearchScanner, SNMPLoginScanner, SNMPEnumScanner,
     SSHLoginScanner,
     MongoDBLoginScanner,
     FTPLoginScanner,
@@ -64,7 +67,7 @@ class ReconEngine:
         self.result = ScanResult(target_domain=config.target_domain)
         self.renderer = TerminalRenderer(redact_subdomains=False)
         self.exporter = JSONExporter(pretty=True)
-        self.file_exporter = FileExporter(base_dir=".")
+        self.file_exporter = FileExporter(base_dir="targets")
 
         # Initialize sources
         self.sources: Dict[str, BaseSource] = {}
@@ -87,6 +90,8 @@ class ReconEngine:
         self.wpscan_scanner = WPScanner(config.scanner)
         self.smbclient_scanner = SMBClientScanner(config.scanner)
         self.katana_scanner = KatanaScanner(config.scanner)
+        self.chameleon_scanner = ChameleonScanner(config.scanner)
+        self.dirsearch_scanner = DirsearchScanner(config.scanner)
         self.snmp_login_scanner = SNMPLoginScanner(config.scanner)
         self.snmp_enum_scanner = SNMPEnumScanner(config.scanner)
         self.ssh_login_scanner = SSHLoginScanner(config.scanner)
@@ -96,6 +101,9 @@ class ReconEngine:
         # Ctrl+C skip state
         self._skip_requested = False
         self._current_phase = ""
+
+        # Resume checkpoint state
+        self._completed_phases: set = set()
 
     @staticmethod
     def _prompt_skip(phase_name: str) -> bool:
@@ -183,6 +191,11 @@ class ReconEngine:
             "sectrails": SecurityTrailsSource,
             "urlscan": URLScanSource,
             "vt_siblings": VTSiblingsSource,
+            "chaos": ChaosSource,
+            "commoncrawl": CommonCrawlSource,
+            "fofa": FOFASource,
+            "zoomeye": ZoomEyeSource,
+            "asn": ASNExpansionSource,
         }
 
         for key, cls in source_classes.items():
@@ -197,6 +210,67 @@ class ReconEngine:
         domain_dir = os.path.join(self.file_exporter.base_dir, domain)
         os.makedirs(domain_dir, exist_ok=True)
         return domain_dir
+
+    def _target_output_dir(self, target_name: str) -> str:
+        """Create and return the output directory for a target label."""
+        target_dir = os.path.join(self.file_exporter.base_dir, target_name)
+        os.makedirs(target_dir, exist_ok=True)
+        return target_dir
+
+    # ─── Resume / checkpoint helpers ───────────────────────────────────────
+
+    def _checkpoint_dir(self) -> str:
+        """Return the output directory used for checkpoint files."""
+        if self.config.input_mode == "direct":
+            label = self.config.target_domain.replace("/", "_")
+            return self._target_output_dir(label)
+        return self._target_output_dir(self.config.target_domain)
+
+    def _phase_done(self, phase: str) -> bool:
+        """Check if a phase was already completed in a previous run."""
+        return phase in self._completed_phases
+
+    def _save_checkpoint(self):
+        """Persist current progress so the scan can be resumed later."""
+        try:
+            d = self._checkpoint_dir()
+            os.makedirs(d, exist_ok=True)
+            cp = os.path.join(d, ".reconx_checkpoint.pkl")
+            with open(cp, "wb") as f:
+                pickle.dump({
+                    "completed_phases": sorted(self._completed_phases),
+                    "result": self.result,
+                }, f)
+        except Exception:
+            pass
+
+    def _load_checkpoint(self) -> bool:
+        """
+        Load a previous checkpoint if available.
+        Returns True if a checkpoint was loaded successfully.
+        """
+        d = self._checkpoint_dir()
+        cp = os.path.join(d, ".reconx_checkpoint.pkl")
+        if not os.path.isfile(cp):
+            return False
+        try:
+            with open(cp, "rb") as f:
+                data = pickle.load(f)
+            self._completed_phases = set(data.get("completed_phases", []))
+            self.result = data["result"]
+            return True
+        except Exception:
+            return False
+
+    def _clear_checkpoint(self):
+        """Remove the checkpoint file after a successful full scan."""
+        try:
+            d = self._checkpoint_dir()
+            cp = os.path.join(d, ".reconx_checkpoint.pkl")
+            if os.path.isfile(cp):
+                os.remove(cp)
+        except Exception:
+            pass
 
     def _save_phase(self, phase: str):
         """
@@ -251,6 +325,10 @@ class ReconEngine:
                 fe._export_smbclient(d, r)
             elif phase == "katana":
                 fe._export_katana(d, r)
+            elif phase == "chameleon":
+                fe._export_chameleon(d, r)
+            elif phase == "dirsearch":
+                fe._export_dirsearch(d, r)
             elif phase == "snmp_login":
                 fe._export_snmp_login(d, r)
             elif phase == "snmp_enum":
@@ -263,6 +341,8 @@ class ReconEngine:
                 fe._export_ftp_login(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
+            self._completed_phases.add(phase)
+            self._save_checkpoint()
         except Exception:
             pass  # Don't let a save failure crash the pipeline
 
@@ -278,121 +358,110 @@ class ReconEngine:
         if self.config.input_mode == "direct":
             return self._run_direct(start_time)
 
-        # ── Phase 1: Fetch subdomains from all sources concurrently ────────
-        all_subdomains_by_source: Dict[str, List[str]] = {}
-
-        # Print source start messages
-        max_name_len = max(
-            max((len(s.name) for s in self.sources.values()), default=7),
-            len("crt.sh"),
-        )
-        source_order = list(self.sources.keys())
-        for key in source_order:
-            source = self.sources[key]
-            desc = getattr(source, 'SOURCE_DESC', source.config.description or f'querying {source.name}')
-            print(f"\033[36m[>]\033[0m {source.name + ':':<{max_name_len + 1}} {desc} ...")
-
-        with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
-            futures = {
-                executor.submit(source.run, domain, False): key
-                for key, source in self.sources.items()
-            }
-            for future in as_completed(futures):
-                key = futures[future]
-                try:
-                    subs = future.result()
-                    all_subdomains_by_source[key] = subs
-                except Exception:
-                    all_subdomains_by_source[key] = []
-
-        # Print results in the same order as queries
-        for key in source_order:
-            source = self.sources[key]
-            count = len(all_subdomains_by_source.get(key, []))
-            elapsed_ms = int(source.elapsed * 1000)
+        # ── Resume from checkpoint if available ────────────────────────────
+        resumed = self._load_checkpoint()
+        if resumed:
+            phases_done = len(self._completed_phases)
             print(
-                f"\033[92m[+]\033[0m {source.name + ':':<{max_name_len + 1}} "
-                f"\033[92m{count:>4}\033[0m subdomains "
-                f"\033[90m({elapsed_ms}ms)\033[0m"
+                f"\033[92m[+]\033[0m Resuming from checkpoint "
+                f"(\033[92m{phases_done}\033[0m phases completed)\n"
             )
 
-        # ── Phase 2: Deduplicate and aggregate ─────────────────────────────
-        unique_hostnames = set()
-        for key, subs in all_subdomains_by_source.items():
-            for sub in subs:
-                unique_hostnames.add(sub.lower().strip())
-            self.result.source_stats[key] = SourceStats(
-                name=self.sources[key].name,
-                count=len(subs),
-                subdomains=subs,
+        # ── Phases 1-4: Subdomain enum + CT + Infrastructure ───────────────
+        if self._phase_done("infrastructure"):
+            subdomain_objects = self.result.subdomains
+        else:
+            # ── Phase 1: Fetch subdomains from all sources concurrently ────
+            all_subdomains_by_source: Dict[str, List[str]] = {}
+
+            # Print source start messages
+            max_name_len = max(
+                (len(s.name) for s in self.sources.values()), default=7,
             )
+            source_order = list(self.sources.keys())
+            for key in source_order:
+                source = self.sources[key]
+                desc = getattr(source, 'SOURCE_DESC', source.config.description or f'querying {source.name}')
+                print(f"\033[36m[>]\033[0m {source.name + ':':<{max_name_len + 1}} {desc} ...")
 
-        # ── Phase 3: CT Log triage (before dedup so CT subs are included) ──
-        print(f"\033[36m[>]\033[0m {'crt.sh:':<{max_name_len + 1}} querying CT log triage ...")
-        ct_start = time.time()
-        ct_entries, ct_subs = self.ct_scanner.scan(domain)
-        ct_elapsed_ms = int((time.time() - ct_start) * 1000)
-        self.result.ct_entries = ct_entries
-        stale, aged, no_date = self.ct_scanner.triage(ct_entries)
-        self.result.ct_stale = stale
-        self.result.ct_aged = aged
-        self.result.ct_no_date = no_date
+            with ThreadPoolExecutor(max_workers=len(self.sources)) as executor:
+                futures = {
+                    executor.submit(source.run, domain, False): key
+                    for key, source in self.sources.items()
+                }
+                for future in as_completed(futures):
+                    key = futures[future]
+                    try:
+                        subs = future.result()
+                        all_subdomains_by_source[key] = subs
+                    except Exception:
+                        all_subdomains_by_source[key] = []
 
-        # Merge CT-discovered subdomains into the main set
-        ct_new_count = 0
-        for sub_name in ct_subs:
-            normalized = sub_name.lower().strip()
-            if normalized not in unique_hostnames:
-                ct_new_count += 1
-            unique_hostnames.add(normalized)
+            # Print results in the same order as queries
+            for key in source_order:
+                source = self.sources[key]
+                count = len(all_subdomains_by_source.get(key, []))
+                elapsed_ms = int(source.elapsed * 1000)
+                print(
+                    f"\033[92m[+]\033[0m {source.name + ':':<{max_name_len + 1}} "
+                    f"\033[92m{count:>4}\033[0m subdomains "
+                    f"\033[90m({elapsed_ms}ms)\033[0m"
+                )
 
-        # Record CT as a source
-        self.result.source_stats["crt.sh"] = SourceStats(
-            name="crt.sh",
-            count=len(ct_subs),
-            subdomains=ct_subs,
-        )
-        print(
-            f"\033[92m[+]\033[0m {'crt.sh:':<{max_name_len + 1}} "
-            f"\033[92m{len(ct_subs):>4}\033[0m subdomains "
-            f"\033[90m({ct_elapsed_ms}ms)\033[0m"
-        )
+            # ── Phase 2: Deduplicate and aggregate ─────────────────────────
+            unique_hostnames = set()
+            for key, subs in all_subdomains_by_source.items():
+                for sub in subs:
+                    unique_hostnames.add(sub.lower().strip())
+                self.result.source_stats[key] = SourceStats(
+                    name=self.sources[key].name,
+                    count=len(subs),
+                    subdomains=subs,
+                )
 
-        # Print takeover candidates warning if any
-        takeover_hint = len([h for h in unique_hostnames if any(
-            kw in h for kw in ['azure', 'cloudapp', 'trafficmanager', 'azurewebsites',
-                               'herokuapp', 's3.amazonaws', 'github.io', 'shopify',
-                               'fastly', 'pantheon', 'ghost', 'surge']
-        )])
-        if takeover_hint > 0:
-            print(f"\n\033[93m[!]\033[0m \033[93m\u26A0{takeover_hint} potential subdomain takeover candidate(s)!\033[0m")
+            # ── Phase 3: CT Log triage (using atlas/crt.sh source data) ────
+            ct_entries, ct_subs = self.ct_scanner.scan(domain)
+            self.result.ct_entries = ct_entries
+            stale, aged, no_date = self.ct_scanner.triage(ct_entries)
+            self.result.ct_stale = stale
+            self.result.ct_aged = aged
+            self.result.ct_no_date = no_date
 
-        print(f"\n\033[36m[>]\033[0m Beacon: HTTP probing {len(unique_hostnames)} subdomains ...")
+            # Print takeover candidates warning if any
+            takeover_hint = len([h for h in unique_hostnames if any(
+                kw in h for kw in ['azure', 'cloudapp', 'trafficmanager', 'azurewebsites',
+                                   'herokuapp', 's3.amazonaws', 'github.io', 'shopify',
+                                   'fastly', 'pantheon', 'ghost', 'surge']
+            )])
+            if takeover_hint > 0:
+                print(f"\n\033[93m[!]\033[0m \033[93m\u26A0{takeover_hint} potential subdomain takeover candidate(s)!\033[0m")
 
-        # Create Subdomain objects from ALL unique hostnames
-        subdomain_objects = []
-        for hostname in sorted(unique_hostnames):
-            sub = Subdomain(hostname=hostname)
-            # Check interesting
-            interesting, reason = is_interesting_subdomain(hostname)
-            sub.interesting = interesting
-            sub.interesting_reason = reason
-            subdomain_objects.append(sub)
+            print(f"\n\033[36m[>]\033[0m Beacon: HTTP probing {len(unique_hostnames)} subdomains ...")
 
-        self.result.subdomains = subdomain_objects
-        self.result.total_unique = len(unique_hostnames)
+            # Create Subdomain objects from ALL unique hostnames
+            subdomain_objects = []
+            for hostname in sorted(unique_hostnames):
+                sub = Subdomain(hostname=hostname)
+                # Check interesting
+                interesting, reason = is_interesting_subdomain(hostname)
+                sub.interesting = interesting
+                sub.interesting_reason = reason
+                subdomain_objects.append(sub)
 
-        # Live save: subdomains + CT
-        self._save_phase("subdomains")
-        self._save_phase("ct")
+            self.result.subdomains = subdomain_objects
+            self.result.total_unique = len(unique_hostnames)
 
-        # ── Phase 4: Infrastructure classification ─────────────────────────
-        self.result.infra = self.infra_scanner.scan(subdomain_objects)
-        self._save_phase("infrastructure")
+            # Live save: subdomains + CT
+            self._save_phase("subdomains")
+            self._save_phase("ct")
+
+            # ── Phase 4: Infrastructure classification ─────────────────────
+            self.result.infra = self.infra_scanner.scan(subdomain_objects)
+            self._save_phase("infrastructure")
 
         # ── Phase 5: HTTPX Probe ──────────────────────────────────────────
         httpx_start = time.time()
-        if self.httpx_probe.available:
+        if self.httpx_probe.available and not self._phase_done("httpx"):
             print(
                 f"\033[36m[>]\033[0m httpx: probing with "
                 f"\033[96m-sc -title -td -favicon -cdn -server\033[0m ..."
@@ -530,7 +599,7 @@ class ReconEngine:
         self._save_phase("flagged")
 
         # ── Phase 9: Nmap port & service scanning ──────────────────────────
-        if self.nmap_scanner.available:
+        if self.nmap_scanner.available and not self._phase_done("nmap"):
             # Collect all unique IP addresses from resolved subdomains
             all_ips = set()
             for sub in subdomain_objects:
@@ -539,7 +608,7 @@ class ReconEngine:
 
             if all_ips:
                 # Run nmap with output directed to the domain results folder
-                nmap_output_dir = os.path.join(".", domain)
+                nmap_output_dir = self._ensure_output_dir()
                 os.makedirs(nmap_output_dir, exist_ok=True)
                 nmap_results = self._safe_scan(
                     "nmap", self.nmap_scanner.scan,
@@ -552,6 +621,7 @@ class ReconEngine:
                     self.result.nmap_results = nmap_results
                     self.result.nmap_stats = nmap_stats.to_dict()
                     self.result.nmap_available = True
+                    self.result.nmap_scanned_ips = sorted(all_ips)
                     self._save_phase("nmap")
 
                     # Print nmap summary
@@ -599,7 +669,8 @@ class ReconEngine:
             )
 
         # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
-        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("enum4linux")):
             # Only scan IPs that have SMB/NetBIOS ports open
             smb_ports = {445, 139, 137, 138}
             enum_ips = set()
@@ -612,7 +683,7 @@ class ReconEngine:
                         enum_ips.add(ip)
                         break
             if enum_ips:
-                enum_output_dir = os.path.join(".", domain)
+                enum_output_dir = self._ensure_output_dir()
                 os.makedirs(enum_output_dir, exist_ok=True)
 
                 enum_results = self._safe_scan(
@@ -676,11 +747,12 @@ class ReconEngine:
             )
 
         # ── Phase 9a-2: SMBClient null session detection ─────────────────────
-        if self.smbclient_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.smbclient_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("smbclient")):
             from .scanner.smbclient_scan import SMBClientScanner as _SMBC
             smb_hosts = _SMBC.get_smb_hosts(self.result.nmap_results)
             if smb_hosts:
-                smb_output_dir = os.path.join(".", domain)
+                smb_output_dir = self._ensure_output_dir()
                 os.makedirs(smb_output_dir, exist_ok=True)
 
                 smb_results = self._safe_scan(
@@ -762,7 +834,7 @@ class ReconEngine:
 
         # ── Phase 9b-3: SMB brute-force (netexec / nxc) ───────────────────
         if self.smb_brute_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            smb_brute_output_dir = os.path.join(".", domain)
+            smb_brute_output_dir = self._ensure_output_dir()
             os.makedirs(smb_brute_output_dir, exist_ok=True)
 
             smb_brute_results = self._safe_scan(
@@ -869,8 +941,9 @@ class ReconEngine:
                 )
 
         # ── Phase 9b-2: VNC brute-force (msfconsole) ────────────────────────
-        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            vnc_output_dir = os.path.join(".", domain)
+        if (self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("vnc")):
+            vnc_output_dir = self._ensure_output_dir()
             os.makedirs(vnc_output_dir, exist_ok=True)
 
             vnc_results = self._safe_scan(
@@ -953,8 +1026,9 @@ class ReconEngine:
                 )
 
         # ── Phase 9b-3: SNMP login brute-force (msfconsole) ─────────────────
-        if self.snmp_login_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            snmp_output_dir = os.path.join(".", domain)
+        if (self.snmp_login_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("snmp_login")):
+            snmp_output_dir = self._ensure_output_dir()
             os.makedirs(snmp_output_dir, exist_ok=True)
 
             snmp_login_results = self._safe_scan(
@@ -1106,8 +1180,9 @@ class ReconEngine:
         # ── Phase 9b-2: SSH login brute-force (msfconsole) ──────────────────
         if (self.ssh_login_scanner.available
                 and self.result.nmap_available
-                and self.result.nmap_results):
-            ssh_output_dir = os.path.join(".", domain)
+                and self.result.nmap_results
+                and not self._phase_done("ssh_login")):
+            ssh_output_dir = self._ensure_output_dir()
             os.makedirs(ssh_output_dir, exist_ok=True)
 
             ssh_results = self._safe_scan(
@@ -1166,8 +1241,9 @@ class ReconEngine:
         # ── Phase 9b-3: MongoDB login/info/enum (msfconsole) ────────────────
         if (self.mongodb_login_scanner.available
                 and self.result.nmap_available
-                and self.result.nmap_results):
-            mongo_output_dir = os.path.join(".", domain)
+                and self.result.nmap_results
+                and not self._phase_done("mongodb_login")):
+            mongo_output_dir = self._ensure_output_dir()
             os.makedirs(mongo_output_dir, exist_ok=True)
 
             mongo_results = self._safe_scan(
@@ -1238,8 +1314,9 @@ class ReconEngine:
         # ── Phase 9b-4: FTP login brute-force (msfconsole) ──────────────────
         if (self.ftp_login_scanner.available
                 and self.result.nmap_available
-                and self.result.nmap_results):
-            ftp_output_dir = os.path.join(".", domain)
+                and self.result.nmap_results
+                and not self._phase_done("ftp_login")):
+            ftp_output_dir = self._ensure_output_dir()
             os.makedirs(ftp_output_dir, exist_ok=True)
 
             ftp_results = self._safe_scan(
@@ -1305,8 +1382,9 @@ class ReconEngine:
                 )
 
         # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
-        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            rdp_output_dir = os.path.join(".", domain)
+        if (self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("rdp")):
+            rdp_output_dir = self._ensure_output_dir()
             os.makedirs(rdp_output_dir, exist_ok=True)
 
             rdp_results = self._safe_scan(
@@ -1371,11 +1449,12 @@ class ReconEngine:
         # ── Phase 9c-2: MSF SMB brute-force (after enum4linux finds users) ──
         if (self.msf_scanner.available
                 and self.result.enum4linux_available
-                and self.result.enum4linux_results):
+                and self.result.enum4linux_results
+                and not self._phase_done("msf")):
             # Get users discovered by enum4linux
             enum_users = self.enum4linux_scanner.get_all_users()
             if enum_users:
-                msf_output_dir = os.path.join(".", domain)
+                msf_output_dir = self._ensure_output_dir()
                 os.makedirs(msf_output_dir, exist_ok=True)
 
                 msf_results = self._safe_scan(
@@ -1438,11 +1517,12 @@ class ReconEngine:
             )
 
         # ── Phase 9c: CrackMapExec protocol enumeration ─────────────────────
-        if self.cme_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.cme_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("cme")):
             print(
                 f"\033[36m[>]\033[0m CME: grouping hosts by protocol from nmap results ..."
             )
-            cme_output_dir = os.path.join(".", domain)
+            cme_output_dir = self._ensure_output_dir()
             os.makedirs(cme_output_dir, exist_ok=True)
 
             cme_results = self._safe_scan(
@@ -1499,7 +1579,7 @@ class ReconEngine:
             )
 
         # ── Phase 5d: Nuclei vulnerability scanning (last) ───────────────
-        if self.nuclei_scanner.available:
+        if self.nuclei_scanner.available and not self._phase_done("nuclei"):
             # Collect alive hostnames for nuclei
             nuclei_targets = [s.hostname for s in subdomain_objects if s.is_alive]
             if not nuclei_targets:
@@ -1514,13 +1594,16 @@ class ReconEngine:
                         existing.add(ip)
 
             if nuclei_targets:
-                nuclei_output_dir = os.path.join(".", domain)
+                nuclei_output_dir = self._ensure_output_dir()
                 os.makedirs(nuclei_output_dir, exist_ok=True)
 
-                nuclei_results = self._safe_scan(
-                    "nuclei", self.nuclei_scanner.scan,
-                    nuclei_targets, output_dir=nuclei_output_dir,
-                )
+                try:
+                    nuclei_results = self.nuclei_scanner.scan(
+                        nuclei_targets, output_dir=nuclei_output_dir,
+                    )
+                except KeyboardInterrupt:
+                    nuclei_results = None
+                    print("\n\033[93m[!]\033[0m nuclei: interrupted by user\n")
 
                 if nuclei_results is not None:
                     nuclei_stats = self.nuclei_scanner.stats
@@ -1569,14 +1652,15 @@ class ReconEngine:
             )
 
         # ── Phase 5c: WPScan WordPress scanning ──────────────────────────
-        if self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results:
+        if (self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results
+                and not self._phase_done("wpscan")):
             from .scanner.wpscan import WPScanner as _WPS
 
             # Detect WordPress targets from nuclei results
             wp_targets = _WPS.detect_wordpress_targets(self.result.nuclei_results)
 
             if wp_targets:
-                wpscan_output_dir = os.path.join(".", domain)
+                wpscan_output_dir = self._ensure_output_dir()
                 os.makedirs(wpscan_output_dir, exist_ok=True)
 
                 wpscan_results = self._safe_scan(
@@ -1623,7 +1707,7 @@ class ReconEngine:
             )
 
         # ── Katana web crawling (domain mode) ─────────────────────────────
-        if self.katana_scanner.available:
+        if self.katana_scanner.available and not self._phase_done("katana"):
             from .scanner.katana_scan import KatanaScanner as _KAT
             katana_targets: set = set()
 
@@ -1643,7 +1727,7 @@ class ReconEngine:
                         katana_targets.add(f"{scheme}://{sub.hostname}")
 
             if katana_targets:
-                katana_output_dir = os.path.join(".", domain)
+                katana_output_dir = self._ensure_output_dir()
                 os.makedirs(katana_output_dir, exist_ok=True)
 
                 katana_results = self._safe_scan(
@@ -1681,15 +1765,15 @@ class ReconEngine:
 
                     # Run httpx on katana URLs for enriched output
                     if total_urls > 0 and self.httpx_probe.available:
-                        katana_urls_file = os.path.join(katana_output_dir, "katana_urls.txt")
+                        katana_urls_file = os.path.join(katana_output_dir, "txt", "katana_urls.txt")
                         if os.path.isfile(katana_urls_file):
-                            katana_httpx_file = os.path.join(katana_output_dir, "katana_httpx.txt")
+                            katana_httpx_file = os.path.join(katana_output_dir, "txt", "katana_httpx.txt")
                             try:
                                 httpx_cmd = [
                                     self.httpx_probe.httpx_path,
                                     "-l", katana_urls_file,
-                                    "-sc", "-title", "-location",
-                                    "-silent", "-no-color",
+                                    "-sc", "-cl", "-title", "-location",
+                                    "-silent",
                                     "-follow-redirects",
                                     "-o", katana_httpx_file,
                                 ]
@@ -1739,6 +1823,114 @@ class ReconEngine:
                 f"\033[90m    Install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
             )
 
+        # ── Chameleon web content discovery (domain mode) ─────────────────
+        if self.chameleon_scanner.available and not self._phase_done("chameleon"):
+            from .scanner.katana_scan import KatanaScanner as _KAT_C
+            chameleon_targets: set = set()
+
+            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
+                chameleon_targets |= _KAT_C.get_http_targets_from_httpx(self.result.httpx_results)
+            if self.result.nmap_available and self.result.nmap_results:
+                chameleon_targets |= _KAT_C.get_http_targets_from_nmap(self.result.nmap_results)
+            if hasattr(self.result, 'subdomains') and self.result.subdomains:
+                for sub in self.result.subdomains:
+                    if sub.is_alive:
+                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
+                        chameleon_targets.add(f"{scheme}://{sub.hostname}")
+
+            if chameleon_targets:
+                chameleon_output_dir = self._ensure_output_dir()
+                os.makedirs(chameleon_output_dir, exist_ok=True)
+
+                chameleon_results = self._safe_scan(
+                    "chameleon", self.chameleon_scanner.scan,
+                    sorted(chameleon_targets), output_dir=chameleon_output_dir,
+                )
+
+                if chameleon_results is not None:
+                    chameleon_stats = self.chameleon_scanner.stats
+                    self.result.chameleon_results = chameleon_results
+                    self.result.chameleon_stats = chameleon_stats.to_dict()
+                    self.result.chameleon_available = True
+                    self._save_phase("chameleon")
+
+                    total = chameleon_stats.total_findings
+                    print(
+                        f"\033[92m[+]\033[0m chameleon: "
+                        f"\033[92m{total} finding(s)\033[0m "
+                        f"from \033[96m{chameleon_stats.targets_scanned}\033[0m target(s) "
+                        f"\033[90m({chameleon_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m chameleon: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[\u00b7]\033[0m chameleon: no HTTP/HTTPS targets found\n"
+                )
+        elif not self.chameleon_scanner.available:
+            print(
+                f"\033[93m[!]\033[0m chameleon not found \u2013 skipping content discovery"
+            )
+            print(
+                f"\033[90m    Install: curl -sL https://raw.githubusercontent.com/iustin24/chameleon/master/install.sh | bash\033[0m\n"
+            )
+
+        # ── Dirsearch directory brute-force (domain mode) ────────────────
+        if self.dirsearch_scanner.available and not self._phase_done("dirsearch"):
+            from .scanner.katana_scan import KatanaScanner as _KAT_D
+            dirsearch_targets: set = set()
+
+            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
+                dirsearch_targets |= _KAT_D.get_http_targets_from_httpx(self.result.httpx_results)
+            if self.result.nmap_available and self.result.nmap_results:
+                dirsearch_targets |= _KAT_D.get_http_targets_from_nmap(self.result.nmap_results)
+            if hasattr(self.result, 'subdomains') and self.result.subdomains:
+                for sub in self.result.subdomains:
+                    if sub.is_alive:
+                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
+                        dirsearch_targets.add(f"{scheme}://{sub.hostname}")
+
+            if dirsearch_targets:
+                dirsearch_output_dir = self._ensure_output_dir()
+                os.makedirs(dirsearch_output_dir, exist_ok=True)
+
+                dirsearch_results = self._safe_scan(
+                    "dirsearch", self.dirsearch_scanner.scan,
+                    sorted(dirsearch_targets), output_dir=dirsearch_output_dir,
+                )
+
+                if dirsearch_results is not None:
+                    dirsearch_stats = self.dirsearch_scanner.stats
+                    self.result.dirsearch_results = dirsearch_results
+                    self.result.dirsearch_stats = dirsearch_stats.to_dict()
+                    self.result.dirsearch_available = True
+                    self._save_phase("dirsearch")
+
+                    total = dirsearch_stats.total_findings
+                    print(
+                        f"\033[92m[+]\033[0m dirsearch: "
+                        f"\033[92m{total} finding(s)\033[0m "
+                        f"from \033[96m{dirsearch_stats.targets_scanned}\033[0m target(s) "
+                        f"\033[90m({dirsearch_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m dirsearch: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[\u00b7]\033[0m dirsearch: no HTTP/HTTPS targets found\n"
+                )
+        elif not self.dirsearch_scanner.available:
+            print(
+                f"\033[93m[!]\033[0m dirsearch not found \u2013 skipping directory brute-force"
+            )
+            print(
+                f"\033[90m    Install: pip3 install dirsearch | or: apt install dirsearch\033[0m\n"
+            )
+
         # ── Phase 10: Statistics ───────────────────────────────────────────
         self.result.flagged_interesting = sum(
             1 for s in subdomain_objects if s.interesting
@@ -1749,6 +1941,7 @@ class ReconEngine:
 
         # ── Phase 11: Render & Export ──────────────────────────────────────
         self._output()
+        self._clear_checkpoint()
 
         return self.result
 
@@ -1769,6 +1962,15 @@ class ReconEngine:
         self.result.target_domain = label
         self.result.total_unique = len(targets)
 
+        # ── Resume from checkpoint if available ────────────────────────────
+        resumed = self._load_checkpoint()
+        if resumed:
+            phases_done = len(self._completed_phases)
+            print(
+                f"\033[92m[+]\033[0m Resuming from checkpoint "
+                f"(\033[92m{phases_done}\033[0m phases completed)\n"
+            )
+
         print(
             f"\033[1;97m[»]\033[0m Direct mode: \033[1;96m{len(targets)}\033[0m "
             f"target(s) from \033[96m{label}\033[0m"
@@ -1779,11 +1981,11 @@ class ReconEngine:
         )
 
         # ── Nmap port & service scanning ───────────────────────────────────
-        if self.nmap_scanner.available:
+        if self.nmap_scanner.available and not self._phase_done("nmap"):
             all_ips = set(targets)
 
             if all_ips:
-                nmap_output_dir = os.path.join(".", label.replace("/", "_"))
+                nmap_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(nmap_output_dir, exist_ok=True)
                 nmap_results = self._safe_scan(
                     "nmap", self.nmap_scanner.scan,
@@ -1796,6 +1998,7 @@ class ReconEngine:
                     self.result.nmap_results = nmap_results
                     self.result.nmap_stats = nmap_stats.to_dict()
                     self.result.nmap_available = True
+                    self.result.nmap_scanned_ips = sorted(all_ips)
                     self._save_phase("nmap")
 
                     if nmap_stats.hosts_up > 0:
@@ -1838,7 +2041,8 @@ class ReconEngine:
             )
 
         # ── Enum4linux SMB/Windows enumeration (direct mode) ───────────────
-        if self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("enum4linux")):
             # Only scan IPs that have SMB/NetBIOS ports open
             smb_ports = {445, 139, 137, 138}
             enum_ips = set()
@@ -1851,7 +2055,7 @@ class ReconEngine:
                         enum_ips.add(ip)
                         break
             if enum_ips:
-                enum_output_dir = os.path.join(".", label.replace("/", "_"))
+                enum_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(enum_output_dir, exist_ok=True)
 
                 enum_results = self._safe_scan(
@@ -1913,11 +2117,12 @@ class ReconEngine:
             )
 
         # ── SMBClient null session detection (direct mode) ──────────────────
-        if self.smbclient_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.smbclient_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("smbclient")):
             from .scanner.smbclient_scan import SMBClientScanner as _SMBC
             smb_hosts = _SMBC.get_smb_hosts(self.result.nmap_results)
             if smb_hosts:
-                smb_output_dir = os.path.join(".", label.replace("/", "_"))
+                smb_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(smb_output_dir, exist_ok=True)
 
                 smb_results = self._safe_scan(
@@ -1997,8 +2202,9 @@ class ReconEngine:
                 )
 
         # ── SMB brute-force (direct mode) ──────────────────────────────────
-        if self.smb_brute_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            smb_brute_output_dir = os.path.join(".", label.replace("/", "_"))
+        if (self.smb_brute_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("smb_brute")):
+            smb_brute_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(smb_brute_output_dir, exist_ok=True)
 
             smb_brute_results = self._safe_scan(
@@ -2101,8 +2307,9 @@ class ReconEngine:
                 )
 
         # ── VNC brute-force (direct mode) ──────────────────────────────────
-        if self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            vnc_output_dir = os.path.join(".", label.replace("/", "_"))
+        if (self.vnc_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("vnc")):
+            vnc_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(vnc_output_dir, exist_ok=True)
 
             vnc_results = self._safe_scan(
@@ -2183,8 +2390,9 @@ class ReconEngine:
                 )
 
         # ── SNMP login brute-force (direct mode) ──────────────────────────
-        if self.snmp_login_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            snmp_output_dir = os.path.join(".", label.replace("/", "_"))
+        if (self.snmp_login_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("snmp_login")):
+            snmp_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(snmp_output_dir, exist_ok=True)
 
             snmp_login_results = self._safe_scan(
@@ -2334,8 +2542,9 @@ class ReconEngine:
         # ── SSH login brute-force (direct mode) ───────────────────────────
         if (self.ssh_login_scanner.available
                 and self.result.nmap_available
-                and self.result.nmap_results):
-            ssh_output_dir = os.path.join(".", label.replace("/", "_"))
+                and self.result.nmap_results
+                and not self._phase_done("ssh_login")):
+            ssh_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(ssh_output_dir, exist_ok=True)
 
             ssh_results = self._safe_scan(
@@ -2394,8 +2603,9 @@ class ReconEngine:
         # ── MongoDB login/info/enum (direct mode) ─────────────────────────
         if (self.mongodb_login_scanner.available
                 and self.result.nmap_available
-                and self.result.nmap_results):
-            mongo_output_dir = os.path.join(".", label.replace("/", "_"))
+                and self.result.nmap_results
+                and not self._phase_done("mongodb_login")):
+            mongo_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(mongo_output_dir, exist_ok=True)
 
             mongo_results = self._safe_scan(
@@ -2466,8 +2676,9 @@ class ReconEngine:
         # ── FTP login brute-force (direct mode) ───────────────────────────
         if (self.ftp_login_scanner.available
                 and self.result.nmap_available
-                and self.result.nmap_results):
-            ftp_output_dir = os.path.join(".", label.replace("/", "_"))
+                and self.result.nmap_results
+                and not self._phase_done("ftp_login")):
+            ftp_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(ftp_output_dir, exist_ok=True)
 
             ftp_results = self._safe_scan(
@@ -2533,8 +2744,9 @@ class ReconEngine:
                 )
 
         # ── RDP brute-force (direct mode) ──────────────────────────────────
-        if self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results:
-            rdp_output_dir = os.path.join(".", label.replace("/", "_"))
+        if (self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("rdp")):
+            rdp_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(rdp_output_dir, exist_ok=True)
 
             rdp_results = self._safe_scan(
@@ -2598,10 +2810,11 @@ class ReconEngine:
         # ── MSF SMB brute-force (direct mode) ─────────────────────────────
         if (self.msf_scanner.available
                 and self.result.enum4linux_available
-                and self.result.enum4linux_results):
+                and self.result.enum4linux_results
+                and not self._phase_done("msf")):
             enum_users = self.enum4linux_scanner.get_all_users()
             if enum_users:
-                msf_output_dir = os.path.join(".", label.replace("/", "_"))
+                msf_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(msf_output_dir, exist_ok=True)
 
                 msf_results = self._safe_scan(
@@ -2661,11 +2874,12 @@ class ReconEngine:
             )
 
         # ── CrackMapExec protocol enumeration (direct mode) ────────────────
-        if self.cme_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.cme_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("cme")):
             print(
                 f"\033[36m[>]\033[0m CME: grouping hosts by protocol from nmap results ..."
             )
-            cme_output_dir = os.path.join(".", label.replace("/", "_"))
+            cme_output_dir = self._target_output_dir(label.replace("/", "_"))
             os.makedirs(cme_output_dir, exist_ok=True)
 
             cme_results = self._safe_scan(
@@ -2718,17 +2932,21 @@ class ReconEngine:
             )
 
         # ── Nuclei vulnerability scanning (direct mode) ──────────────────
-        if self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("nuclei")):
             # Use IPs from nmap results as nuclei targets
             nuclei_targets = sorted(self.result.nmap_results.keys())
             if nuclei_targets:
-                nuclei_output_dir = os.path.join(".", label.replace("/", "_"))
+                nuclei_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(nuclei_output_dir, exist_ok=True)
 
-                nuclei_results = self._safe_scan(
-                    "nuclei", self.nuclei_scanner.scan,
-                    nuclei_targets, output_dir=nuclei_output_dir,
-                )
+                try:
+                    nuclei_results = self.nuclei_scanner.scan(
+                        nuclei_targets, output_dir=nuclei_output_dir,
+                    )
+                except KeyboardInterrupt:
+                    nuclei_results = None
+                    print("\n\033[93m[!]\033[0m nuclei: interrupted by user\n")
 
                 if nuclei_results is not None:
                     nuclei_stats = self.nuclei_scanner.stats
@@ -2776,7 +2994,8 @@ class ReconEngine:
             )
 
         # ── WPScan WordPress scanning (direct mode) ──────────────────────
-        if self.wpscan_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.wpscan_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("wpscan")):
             from .scanner.wpscan import WPScanner as _WPS
             # In direct mode, detect WP from nmap HTTP/HTTPS services
             wp_targets: set[str] = set()
@@ -2791,7 +3010,7 @@ class ReconEngine:
                         scheme = "https" if "https" in svc or port_num == 443 else "http"
                         wp_targets.add(f"{scheme}://{ip}:{port_num}")
             if wp_targets:
-                wpscan_output_dir = os.path.join(".", label.replace("/", "_"))
+                wpscan_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(wpscan_output_dir, exist_ok=True)
 
                 wpscan_results = self._safe_scan(
@@ -2838,12 +3057,13 @@ class ReconEngine:
             )
 
         # ── Katana web crawling (direct mode) ────────────────────────────
-        if self.katana_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if (self.katana_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("katana")):
             from .scanner.katana_scan import KatanaScanner as _KAT2
             katana_targets = _KAT2.get_http_targets_from_nmap(self.result.nmap_results)
 
             if katana_targets:
-                katana_output_dir = os.path.join(".", label.replace("/", "_"))
+                katana_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(katana_output_dir, exist_ok=True)
 
                 katana_results = self._safe_scan(
@@ -2881,15 +3101,15 @@ class ReconEngine:
 
                     # Run httpx on katana URLs for enriched output
                     if total_urls > 0 and self.httpx_probe.available:
-                        katana_urls_file = os.path.join(katana_output_dir, "katana_urls.txt")
+                        katana_urls_file = os.path.join(katana_output_dir, "txt", "katana_urls.txt")
                         if os.path.isfile(katana_urls_file):
-                            katana_httpx_file = os.path.join(katana_output_dir, "katana_httpx.txt")
+                            katana_httpx_file = os.path.join(katana_output_dir, "txt", "katana_httpx.txt")
                             try:
                                 httpx_cmd = [
                                     self.httpx_probe.httpx_path,
                                     "-l", katana_urls_file,
-                                    "-sc", "-title", "-location",
-                                    "-silent", "-no-color",
+                                    "-sc", "-cl", "-title", "-location",
+                                    "-silent",
                                     "-follow-redirects",
                                     "-o", katana_httpx_file,
                                 ]
@@ -2939,9 +3159,100 @@ class ReconEngine:
                 f"\033[90m    Install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
             )
 
+        # ── Chameleon web content discovery (direct mode) ────────────────
+        if (self.chameleon_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("chameleon")):
+            from .scanner.katana_scan import KatanaScanner as _KAT2_C
+            chameleon_targets = _KAT2_C.get_http_targets_from_nmap(self.result.nmap_results)
+
+            if chameleon_targets:
+                chameleon_output_dir = self._target_output_dir(label.replace("/", "_"))
+                os.makedirs(chameleon_output_dir, exist_ok=True)
+
+                chameleon_results = self._safe_scan(
+                    "chameleon", self.chameleon_scanner.scan,
+                    sorted(chameleon_targets), output_dir=chameleon_output_dir,
+                )
+
+                if chameleon_results is not None:
+                    chameleon_stats = self.chameleon_scanner.stats
+                    self.result.chameleon_results = chameleon_results
+                    self.result.chameleon_stats = chameleon_stats.to_dict()
+                    self.result.chameleon_available = True
+                    self._save_phase("chameleon")
+
+                    total = chameleon_stats.total_findings
+                    print(
+                        f"\033[92m[+]\033[0m chameleon: "
+                        f"\033[92m{total} finding(s)\033[0m "
+                        f"from \033[96m{chameleon_stats.targets_scanned}\033[0m target(s) "
+                        f"\033[90m({chameleon_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m chameleon: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[\u00b7]\033[0m chameleon: no HTTP/HTTPS services found\n"
+                )
+        elif not self.chameleon_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m chameleon not found \u2013 skipping content discovery"
+            )
+            print(
+                f"\033[90m    Install: curl -sL https://raw.githubusercontent.com/iustin24/chameleon/master/install.sh | bash\033[0m\n"
+            )
+
+        # ── Dirsearch directory brute-force (direct mode) ────────────────
+        if (self.dirsearch_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("dirsearch")):
+            from .scanner.katana_scan import KatanaScanner as _KAT2_D
+            dirsearch_targets = _KAT2_D.get_http_targets_from_nmap(self.result.nmap_results)
+
+            if dirsearch_targets:
+                dirsearch_output_dir = self._target_output_dir(label.replace("/", "_"))
+                os.makedirs(dirsearch_output_dir, exist_ok=True)
+
+                dirsearch_results = self._safe_scan(
+                    "dirsearch", self.dirsearch_scanner.scan,
+                    sorted(dirsearch_targets), output_dir=dirsearch_output_dir,
+                )
+
+                if dirsearch_results is not None:
+                    dirsearch_stats = self.dirsearch_scanner.stats
+                    self.result.dirsearch_results = dirsearch_results
+                    self.result.dirsearch_stats = dirsearch_stats.to_dict()
+                    self.result.dirsearch_available = True
+                    self._save_phase("dirsearch")
+
+                    total = dirsearch_stats.total_findings
+                    print(
+                        f"\033[92m[+]\033[0m dirsearch: "
+                        f"\033[92m{total} finding(s)\033[0m "
+                        f"from \033[96m{dirsearch_stats.targets_scanned}\033[0m target(s) "
+                        f"\033[90m({dirsearch_stats.scan_time:.1f}s)\033[0m\n"
+                    )
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m dirsearch: skipped by user\n"
+                    )
+            else:
+                print(
+                    f"\033[90m[\u00b7]\033[0m dirsearch: no HTTP/HTTPS services found\n"
+                )
+        elif not self.dirsearch_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m dirsearch not found \u2013 skipping directory brute-force"
+            )
+            print(
+                f"\033[90m    Install: pip3 install dirsearch | or: apt install dirsearch\033[0m\n"
+            )
+
         # ── Statistics & Output ────────────────────────────────────────────
         self.result.scan_time = time.time() - start_time
         self._output()
+        self._clear_checkpoint()
 
         return self.result
 

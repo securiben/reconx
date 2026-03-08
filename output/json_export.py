@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from ..models import ScanResult
+from ..utils import routed_path
 
 
 class JSONExporter:
@@ -64,16 +65,16 @@ class JSONExporter:
             "subdomains": [s.to_dict() for s in result.subdomains],
         }
 
-        # Ensure directory exists
+        # Route to json/ subfolder
         dirname = os.path.dirname(filename)
-        if dirname:
-            os.makedirs(dirname, exist_ok=True)
+        basename = os.path.basename(filename)
+        final_path = routed_path(dirname, basename) if dirname else filename
 
         # Write JSON
-        with open(filename, "w", encoding="utf-8") as f:
+        with open(final_path, "w", encoding="utf-8") as f:
             if self.pretty:
                 json.dump(data, f, indent=2, ensure_ascii=False, default=str)
             else:
                 json.dump(data, f, ensure_ascii=False, default=str)
 
-        return os.path.abspath(filename)
+        return os.path.abspath(final_path)

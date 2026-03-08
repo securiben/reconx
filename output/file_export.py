@@ -89,6 +89,8 @@ class FileExporter:
         self._export_vnc(domain_dir, result)
         self._export_smb_brute(domain_dir, result)
         self._export_smbclient(domain_dir, result)
+        self._export_chameleon(domain_dir, result)
+        self._export_dirsearch(domain_dir, result)
         self._export_snmp_login(domain_dir, result)
         self._export_snmp_enum(domain_dir, result)
         self._export_ssh_login(domain_dir, result)
@@ -759,7 +761,7 @@ class FileExporter:
     def _export_nmap(self, outdir: str, result: ScanResult):
         """
         Export nmap scan results as summary text file.
-        The raw nmap output files (.nmap, .xml, .gnmap) are already
+        The raw nmap output file (nmap_scan.txt) is already
         written directly by the nmap scanner to the output directory.
         This method creates an additional human-readable summary.
         """
@@ -830,15 +832,49 @@ class FileExporter:
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 
+        # ── host-up.txt ── IPs that responded ─────────────────────────
+        up_ips = sorted(nmap_results.keys())
+        if up_ips:
+            filepath_up = os.path.join(outdir, "host-up.txt")
+            lines_up = [
+                f"# ReconX — Hosts Up for {domain}",
+                f"# Total: {len(up_ips)} host(s) up",
+                "",
+            ]
+            lines_up.extend(up_ips)
+            self._write(filepath_up, "\n".join(lines_up) + "\n")
+
+        # ── host-down.txt ── IPs that did not respond ─────────────────
+        scanned_ips = set(getattr(result, 'nmap_scanned_ips', []))
+        down_ips = sorted(scanned_ips - set(nmap_results.keys()))
+        if down_ips:
+            filepath_down = os.path.join(outdir, "host-down.txt")
+            lines_down = [
+                f"# ReconX — Hosts Down for {domain}",
+                f"# Total: {len(down_ips)} host(s) down",
+                "",
+            ]
+            lines_down.extend(down_ips)
+            self._write(filepath_down, "\n".join(lines_down) + "\n")
+
     def _export_enum4linux(self, outdir: str, result: ScanResult):
         """
         Export enum4linux scan results.
         Creates a human-readable summary and a structured JSON file.
         Raw per-host output files are already written by the scanner.
+        Only exports when at least one host responded successfully.
         """
         enum_stats = getattr(result, 'enum4linux_stats', {})
         enum_results = getattr(result, 'enum4linux_results', {})
         if not getattr(result, 'enum4linux_available', False) or not enum_results:
+            return
+
+        # Only save if at least one host responded
+        has_success = any(
+            (h.success if hasattr(h, 'success') else h.get('success', False))
+            for h in enum_results.values()
+        )
+        if not has_success:
             return
 
         domain = result.target_domain
@@ -1164,10 +1200,15 @@ class FileExporter:
         """
         Export VNC brute-force results.
         Creates credentials file, no-auth list, and structured JSON summary.
+        Only exports when valid credentials are found.
         """
         vnc_stats = getattr(result, 'vnc_stats', {})
         vnc_results = getattr(result, 'vnc_results', {})
         if not getattr(result, 'vnc_available', False) or not vnc_results:
+            return
+
+        # Only save if credentials were found
+        if vnc_stats.get('credentials_found', 0) == 0:
             return
 
         domain = result.target_domain
@@ -1250,10 +1291,15 @@ class FileExporter:
         """
         Export SMB brute-force results (nxc).
         Creates credentials file, SAM hashes file, and structured JSON summary.
+        Only exports when valid credentials are found.
         """
         smb_stats = getattr(result, 'smb_brute_stats', {})
         smb_results = getattr(result, 'smb_brute_results', {})
         if not getattr(result, 'smb_brute_available', False) or not smb_results:
+            return
+
+        # Only save if credentials were found
+        if smb_stats.get('credentials_found', 0) == 0:
             return
 
         domain = result.target_domain
@@ -1385,10 +1431,15 @@ class FileExporter:
         """
         Export RDP brute-force results.
         Creates credentials file and structured JSON summary.
+        Only exports when valid credentials are found.
         """
         rdp_stats = getattr(result, 'rdp_stats', {})
         rdp_results = getattr(result, 'rdp_results', {})
         if not getattr(result, 'rdp_available', False) or not rdp_results:
+            return
+
+        # Only save if credentials were found
+        if rdp_stats.get('credentials_found', 0) == 0:
             return
 
         domain = result.target_domain
@@ -1459,10 +1510,15 @@ class FileExporter:
         """
         Export SMBClient null session results.
         Creates human-readable summary and structured JSON.
+        Only exports when null sessions are found.
         """
         smb_stats = getattr(result, 'smbclient_stats', {})
         smb_results = getattr(result, 'smbclient_results', {})
         if not getattr(result, 'smbclient_available', False) or not smb_results:
+            return
+
+        # Only save if null sessions were found
+        if smb_stats.get('hosts_with_null_session', 0) == 0:
             return
 
         domain = result.target_domain
@@ -1661,14 +1717,81 @@ class FileExporter:
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 
+    def _export_chameleon(self, outdir: str, result: ScanResult):
+        """Export chameleon web content discovery results."""
+        chameleon_stats = getattr(result, 'chameleon_stats', {})
+        chameleon_results = getattr(result, 'chameleon_results', [])
+        if not getattr(result, 'chameleon_available', False) or not chameleon_results:
+            return
+
+        domain = result.target_domain
+
+        # ── chameleon_summary.txt ─────────────────────────────────────
+        filepath = os.path.join(outdir, "chameleon_summary.txt")
+        lines = [f"# ReconX - Chameleon Content Discovery for {domain}"]
+        lines.append(f"# Total findings: {chameleon_stats.get('total_findings', 0)}")
+        lines.append(f"# Targets scanned: {chameleon_stats.get('targets_scanned', 0)}")
+        lines.append(f"# Scan time: {chameleon_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+        lines.append(f"── Results ({len(chameleon_results)}) ──")
+        for r in chameleon_results:
+            lines.append(f"  {r}")
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── chameleon_summary.json ────────────────────────────────────
+        filepath_json = os.path.join(outdir, "chameleon_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": chameleon_stats,
+            "total_findings": len(chameleon_results),
+            "results": chameleon_results,
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_dirsearch(self, outdir: str, result: ScanResult):
+        """Export dirsearch directory brute-force results."""
+        dirsearch_stats = getattr(result, 'dirsearch_stats', {})
+        dirsearch_results = getattr(result, 'dirsearch_results', [])
+        if not getattr(result, 'dirsearch_available', False) or not dirsearch_results:
+            return
+
+        domain = result.target_domain
+
+        # ── dirsearch_summary.txt ─────────────────────────────────────
+        filepath = os.path.join(outdir, "dirsearch_summary.txt")
+        lines = [f"# ReconX - Dirsearch Directory Discovery for {domain}"]
+        lines.append(f"# Total findings: {dirsearch_stats.get('total_findings', 0)}")
+        lines.append(f"# Targets scanned: {dirsearch_stats.get('targets_scanned', 0)}")
+        lines.append(f"# Scan time: {dirsearch_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+        lines.append(f"── Results ({len(dirsearch_results)}) ──")
+        for r in dirsearch_results:
+            lines.append(f"  {r}")
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── dirsearch_summary.json ────────────────────────────────────
+        filepath_json = os.path.join(outdir, "dirsearch_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": dirsearch_stats,
+            "total_findings": len(dirsearch_results),
+            "results": dirsearch_results,
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
     def _export_snmp_login(self, outdir: str, result: ScanResult):
         """
         Export SNMP login brute-force results.
         Creates community strings file and structured JSON summary.
+        Only exports when valid community strings are found.
         """
         snmp_login_stats = getattr(result, 'snmp_login_stats', {})
         snmp_login_results = getattr(result, 'snmp_login_results', {})
         if not getattr(result, 'snmp_login_available', False) or not snmp_login_results:
+            return
+
+        # Only save if community strings were found
+        if snmp_login_stats.get('credentials_found', 0) == 0:
             return
 
         domain = result.target_domain
@@ -1846,10 +1969,14 @@ class FileExporter:
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 
     def _export_ssh_login(self, outdir: str, result: ScanResult):
-        """Export SSH login brute-force results."""
+        """Export SSH login brute-force results. Only exports when valid credentials are found."""
         ssh_login_stats = getattr(result, 'ssh_login_stats', {})
         ssh_login_results = getattr(result, 'ssh_login_results', {})
         if not getattr(result, 'ssh_login_available', False) or not ssh_login_results:
+            return
+
+        # Only save if credentials were found
+        if ssh_login_stats.get('credentials_found', 0) == 0:
             return
 
         domain = result.target_domain
@@ -1912,18 +2039,6 @@ class FileExporter:
             lines.append("")
 
         self._write(filepath, "\n".join(lines) + "\n")
-
-        # ── ssh_login_summary.json ── Structured JSON ─────────────────
-        filepath_json = os.path.join(outdir, "ssh_login_summary.json")
-        json_data = {
-            "domain": domain,
-            "stats": ssh_login_stats,
-            "hosts": {
-                key: r.to_dict() if hasattr(r, 'to_dict') else r
-                for key, r in ssh_login_results.items()
-            },
-        }
-        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 
     def _export_mongodb_login(self, outdir: str, result: ScanResult):
         """Export MongoDB login/info/enum results."""
@@ -2029,10 +2144,14 @@ class FileExporter:
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 
     def _export_ftp_login(self, outdir: str, result: ScanResult):
-        """Export FTP login brute-force results (anonymous + credentials)."""
+        """Export FTP login brute-force results (anonymous + credentials). Only exports when valid credentials or anonymous access found."""
         ftp_stats = getattr(result, 'ftp_login_stats', {})
         ftp_results = getattr(result, 'ftp_login_results', {})
         if not getattr(result, 'ftp_login_available', False) or not ftp_results:
+            return
+
+        # Only save if credentials or anonymous access found
+        if ftp_stats.get('credentials_found', 0) == 0 and ftp_stats.get('anonymous_hosts', 0) == 0:
             return
 
         domain = result.target_domain

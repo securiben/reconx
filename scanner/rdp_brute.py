@@ -28,6 +28,7 @@ from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── Default usernames to test ───────────────────────────────────────────────
@@ -498,7 +499,7 @@ class RDPBruteScanner:
         os.makedirs(output_dir, exist_ok=True)
 
         # Plain-text credentials file
-        cred_file = os.path.join(output_dir, "rdp_credentials.txt")
+        cred_file = routed_path(output_dir, "rdp_credentials.txt")
         lines = ["# ReconX - RDP Brute-force Results"]
         lines.append(f"# Hosts tested: {self.stats.hosts_tested}/{self.stats.total_rdp_hosts}")
         lines.append(f"# Credentials found: {self.stats.credentials_found}")
@@ -529,7 +530,7 @@ class RDPBruteScanner:
             f.write("\n".join(lines) + "\n")
 
         # JSON summary
-        json_file = os.path.join(output_dir, "rdp_brute_summary.json")
+        json_file = routed_path(output_dir, "rdp_brute_summary.json")
         json_data = {
             "stats": self.stats.to_dict(),
             "hosts": {

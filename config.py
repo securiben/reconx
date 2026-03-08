@@ -101,7 +101,7 @@ class ReconConfig:
     # Source configs - Real free APIs, no keys required (except optional VirusTotal)
     sources: Dict[str, SourceConfig] = field(default_factory=lambda: {
         "atlas": SourceConfig(
-            name="Atlas",
+            name="Crt.sh",
             description="querying crt.sh certificate transparency",
         ),
         "sphinx": SourceConfig(
@@ -120,7 +120,7 @@ class ReconConfig:
         ),
         "torrent": SourceConfig(
             name="Torrent",
-            description="querying RapidDNS passive DNS",
+            description="querying Wayback Machine CDX index",
         ),
         "venom": SourceConfig(
             name="Venom",
@@ -153,16 +153,42 @@ class ReconConfig:
             api_key=os.getenv("VT_DOMAIN_API_KEY") or os.getenv("VT_API_KEY"),
             timeout=15,
         ),
+        "chaos": SourceConfig(
+            name="Chaos",
+            description="querying ProjectDiscovery Chaos",
+            api_key=os.getenv("CHAOS_API_KEY"),
+        ),
+        "commoncrawl": SourceConfig(
+            name="CommonCrawl",
+            description="querying Common Crawl index",
+            timeout=30,
+        ),
+        "fofa": SourceConfig(
+            name="FOFA",
+            description="querying FOFA cyberspace search",
+            api_key=os.getenv("FOFA_API_KEY"),
+        ),
+        "zoomeye": SourceConfig(
+            name="ZoomEye",
+            description="querying ZoomEye cyberspace search",
+            api_key=os.getenv("ZOOMEYE_API_KEY"),
+        ),
+        "asn": SourceConfig(
+            name="ASN",
+            description="querying ASN/netblock expansion",
+        ),
     })
 
     scanner: ScannerConfig = field(default_factory=ScannerConfig)
 
     def get_output_filename(self) -> str:
         """Generate output filename based on target domain."""
+        target_dir = os.path.join("targets", self.target_domain)
+        os.makedirs(target_dir, exist_ok=True)
+
         if self.output_file:
-            return self.output_file
+            if os.path.isabs(self.output_file):
+                return self.output_file
+            return os.path.join(target_dir, os.path.basename(self.output_file))
         safe_domain = self.target_domain.replace(".", "_").replace("/", "_")
-        # Place JSON output inside domain results folder
-        domain_dir = os.path.join(".", self.target_domain)
-        os.makedirs(domain_dir, exist_ok=True)
-        return os.path.join(domain_dir, f"{safe_domain}.json")
+        return os.path.join(target_dir, f"{safe_domain}.json")

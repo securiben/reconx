@@ -28,6 +28,21 @@ except ImportError:
     HAS_REQUESTS = False
 
 
+# ─── File Routing ─────────────────────────────────────────────────────────────
+
+def routed_path(output_dir: str, filename: str) -> str:
+    """Return path with .txt→txt/ and .json→json/ subfolder routing."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == '.json':
+        subdir = os.path.join(output_dir, 'json')
+    elif ext == '.txt':
+        subdir = os.path.join(output_dir, 'txt')
+    else:
+        subdir = output_dir
+    os.makedirs(subdir, exist_ok=True)
+    return os.path.join(subdir, filename)
+
+
 # ─── DNS Utilities ────────────────────────────────────────────────────────────
 
 def resolve_cname(hostname: str, timeout: int = 5) -> List[str]:

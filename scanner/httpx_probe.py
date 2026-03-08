@@ -208,7 +208,6 @@ class HttpxProbe:
         "-efqdn",       # extract FQDNs from response
         "-json",        # JSON output (NDJSON)
         "-silent",      # quiet mode
-        "-no-color",    # disable colors
         "-follow-redirects",  # follow HTTP redirects
         "-random-agent",      # randomize User-Agent
     ]

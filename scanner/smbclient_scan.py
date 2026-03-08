@@ -27,6 +27,7 @@ from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── SMB ports to look for in nmap results ────────────────────────────────────
@@ -546,7 +547,7 @@ class SMBClientScanner:
 
     def _save_output(self, output_dir: str):
         """Save smbclient results to a human-readable text file."""
-        filepath = os.path.join(output_dir, "smbclient_nullsession.txt")
+        filepath = routed_path(output_dir, "smbclient_nullsession.txt")
         lines = [
             "# ReconX - SMBClient Null Session Results",
             f"# Hosts scanned: {self.stats.total_hosts_scanned}",

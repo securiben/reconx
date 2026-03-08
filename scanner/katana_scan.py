@@ -20,12 +20,14 @@ import shutil
 import subprocess
 import tempfile
 import time
+import threading
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
 from collections import Counter, defaultdict
 from urllib.parse import urlparse
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── Data Models ──────────────────────────────────────────────────────────────
@@ -237,7 +239,7 @@ class KatanaScanner:
         input_file = os.path.join(tmpdir, "targets.txt")
 
         os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, "katana_urls.txt")
+        output_file = routed_path(output_dir, "katana_urls.txt")
 
         try:
             with open(input_file, "w", encoding="utf-8") as f:
@@ -257,27 +259,65 @@ class KatanaScanner:
                 "-d", "5",        # Depth
                 "-c", "50",       # Concurrency
                 "-p", "20",       # Parallelism
+                "-e", "png,jpg,jpeg,gif,svg,ico,webp,css,woff,woff2,ttf,eot,otf,mp4,mp3,avi,mov,wmv",
                 "-silent",
                 "-o", output_file,
             ]
 
             timeout_secs = max(600, len(targets) * 60)
-            print(
-                f"\033[36m[>]\033[0m katana: crawling "
-                f"\033[92m{len(targets)}\033[0m target(s) ..."
-            )
 
             proc = subprocess.Popen(
                 cmd,
-                stdout=sys.stderr,
-                stderr=sys.stderr,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
 
+            # ── Live spinner progress ──
+            spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+            spinner_idx = [0]
+            url_count = [0]
+            bar_width = 30
+            num_targets = len(targets)
+            scan_label = f"katana crawling: \033[92m{num_targets}\033[0m targets"
+
+            def _draw():
+                si = spinner_chars[spinner_idx[0] % len(spinner_chars)]
+                spinner_idx[0] += 1
+                bar = "\033[92m━\033[0m" * bar_width
+                sys.stdout.write(
+                    f"\r\033[96m[{si}]\033[0m {scan_label} [{bar}] "
+                    f"\033[92m{url_count[0]}\033[0m urls\033[K"
+                )
+                sys.stdout.flush()
+
+            _draw()
             try:
-                proc.wait(timeout=timeout_secs)
+                while proc.poll() is None:
+                    time.sleep(0.15)
+                    if os.path.isfile(output_file):
+                        try:
+                            url_count[0] = sum(1 for _ in open(output_file, encoding="utf-8", errors="replace"))
+                        except Exception:
+                            pass
+                    _draw()
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
+
+            # Final count
+            if os.path.isfile(output_file):
+                try:
+                    url_count[0] = sum(1 for _ in open(output_file, encoding="utf-8", errors="replace"))
+                except Exception:
+                    pass
+
+            # Final status
+            bar = "\033[92m━\033[0m" * bar_width
+            sys.stdout.write(
+                f"\r\033[92m[✓]\033[0m {scan_label} [{bar}] "
+                f"\033[92m{url_count[0]}\033[0m urls\033[K\n"
+            )
+            sys.stdout.flush()
 
             # Parse results
             if os.path.isfile(output_file) and os.path.getsize(output_file) > 0:

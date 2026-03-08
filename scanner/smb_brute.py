@@ -24,6 +24,7 @@ from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── SMB ports ────────────────────────────────────────────────────────────────
@@ -874,7 +875,7 @@ class SMBBruteScanner:
         os.makedirs(output_dir, exist_ok=True)
 
         # ── smb_brute_credentials.txt ── Human-readable credentials ──
-        cred_file = os.path.join(output_dir, "smb_brute_credentials.txt")
+        cred_file = routed_path(output_dir, "smb_brute_credentials.txt")
         lines = ["# ReconX - SMB Brute-force Results (NXC)"]
         lines.append(f"# Hosts tested: {self.stats.hosts_tested}/{self.stats.total_smb_hosts}")
         lines.append(f"# Null auth: {self.stats.hosts_null_auth}")
@@ -933,7 +934,7 @@ class SMBBruteScanner:
                 all_hashes.append((ip, h))
 
         if all_hashes:
-            sam_file = os.path.join(output_dir, "smb_brute_sam_hashes.txt")
+            sam_file = routed_path(output_dir, "smb_brute_sam_hashes.txt")
             with open(sam_file, "w", encoding="utf-8") as f:
                 f.write("# ReconX - SAM Hashes (dumped via nxc --sam)\n")
                 f.write(f"# Total: {len(all_hashes)} hash(es)\n\n")
@@ -942,7 +943,7 @@ class SMBBruteScanner:
                     f.write(f"{h}\n")
 
         # ── smb_brute_summary.json ── Structured JSON ─────────────────
-        json_file = os.path.join(output_dir, "smb_brute_summary.json")
+        json_file = routed_path(output_dir, "smb_brute_summary.json")
         json_data = {
             "stats": self.stats.to_dict(),
             "hosts": {

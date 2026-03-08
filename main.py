@@ -31,31 +31,99 @@ from reconx.utils import resolve_targets, parse_multi_files
 
 # ─── Banner ───────────────────────────────────────────────────────────────────
 
-BANNER = r"""
+BANNER_TOP = """\
 {cyan}╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║   {bold_white}██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗██╗  ██╗{cyan}       ║
-║   {bold_white}██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║╚██╗██╔╝{cyan}       ║
-║   {bold_white}██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║ ╚███╔╝{cyan}        ║
-║   {bold_white}██╔══██╗██╔══╝  ██║     ██║   ██║██║╚██╗██║ ██╔██╗{cyan}        ║
-║   {bold_white}██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║██╔╝ ██╗{cyan}       ║
-║   {bold_white}╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝{cyan}       ║
+║   {bold_white}██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗██╗  ██╗{cyan}        ║
+║   {bold_white}██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║╚██╗██╔╝{cyan}        ║
+║   {bold_white}██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║ ╚███╔╝{cyan}         ║
+║   {bold_white}██╔══██╗██╔══╝  ██║     ██║   ██║██║╚██╗██║ ██╔██╗{cyan}         ║
+║   {bold_white}██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║██╔╝ ██╗{cyan}        ║
+║   {bold_white}╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝{cyan}        ║
 ║                                                              ║
 ║   {dim}Automated Reconnaissance & Intelligence Gathering{cyan}          ║
 ║   {dim}v1.0.0 | Multi-Source Subdomain Enumeration Engine{cyan}         ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝{reset}
+║                                                              ║"""
+
+BANNER_BOTTOM = """\
+{cyan}╚══════════════════════════════════════════════════════════════╝{reset}
 """
+
+# Inner width between the two ║ chars (count the spaces in the banner → 62)
+_BOX_W = 62
+
+
+def _fetch_ipinfo() -> dict:
+    """Fetch network identity from ipinfo.io. Returns empty dict on failure."""
+    try:
+        import requests
+        resp = requests.get("https://ipinfo.io/json", timeout=5)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {}
+
+
+def _ipinfo_rows(data: dict) -> list:
+    """Build coloured row strings for each ipinfo field."""
+    white = "\033[1;97m"
+    dim = "\033[2;37m"
+    green = "\033[32m"
+    yellow = "\033[33m"
+
+    fields = [
+        ("IP",       white,  data.get("ip", "N/A")),
+        ("Hostname", white,  data.get("hostname", "N/A")),
+        ("ASN/Org",  yellow, data.get("org", "N/A")),
+        ("City",     green,  data.get("city", "N/A")),
+        ("Region",   green,  data.get("region", "N/A")),
+        ("Country",  green,  data.get("country", "N/A")),
+        ("Location", dim,    data.get("loc", "N/A")),
+        ("Postal",   dim,    data.get("postal", "N/A")),
+        ("Timezone", dim,    data.get("timezone", "N/A")),
+    ]
+
+    rows = []
+    cyan = "\033[36m"
+    reset = "\033[0m"
+    for label, color, value in fields:
+        # "   IP       : 103.130.18.239"
+        visible = f"   {label:<9s}: {value}"
+        pad = _BOX_W - len(visible)
+        rows.append(
+            f"{cyan}║{reset}{cyan}   {label:<9s}{dim}: {color}{value}{reset}"
+            f"{' ' * max(pad, 1)}{cyan}║{reset}"
+        )
+    return rows
 
 
 def print_banner():
-    """Print the ReconX ASCII banner."""
-    print(BANNER.format(
-        cyan="\033[36m",
-        bold_white="\033[1;97m",
-        dim="\033[2;37m",
-        reset="\033[0m",
-    ))
+    """Print the ReconX ASCII banner with embedded network identity."""
+    cyan = "\033[36m"
+    bold_white = "\033[1;97m"
+    dim = "\033[2;37m"
+    reset = "\033[0m"
+
+    # Top part (logo + tagline)
+    print(BANNER_TOP.format(cyan=cyan, bold_white=bold_white, dim=dim, reset=reset))
+
+    # Fetch ipinfo (may silently fail)
+    data = _fetch_ipinfo()
+    if data:
+        # Separator
+        print(f"{cyan}╠══════════════════════════════════════════════════════════════╣{reset}")
+        # Title
+        title = "Network Identity"
+        pad = _BOX_W - len(title) - 4  # 4 = leading spaces
+        print(f"{cyan}║{reset}  {bold_white}{title}{reset}{' ' * max(pad, 1)}{cyan}  ║{reset}")
+        print(f"{cyan}╠══════════════════════════════════════════════════════════════╣{reset}")
+        # Rows
+        for row in _ipinfo_rows(data):
+            print(row)
+        print(f"{cyan}║{' ' * _BOX_W}║{reset}")
+
+    # Bottom border
+    print(BANNER_BOTTOM.format(cyan=cyan, reset=reset))
 
 
 def print_scan_start(label: str, direct: bool = False):

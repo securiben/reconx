@@ -31,6 +31,7 @@ from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── MongoDB Ports ────────────────────────────────────────────────────────────
@@ -619,7 +620,7 @@ class MongoDBLoginScanner:
         # Save per-host raw output
         if output_dir and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
-            out_file = os.path.join(output_dir, f"mongodb_login_{safe_ip}_{port}.txt")
+            out_file = routed_path(output_dir, f"mongodb_login_{safe_ip}_{port}.txt")
             try:
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(f"# Metasploit MongoDB login/info/enum: {ip}:{port}\n")
@@ -944,7 +945,7 @@ class MongoDBLoginScanner:
                 all_creds.append(cred)
 
         if all_creds:
-            cred_file = os.path.join(output_dir, "mongodb_credentials.txt")
+            cred_file = routed_path(output_dir, "mongodb_credentials.txt")
             try:
                 with open(cred_file, "w", encoding="utf-8") as f:
                     f.write("# Metasploit MongoDB Login — Valid Credentials\n")
@@ -959,7 +960,7 @@ class MongoDBLoginScanner:
                 pass
 
         # Full summary JSON
-        summary_file = os.path.join(output_dir, "mongodb_login_summary.json")
+        summary_file = routed_path(output_dir, "mongodb_login_summary.json")
         try:
             summary = {
                 "stats": self.stats.to_dict(),

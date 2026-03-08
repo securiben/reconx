@@ -30,6 +30,7 @@ from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── VNC Ports ────────────────────────────────────────────────────────────────
@@ -488,7 +489,7 @@ class VNCBruteScanner:
         # Save per-host raw output
         if output_dir and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
-            out_file = os.path.join(output_dir, f"vnc_brute_{safe_ip}.txt")
+            out_file = routed_path(output_dir, f"vnc_brute_{safe_ip}.txt")
             try:
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(f"# Metasploit VNC brute-force: {ip}:{port}\n")
@@ -765,7 +766,7 @@ class VNCBruteScanner:
                 all_creds.append(cred)
 
         if all_creds:
-            cred_file = os.path.join(output_dir, "vnc_credentials.txt")
+            cred_file = routed_path(output_dir, "vnc_credentials.txt")
             try:
                 with open(cred_file, "w", encoding="utf-8") as f:
                     f.write("# Metasploit VNC Brute-Force — Valid Credentials\n")
@@ -790,7 +791,7 @@ class VNCBruteScanner:
             (ip, r.port) for ip, r in sorted(self.results.items()) if r.no_auth
         ]
         if no_auth_hosts:
-            no_auth_file = os.path.join(output_dir, "vnc_no_auth.txt")
+            no_auth_file = routed_path(output_dir, "vnc_no_auth.txt")
             try:
                 with open(no_auth_file, "w", encoding="utf-8") as f:
                     f.write("# VNC Servers with No Authentication Required\n")
@@ -802,7 +803,7 @@ class VNCBruteScanner:
                 pass
 
         # Full summary JSON
-        summary_file = os.path.join(output_dir, "vnc_brute_summary.json")
+        summary_file = routed_path(output_dir, "vnc_brute_summary.json")
         try:
             summary = {
                 "stats": self.stats.to_dict(),

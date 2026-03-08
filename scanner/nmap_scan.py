@@ -167,7 +167,7 @@ class NmapScanner:
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
-        output_prefix = os.path.join(output_dir or tmpdir, "nmap_scan")
+        output_prefix = os.path.join(tmpdir, "nmap_scan")
 
         try:
             extra = ["-Pn"] if getattr(self.config, 'nmap_pn', False) else []
@@ -176,15 +176,14 @@ class NmapScanner:
                 extra_flags=extra, label="IPs",
             )
 
-            # Copy output files to output_dir if needed
-            if output_dir and output_dir != tmpdir:
-                for ext in [".nmap", ".xml", ".gnmap"]:
-                    src = os.path.join(tmpdir, "nmap_scan" + ext)
-                    if os.path.isfile(src):
-                        dst = os.path.join(output_dir, "nmap_scan" + ext)
-                        if os.path.abspath(src) != os.path.abspath(dst):
-                            import shutil as _shutil
-                            _shutil.copy2(src, dst)
+            # Copy only .nmap output renamed to .txt into output_dir/txt/
+            if output_dir:
+                src = os.path.join(tmpdir, "nmap_scan.nmap")
+                if os.path.isfile(src):
+                    txt_dir = os.path.join(output_dir, "txt")
+                    os.makedirs(txt_dir, exist_ok=True)
+                    import shutil as _shutil
+                    _shutil.copy2(src, os.path.join(txt_dir, "nmap_scan.txt"))
 
         except FileNotFoundError:
             self.available = False
@@ -259,7 +258,6 @@ class NmapScanner:
         pct = [0.0]
         bar_width = 30
         pct_re = re.compile(r'About\s+([\d.]+)%\s+done')
-        hosts_up_re = re.compile(r'(\d+)\s+hosts?\s+completed.*\((\d+)\s+up\)')
         done = threading.Event()
 
         def _reader():
@@ -275,7 +273,7 @@ class NmapScanner:
                     line, buf = buf.split("\n", 1)
                     m = pct_re.search(line)
                     if m:
-                        pct[0] = float(m.group(1))
+                        pct[0] = max(pct[0], float(m.group(1)))
             done.set()
 
         reader_t = threading.Thread(target=_reader, daemon=True)
@@ -284,14 +282,16 @@ class NmapScanner:
         # Animate progress bar
         scan_label = (
             f"nmap: \033[96m{len(ip_addresses)}\033[0m {label} "
-            f"\033[90m-sCV --top-ports 1000 -T3{flag_display}\033[0m"
+            f"\033[90mhost up (icmp) - top-ports 1000 -T3{flag_display}\033[0m"
         )
+        sys.stdout.write(f"\033[96m[*]\033[0m {scan_label}\n")
+        sys.stdout.flush()
         while proc.poll() is None:
             p = pct[0]
             filled = int(bar_width * p / 100)
             bar = "\033[92m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
             sys.stdout.write(
-                f"\r\033[96m[*]\033[0m {scan_label} [{bar}] \033[93m{p:5.1f}%\033[0m\033[K"
+                f"\r[{bar}] \033[93m{p:5.1f}%\033[0m\033[K"
             )
             sys.stdout.flush()
             time.sleep(0.3)
@@ -303,14 +303,14 @@ class NmapScanner:
         if success:
             bar = "\033[92m━\033[0m" * bar_width
             sys.stdout.write(
-                f"\r\033[92m[✓]\033[0m {scan_label} [{bar}] \033[92m100.0%\033[0m\033[K\n"
+                f"\r[{bar}] \033[92m100.0%\033[0m\033[K\n"
             )
         else:
             p = pct[0]
             filled = int(bar_width * p / 100)
             bar = "\033[91m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
             sys.stdout.write(
-                f"\r\033[91m[✗]\033[0m {scan_label} [{bar}] \033[91m{p:5.1f}%\033[0m\033[K\n"
+                f"\r[{bar}] \033[91m{p:5.1f}%\033[0m\033[K\n"
             )
         sys.stdout.flush()
 
@@ -380,7 +380,7 @@ class NmapScanner:
                                     service = fields[4].strip() if len(fields) > 4 else ""
                                     version = fields[6].strip() if len(fields) > 6 else ""
 
-                                    if state in ("open", "open|filtered"):
+                                    if state in ("open", "open|filtered") and service.lower() not in ("tcpwrapped", "closed"):
                                         port = NmapPort(
                                             port=port_num,
                                             protocol=proto,
@@ -431,7 +431,7 @@ class NmapScanner:
                             service = parts[2] if len(parts) > 2 else ""
                             version = " ".join(parts[3:]) if len(parts) > 3 else ""
 
-                            if state in ("open", "open|filtered"):
+                            if state in ("open", "open|filtered") and service.lower() not in ("tcpwrapped", "closed"):
                                 if current_ip in self.results:
                                     # Update existing port with better version info
                                     for p in self.results[current_ip].ports:

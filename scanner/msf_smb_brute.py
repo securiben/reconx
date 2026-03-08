@@ -28,6 +28,7 @@ from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── Data Models ──────────────────────────────────────────────────────────────
@@ -412,7 +413,7 @@ class MSFSMBBruteScanner:
         # Save per-host raw output
         if output_dir and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
-            out_file = os.path.join(output_dir, f"msf_smb_{safe_ip}.txt")
+            out_file = routed_path(output_dir, f"msf_smb_{safe_ip}.txt")
             try:
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(f"# Metasploit SMB brute-force: {ip}\n")
@@ -606,7 +607,7 @@ class MSFSMBBruteScanner:
                 all_creds.append(cred)
 
         if all_creds:
-            cred_file = os.path.join(output_dir, "msf_smb_credentials.txt")
+            cred_file = routed_path(output_dir, "msf_smb_credentials.txt")
             try:
                 with open(cred_file, "w", encoding="utf-8") as f:
                     f.write("# Metasploit SMB Brute-Force — Valid Credentials\n")
@@ -623,7 +624,7 @@ class MSFSMBBruteScanner:
 
         # Full summary JSON
         import json
-        summary_file = os.path.join(output_dir, "msf_smb_summary.json")
+        summary_file = routed_path(output_dir, "msf_smb_summary.json")
         try:
             summary = {
                 "stats": self.stats.to_dict(),

@@ -24,6 +24,7 @@ from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 
 from ..config import ScannerConfig
+from ..utils import routed_path
 
 
 # ─── SNMP Ports ───────────────────────────────────────────────────────────────
@@ -357,7 +358,7 @@ class SNMPLoginScanner:
         # Save per-host raw output
         if output_dir and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
-            out_file = os.path.join(output_dir, f"snmp_login_{safe_ip}.txt")
+            out_file = routed_path(output_dir, f"snmp_login_{safe_ip}.txt")
             try:
                 with open(out_file, "w", encoding="utf-8") as f:
                     f.write(f"# Metasploit SNMP login: {ip}:{port}\n")
@@ -522,7 +523,7 @@ class SNMPLoginScanner:
                 all_creds.append(cred)
 
         if all_creds:
-            cred_file = os.path.join(output_dir, "snmp_communities.txt")
+            cred_file = routed_path(output_dir, "snmp_communities.txt")
             try:
                 with open(cred_file, "w", encoding="utf-8") as f:
                     f.write("# Metasploit SNMP Login — Valid Community Strings\n")
@@ -541,7 +542,7 @@ class SNMPLoginScanner:
         # Read-write community strings (critical finding)
         rw_creds = [c for c in all_creds if "write" in c.access_level.lower()]
         if rw_creds:
-            rw_file = os.path.join(output_dir, "snmp_read_write.txt")
+            rw_file = routed_path(output_dir, "snmp_read_write.txt")
             try:
                 with open(rw_file, "w", encoding="utf-8") as f:
                     f.write("# SNMP Hosts with Read-Write Community Strings\n")
@@ -553,7 +554,7 @@ class SNMPLoginScanner:
                 pass
 
         # Full summary JSON
-        summary_file = os.path.join(output_dir, "snmp_login_summary.json")
+        summary_file = routed_path(output_dir, "snmp_login_summary.json")
         try:
             summary = {
                 "stats": self.stats.to_dict(),
