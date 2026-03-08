@@ -393,10 +393,7 @@ class SMBBruteScanner:
 
         print(
             f"\033[36m[>]\033[0m smb-brute: testing "
-            f"\033[92m{len(smb_hosts)}\033[0m SMB host(s) — "
-            f"anonymous check + "
-            f"\033[96m{', '.join(test_users)}\033[0m + "
-            f"\033[96m{os.path.basename(pass_file_path)}\033[0m ..."
+            f"\033[92m{len(smb_hosts)}\033[0m SMB host(s) ..."
         )
 
         for idx, ip in enumerate(sorted(smb_hosts.keys()), 1):

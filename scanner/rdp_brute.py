@@ -315,9 +315,7 @@ class RDPBruteScanner:
 
         print(
             f"\033[36m[>]\033[0m rdp-brute: testing "
-            f"\033[92m{len(rdp_hosts)}\033[0m RDP host(s) with "
-            f"\033[96m{', '.join(test_users)}\033[0m + "
-            f"\033[96m{os.path.basename(pass_file_path)}\033[0m ..."
+            f"\033[92m{len(rdp_hosts)}\033[0m RDP host(s) ..."
         )
 
         for ip in sorted(rdp_hosts.keys()):

@@ -426,12 +426,9 @@ class MongoDBLoginScanner:
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
-        unique_ips = len({t[0] for t in mongodb_targets})
         print(
             f"\033[36m[>]\033[0m mongodb-login: MongoDB login/info/enum on "
-            f"\033[96m{len(mongodb_targets)}\033[0m target(s) "
-            f"(\033[96m{unique_ips}\033[0m unique IP(s)) "
-            f"with \033[96m{os.path.basename(userpass_path)}\033[0m ..."
+            f"\033[96m{len(mongodb_targets)}\033[0m target(s) ..."
         )
 
         for idx, (ip, mongo_port) in enumerate(mongodb_targets, 1):

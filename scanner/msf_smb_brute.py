@@ -270,8 +270,7 @@ class MSFSMBBruteScanner:
         print(
             f"\033[36m[>]\033[0m msf-brute: SMB login brute-force on "
             f"\033[96m{len(enum4linux_users)}\033[0m IPs, "
-            f"\033[96m{total_users}\033[0m users "
-            f"with \033[96m{os.path.basename(pass_file_path)}\033[0m ..."
+            f"\033[96m{total_users}\033[0m users ..."
         )
 
         sorted_ips = sorted(enum4linux_users.keys())

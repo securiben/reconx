@@ -319,12 +319,9 @@ class VNCBruteScanner:
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
-        unique_ips = len({t[0] for t in vnc_targets})
         print(
             f"\033[36m[>]\033[0m vnc-brute: VNC login brute-force on "
-            f"\033[96m{len(vnc_targets)}\033[0m target(s) "
-            f"(\033[96m{unique_ips}\033[0m unique IP(s)) "
-            f"with \033[96m{os.path.basename(pass_file_path)}\033[0m ..."
+            f"\033[96m{len(vnc_targets)}\033[0m target(s) ..."
         )
 
         for idx, (ip, vnc_port) in enumerate(vnc_targets, 1):

@@ -257,6 +257,8 @@ class NmapScanner:
         # Shared state for progress
         pct = [0.0]
         bar_width = 30
+        spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        spinner_idx = [0]
         pct_re = re.compile(r'About\s+([\d.]+)%\s+done')
         done = threading.Event()
 
@@ -288,13 +290,15 @@ class NmapScanner:
         sys.stdout.flush()
         while proc.poll() is None:
             p = pct[0]
+            spinner = spinner_chars[spinner_idx[0] % len(spinner_chars)]
+            spinner_idx[0] += 1
             filled = int(bar_width * p / 100)
             bar = "\033[92m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
             sys.stdout.write(
-                f"\r[{bar}] \033[93m{p:5.1f}%\033[0m\033[K"
+                f"\r\033[96m[{spinner}]\033[0m nmap: [{bar}] \033[93m{p:5.1f}%\033[0m\033[K"
             )
             sys.stdout.flush()
-            time.sleep(0.3)
+            time.sleep(0.15)
 
         reader_t.join(timeout=5)
 
@@ -303,14 +307,14 @@ class NmapScanner:
         if success:
             bar = "\033[92m━\033[0m" * bar_width
             sys.stdout.write(
-                f"\r[{bar}] \033[92m100.0%\033[0m\033[K\n"
+                f"\r\033[96m[⠏]\033[0m nmap: [{bar}] \033[92m100.0%\033[0m\033[K\n"
             )
         else:
             p = pct[0]
             filled = int(bar_width * p / 100)
             bar = "\033[91m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
             sys.stdout.write(
-                f"\r[{bar}] \033[91m{p:5.1f}%\033[0m\033[K\n"
+                f"\r\033[91m[✗]\033[0m nmap: [{bar}] \033[91m{p:5.1f}%\033[0m\033[K\n"
             )
         sys.stdout.flush()
 
