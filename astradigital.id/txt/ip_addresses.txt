@@ -1,7 +1,0 @@
-# ReconX - IP Addresses for astradigital.id
-# Total: 4 unique IPs
-
-104.21.73.212
-149.72.50.175
-172.67.166.120
-35.219.200.63

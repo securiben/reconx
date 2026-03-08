@@ -1,9 +1,0 @@
-# ReconX - HTTP Page Titles for astradigital.id
-# 6 hosts with page titles
-
-[200] astradigital.id  "Beranda | Astra Digital"
-[200] astranautsapi.astradigital.id  "Welcome to your Strapi app"
-[404] faas-loyaltysit.astradigital.id  "Microsoft Azure Web App - Error 404"
-[404] gateway-loyaltyuat.astradigital.id  "404 Not Found"
-[200] splashchat.astradigital.id  "SPLASHChat - Macroeconomics Chatbot"
-[200] www.astradigital.id  "Beranda | Astra Digital"
