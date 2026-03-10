@@ -537,6 +537,14 @@ class ReconEngine:
 
         # ── Phase 5: HTTPX Probe ──────────────────────────────────────────
         httpx_start = time.time()
+
+        # Attempt auto-install if httpx is not available
+        if not self.httpx_probe.available:
+            print(
+                f"\033[93m[!]\033[0m httpx not found \u2013 attempting auto-install..."
+            )
+            self.httpx_probe.ensure_available()
+
         if self.httpx_probe.available and not self._phase_done("httpx"):
             print(
                 f"\033[36m[>]\033[0m httpx: probing with "
@@ -595,15 +603,15 @@ class ReconEngine:
                     f"\033[92m[+]\033[0m httpx: discovered \033[92m{new_from_httpx}\033[0m "
                     f"new FQDNs from response bodies"
                 )
-        else:
+        elif not self.httpx_probe.available:
             # Fallback: count alive from infrastructure scan
             alive_count = sum(1 for s in subdomain_objects if s.is_alive)
             print(
-                f"\033[93m[!]\033[0m ProjectDiscovery httpx not found \u2013 using basic DNS probe only "
+                f"\033[91m[✗]\033[0m httpx auto-install failed \u2013 using basic DNS probe only "
                 f"(\033[92m{alive_count} alive\033[0m)"
             )
             print(
-                f"\033[90m    Install: go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest\033[0m"
+                f"\033[90m    Manual install: go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest\033[0m"
             )
             print(
                 f"\033[90m    Or download: https://github.com/projectdiscovery/httpx/releases\033[0m"
@@ -1655,6 +1663,13 @@ class ReconEngine:
             )
 
         # ── Phase 5d: Nuclei vulnerability scanning (last) ───────────────
+        # Attempt auto-install if nuclei is not available
+        if not self.nuclei_scanner.available:
+            print(
+                f"\033[93m[!]\033[0m nuclei not found \u2013 attempting auto-install..."
+            )
+            self.nuclei_scanner.ensure_available()
+
         if self.nuclei_scanner.available and not self._phase_done("nuclei"):
             # Collect alive hostnames for nuclei
             nuclei_targets = [s.hostname for s in subdomain_objects if s.is_alive]
@@ -1721,10 +1736,10 @@ class ReconEngine:
                     )
         else:
             print(
-                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
+                f"\033[91m[✗]\033[0m nuclei auto-install failed \u2013 skipping vulnerability scan"
             )
             print(
-                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
+                f"\033[90m    Manual install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
             )
 
         # ── Phase 5c: WPScan WordPress scanning ──────────────────────────
@@ -1783,6 +1798,13 @@ class ReconEngine:
             )
 
         # ── Katana web crawling (domain mode) ─────────────────────────────
+        # Attempt auto-install if katana is not available
+        if not self.katana_scanner.available:
+            print(
+                f"\033[93m[!]\033[0m katana not found \u2013 attempting auto-install..."
+            )
+            self.katana_scanner.ensure_available()
+
         if self.katana_scanner.available and not self._phase_done("katana"):
             from .scanner.katana_scan import KatanaScanner as _KAT
             katana_targets: set = set()
@@ -1876,10 +1898,10 @@ class ReconEngine:
                 )
         elif not self.katana_scanner.available:
             print(
-                f"\033[93m[!]\033[0m katana not found \u2013 skipping web crawling"
+                f"\033[91m[✗]\033[0m katana auto-install failed \u2013 skipping web crawling"
             )
             print(
-                f"\033[90m    Install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
+                f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
             )
 
         # ── Chameleon web content discovery (domain mode) ─────────────────
@@ -2991,6 +3013,13 @@ class ReconEngine:
             )
 
         # ── Nuclei vulnerability scanning (direct mode) ──────────────────
+        # Attempt auto-install if nuclei is not available
+        if not self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            print(
+                f"\033[93m[!]\033[0m nuclei not found \u2013 attempting auto-install..."
+            )
+            self.nuclei_scanner.ensure_available()
+
         if (self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("nuclei")):
             # Use IPs from nmap results as nuclei targets
@@ -3046,10 +3075,10 @@ class ReconEngine:
                     )
         elif not self.nuclei_scanner.available and self.result.nmap_available:
             print(
-                f"\033[93m[!]\033[0m nuclei not found – skipping vulnerability scan"
+                f"\033[91m[✗]\033[0m nuclei auto-install failed \u2013 skipping vulnerability scan"
             )
             print(
-                f"\033[90m    Install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
+                f"\033[90m    Manual install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
             )
 
         # ── WPScan WordPress scanning (direct mode) ──────────────────────
@@ -3116,6 +3145,13 @@ class ReconEngine:
             )
 
         # ── Katana web crawling (direct mode) ────────────────────────────
+        # Attempt auto-install if katana is not available
+        if not self.katana_scanner.available and self.result.nmap_available and self.result.nmap_results:
+            print(
+                f"\033[93m[!]\033[0m katana not found \u2013 attempting auto-install..."
+            )
+            self.katana_scanner.ensure_available()
+
         if (self.katana_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("katana")):
             from .scanner.katana_scan import KatanaScanner as _KAT2
@@ -3195,10 +3231,10 @@ class ReconEngine:
                 )
         elif not self.katana_scanner.available and self.result.nmap_available:
             print(
-                f"\033[93m[!]\033[0m katana not found \u2013 skipping web crawling"
+                f"\033[91m[✗]\033[0m katana auto-install failed \u2013 skipping web crawling"
             )
             print(
-                f"\033[90m    Install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
+                f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
             )
 
         # ── Chameleon web content discovery (direct mode) ────────────────

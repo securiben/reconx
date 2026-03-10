@@ -121,14 +121,20 @@ class KatanaScanner:
             if self._verify_katana(path):
                 return path
 
-        # Auto-install katana if not found
+        return None
+
+    def ensure_available(self) -> bool:
+        """Attempt auto-install if katana is not available. Returns True if now available."""
+        if self.available:
+            return True
         from .auto_install import ensure_tool
         if ensure_tool("katana"):
             found = shutil.which("katana")
             if found and self._verify_katana(found):
-                return found
-
-        return None
+                self.katana_path = found
+                self.available = True
+                return True
+        return False
 
     def _verify_katana(self, path: str) -> bool:
         """Verify that the binary is actually ProjectDiscovery katana."""

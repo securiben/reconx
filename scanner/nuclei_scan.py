@@ -229,14 +229,20 @@ class NucleiScanner:
             if self._verify_nuclei(path):
                 return path
 
-        # Auto-install nuclei if not found
+        return None
+
+    def ensure_available(self) -> bool:
+        """Attempt auto-install if nuclei is not available. Returns True if now available."""
+        if self.available:
+            return True
         from .auto_install import ensure_tool
         if ensure_tool("nuclei"):
             found = shutil.which("nuclei")
             if found and self._verify_nuclei(found):
-                return found
-
-        return None
+                self.nuclei_path = found
+                self.available = True
+                return True
+        return False
 
     def _verify_nuclei(self, path: str) -> bool:
         """Verify that the binary is actually ProjectDiscovery nuclei."""

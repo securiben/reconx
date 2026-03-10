@@ -256,14 +256,20 @@ class HttpxProbe:
             if self._is_projectdiscovery_httpx(path):
                 return path
 
-        # Auto-install httpx if not found
+        return None
+
+    def ensure_available(self) -> bool:
+        """Attempt auto-install if httpx is not available. Returns True if now available."""
+        if self.available:
+            return True
         from .auto_install import ensure_tool
         if ensure_tool("httpx"):
             found = shutil.which("httpx")
             if found and self._is_projectdiscovery_httpx(found):
-                return found
-
-        return None
+                self.httpx_path = found
+                self.available = True
+                return True
+        return False
 
     def _is_projectdiscovery_httpx(self, path: str) -> bool:
         """
