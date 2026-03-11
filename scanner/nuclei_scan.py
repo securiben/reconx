@@ -361,7 +361,7 @@ class NucleiScanner:
                 "-bs", "50",
                 "-c", "30",
                 "-s", "low,medium,high,critical",
-                "-etags", "application-dos",
+                "-etags", "Application-dos",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-silent",
