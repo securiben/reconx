@@ -48,6 +48,10 @@ NUCLEI_SEVERITY_COLORS = {
     "unknown": "\033[90m",     # Gray
 }
 
+EXCLUDED_TEMPLATE_KEYWORDS = {
+    "application-dos",
+}
+
 # ─── Base + conditional tag mapping ──────────────────────────────────────────
 
 BASE_TAGS = [
@@ -304,6 +308,43 @@ class NucleiScanner:
 
         return tags
 
+    def _is_excluded_finding(self,
+                             template_id: str = "",
+                             template_name: str = "",
+                             tags: Optional[List[str]] = None) -> bool:
+        """Return True when a finding should be hidden from output/results."""
+        haystacks = [template_id or "", template_name or ""]
+        if tags:
+            haystacks.extend(tags)
+
+        for value in haystacks:
+            value_lower = str(value).strip().lower()
+            if any(keyword in value_lower for keyword in EXCLUDED_TEMPLATE_KEYWORDS):
+                return True
+        return False
+
+    def _filter_text_output_file(self, filepath: str):
+        """Remove excluded findings from nuclei plain-text output file."""
+        try:
+            if not os.path.isfile(filepath):
+                return
+
+            filtered_lines = []
+            changed = False
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line_lower = line.lower()
+                    if any(keyword in line_lower for keyword in EXCLUDED_TEMPLATE_KEYWORDS):
+                        changed = True
+                        continue
+                    filtered_lines.append(line)
+
+            if changed:
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.writelines(filtered_lines)
+        except Exception:
+            pass
+
     def scan(self, alive_hostnames: List[str],
              output_dir: str = ".") -> List[NucleiResult]:
         """
@@ -361,7 +402,7 @@ class NucleiScanner:
                 "-bs", "50",
                 "-c", "30",
                 "-s", "low,medium,high,critical",
-                "-etags", "Application-dos",
+                "-etags", "application-dos",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-silent",
@@ -422,9 +463,11 @@ class NucleiScanner:
                         line, buf = buf.split("\n", 1)
                         m = finding_re.search(line)
                         if m:
+                            tmpl = m.group(1)
+                            if self._is_excluded_finding(template_id=tmpl, template_name=tmpl):
+                                continue
                             with lock:
                                 findings[0] += 1
-                                tmpl = m.group(1)
                                 sev = m.group(3).lower()
                                 url = m.group(4)
                                 color = sev_colors.get(sev, "\033[37m")
@@ -476,6 +519,8 @@ class NucleiScanner:
                 # Fallback: parse plain text output if JSONL unavailable
                 self._parse_text_output(txt_output)
 
+            self._filter_text_output_file(txt_output)
+
         except FileNotFoundError:
             self.available = False
         except Exception:
@@ -511,13 +556,19 @@ class NucleiScanner:
                     for data in items:
                         if isinstance(data, dict):
                             result = NucleiResult.from_json(data)
-                            if result.template_id:
+                            if result.template_id and not self._is_excluded_finding(
+                                    template_id=result.template_id,
+                                    template_name=result.template_name,
+                                    tags=result.tags):
                                 self.results.append(result)
                     return
                 elif isinstance(items, dict):
                     # Single JSON object
                     result = NucleiResult.from_json(items)
-                    if result.template_id:
+                    if result.template_id and not self._is_excluded_finding(
+                            template_id=result.template_id,
+                            template_name=result.template_name,
+                            tags=result.tags):
                         self.results.append(result)
                     return
             except (json.JSONDecodeError, ValueError):
@@ -532,7 +583,10 @@ class NucleiScanner:
                     data = json.loads(line)
                     if isinstance(data, dict):
                         result = NucleiResult.from_json(data)
-                        if result.template_id:
+                        if result.template_id and not self._is_excluded_finding(
+                                template_id=result.template_id,
+                                template_name=result.template_name,
+                                tags=result.tags):
                             self.results.append(result)
                 except (json.JSONDecodeError, ValueError):
                     continue
@@ -548,7 +602,10 @@ class NucleiScanner:
             try:
                 data = json.loads(line)
                 result = NucleiResult.from_json(data)
-                if result.template_id:
+                if result.template_id and not self._is_excluded_finding(
+                        template_id=result.template_id,
+                        template_name=result.template_name,
+                        tags=result.tags):
                     self.results.append(result)
             except (json.JSONDecodeError, Exception):
                 continue
@@ -570,6 +627,10 @@ class NucleiScanner:
                         continue
                     m = pattern.search(line)
                     if m:
+                        if self._is_excluded_finding(
+                                template_id=m.group(1),
+                                template_name=m.group(1)):
+                            continue
                         r = NucleiResult()
                         r.template_id = m.group(1)
                         r.template_name = m.group(1)
