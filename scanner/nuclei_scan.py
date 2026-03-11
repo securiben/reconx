@@ -354,13 +354,14 @@ class NucleiScanner:
             _pkg_dir = os.path.dirname(os.path.abspath(__file__))
             _custom_tpl_dir = os.path.join(os.path.dirname(_pkg_dir), "prv8_nuclei_templates")
 
-            # nuclei -l targets.txt -bs 50 -c 30 -s low,medium,high,critical -o nuclei_results.txt
+            # nuclei -l targets.txt -bs 50 -c 30 -s low,medium,high,critical -etags application-dos -o nuclei_results.txt
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
                 "-bs", "50",
                 "-c", "30",
                 "-s", "low,medium,high,critical",
+                "-etags", "application-dos",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-silent",
