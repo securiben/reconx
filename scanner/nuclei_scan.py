@@ -347,26 +347,22 @@ class NucleiScanner:
         try:
             with open(input_file, "w", encoding="utf-8") as f:
                 for h in alive_hostnames:
-                    # Strip any scheme — nuclei wants bare hostnames
-                    clean = h.replace("https://", "").replace("http://", "").rstrip("/")
-                    f.write(clean + "\n")
+                    # Keep full URLs (scheme + host + port) for nuclei
+                    f.write(h.rstrip("/") + "\n")
 
             # Custom templates directory (prv8_nuclei_templates at repo root)
             _pkg_dir = os.path.dirname(os.path.abspath(__file__))
             _custom_tpl_dir = os.path.join(os.path.dirname(_pkg_dir), "prv8_nuclei_templates")
 
-            # Exact command:
+            # nuclei -l targets.txt -bs 50 -c 30 -s low,medium,high,critical -o nuclei_results.txt
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-sa",                     # scan all IPs per host
-                "-as",                     # auto-scan based on wappalyzer
-                "-ue", "shodan,censys,fofa,shodan-idb,quake,hunter,zoomeye,netlas,criminalip,publicwww,hunterhow,google,odin,binaryedge,onyphe,driftnet,greynoise",
-                "-s", "critical,high,medium,low",
-                "-o", txt_output,
-                "-je", jsonl_file,         # JSONL export for structured parsing
                 "-bs", "50",
                 "-c", "30",
+                "-s", "low,medium,high,critical",
+                "-o", txt_output,
+                "-je", jsonl_file,         # JSONL export for structured parsing
                 "-silent",
             ]
 

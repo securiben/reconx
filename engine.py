@@ -1671,18 +1671,52 @@ class ReconEngine:
             self.nuclei_scanner.ensure_available()
 
         if self.nuclei_scanner.available and not self._phase_done("nuclei"):
-            # Collect alive hostnames for nuclei
-            nuclei_targets = [s.hostname for s in subdomain_objects if s.is_alive]
-            if not nuclei_targets:
-                nuclei_targets = [s.hostname for s in subdomain_objects]
+            # Collect full URLs (scheme + host + port) for nuclei
+            nuclei_targets: list = []
+            seen: set = set()
 
-            # Also add IPs from nmap results
+            # From httpx results: use full URLs (http://domain:port)
+            if hasattr(self.result, 'subdomains') and self.result.subdomains:
+                for sub in self.result.subdomains:
+                    if sub.is_alive and sub.http_url:
+                        url = sub.http_url.rstrip("/")
+                        if url not in seen:
+                            nuclei_targets.append(url)
+                            seen.add(url)
+
+            # Fallback: if no httpx URLs, build from hostnames with https://
+            if not nuclei_targets:
+                for sub in subdomain_objects:
+                    if sub.is_alive:
+                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
+                        url = f"{scheme}://{sub.hostname}"
+                        if url not in seen:
+                            nuclei_targets.append(url)
+                            seen.add(url)
+                if not nuclei_targets:
+                    for sub in subdomain_objects:
+                        url = f"https://{sub.hostname}"
+                        if url not in seen:
+                            nuclei_targets.append(url)
+                            seen.add(url)
+
+            # Add IP:port URLs from nmap results (http/https services)
             if self.result.nmap_available and self.result.nmap_results:
-                existing = set(nuclei_targets)
-                for ip in self.result.nmap_results.keys():
-                    if ip not in existing:
-                        nuclei_targets.append(ip)
-                        existing.add(ip)
+                for ip, host_result in self.result.nmap_results.items():
+                    if hasattr(host_result, 'ports'):
+                        for port_obj in host_result.ports:
+                            if port_obj.state == "open":
+                                svc = (port_obj.service or "").lower()
+                                p = port_obj.port
+                                if "https" in svc or "ssl" in svc or p in (443, 8443):
+                                    url = f"https://{ip}:{p}"
+                                elif "http" in svc or p in (80, 8080, 8000, 8888, 3000, 5000, 9090):
+                                    url = f"http://{ip}:{p}"
+                                else:
+                                    continue
+                                if url not in seen:
+                                    nuclei_targets.append(url)
+                                    seen.add(url)
 
             if nuclei_targets:
                 nuclei_output_dir = self._ensure_output_dir()
@@ -3022,8 +3056,28 @@ class ReconEngine:
 
         if (self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("nuclei")):
-            # Use IPs from nmap results as nuclei targets
-            nuclei_targets = sorted(self.result.nmap_results.keys())
+            # Build full URLs (scheme + IP:port) from nmap results for nuclei
+            nuclei_targets: list = []
+            seen: set = set()
+            for ip, host_result in self.result.nmap_results.items():
+                if hasattr(host_result, 'ports'):
+                    for port_obj in host_result.ports:
+                        if port_obj.state == "open":
+                            svc = (port_obj.service or "").lower()
+                            p = port_obj.port
+                            if "https" in svc or "ssl" in svc or p in (443, 8443):
+                                url = f"https://{ip}:{p}"
+                            elif "http" in svc or p in (80, 8080, 8000, 8888, 3000, 5000, 9090):
+                                url = f"http://{ip}:{p}"
+                            else:
+                                continue
+                            if url not in seen:
+                                nuclei_targets.append(url)
+                                seen.add(url)
+            # Fallback: if no HTTP services found, use http://ip for each host
+            if not nuclei_targets:
+                for ip in sorted(self.result.nmap_results.keys()):
+                    nuclei_targets.append(f"http://{ip}")
             if nuclei_targets:
                 nuclei_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(nuclei_output_dir, exist_ok=True)
