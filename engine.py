@@ -1530,6 +1530,13 @@ class ReconEngine:
         # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
         if (self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("rdp")):
+            rdp_output_dir = self._ensure_output_dir()
+            os.makedirs(rdp_output_dir, exist_ok=True)
+
+            rdp_results = self._safe_scan(
+                "rdp-brute", self.rdp_scanner.scan,
+                self.result.nmap_results, output_dir=rdp_output_dir,
+            )
 
             if rdp_results:
                 rdp_stats = self.rdp_scanner.stats
