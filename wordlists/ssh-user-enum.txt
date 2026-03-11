@@ -1,5 +1,7 @@
 root
 administrator
+kali
+agent
 NetLinx
 amx
 admin
