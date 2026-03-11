@@ -36,7 +36,7 @@ from .scanner import (
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
     MSFSMBBruteScanner, RDPBruteScanner, VNCBruteScanner, SMBBruteScanner, WPScanner, SMBClientScanner,
-    KatanaScanner, ChameleonScanner, DirsearchScanner, SNMPLoginScanner, SNMPEnumScanner,
+    KatanaScanner, DirsearchScanner, SNMPLoginScanner, SNMPEnumScanner,
     SSHLoginScanner,
     MongoDBLoginScanner,
     FTPLoginScanner,
@@ -90,7 +90,6 @@ class ReconEngine:
         self.wpscan_scanner = WPScanner(config.scanner)
         self.smbclient_scanner = SMBClientScanner(config.scanner)
         self.katana_scanner = KatanaScanner(config.scanner)
-        self.chameleon_scanner = ChameleonScanner(config.scanner)
         self.dirsearch_scanner = DirsearchScanner(config.scanner)
         self.snmp_login_scanner = SNMPLoginScanner(config.scanner)
         self.snmp_enum_scanner = SNMPEnumScanner(config.scanner)
@@ -392,8 +391,6 @@ class ReconEngine:
                 fe._export_smbclient(d, r)
             elif phase == "katana":
                 fe._export_katana(d, r)
-            elif phase == "chameleon":
-                fe._export_chameleon(d, r)
             elif phase == "dirsearch":
                 fe._export_dirsearch(d, r)
             elif phase == "snmp_login":
@@ -1777,7 +1774,14 @@ class ReconEngine:
             )
 
         # ── Phase 5c: WPScan WordPress scanning ──────────────────────────
-        if (self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results
+        if self.wpscan_scanner.available and not self.wpscan_scanner.api_token:
+            print(
+                "\033[93m[!]\033[0m wpscan: \033[93mWPSCAN_API_TOKEN not set in .env\033[0m \u2013 skipping"
+            )
+            print(
+                "\033[90m    Get a free token at: https://wpscan.com/api\033[0m\n"
+            )
+        elif (self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results
                 and not self._phase_done("wpscan")):
             from .scanner.wpscan import WPScanner as _WPS
 
@@ -1936,60 +1940,6 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
-            )
-
-        # ── Chameleon web content discovery (domain mode) ─────────────────
-        if self.chameleon_scanner.available and not self._phase_done("chameleon"):
-            from .scanner.katana_scan import KatanaScanner as _KAT_C
-            chameleon_targets: set = set()
-
-            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
-                chameleon_targets |= _KAT_C.get_http_targets_from_httpx(self.result.httpx_results)
-            if self.result.nmap_available and self.result.nmap_results:
-                chameleon_targets |= _KAT_C.get_http_targets_from_nmap(self.result.nmap_results)
-            if hasattr(self.result, 'subdomains') and self.result.subdomains:
-                for sub in self.result.subdomains:
-                    if sub.is_alive:
-                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
-                        chameleon_targets.add(f"{scheme}://{sub.hostname}")
-
-            if chameleon_targets:
-                chameleon_output_dir = self._ensure_output_dir()
-                os.makedirs(chameleon_output_dir, exist_ok=True)
-
-                chameleon_results = self._safe_scan(
-                    "chameleon", self.chameleon_scanner.scan,
-                    sorted(chameleon_targets), output_dir=chameleon_output_dir,
-                )
-
-                if chameleon_results is not None:
-                    chameleon_stats = self.chameleon_scanner.stats
-                    self.result.chameleon_results = chameleon_results
-                    self.result.chameleon_stats = chameleon_stats.to_dict()
-                    self.result.chameleon_available = True
-                    self._save_phase("chameleon")
-
-                    total = chameleon_stats.total_findings
-                    print(
-                        f"\033[92m[+]\033[0m chameleon: "
-                        f"\033[92m{total} finding(s)\033[0m "
-                        f"from \033[96m{chameleon_stats.targets_scanned}\033[0m target(s) "
-                        f"\033[90m({chameleon_stats.scan_time:.1f}s)\033[0m\n"
-                    )
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m chameleon: skipped by user\n"
-                    )
-            else:
-                print(
-                    f"\033[90m[\u00b7]\033[0m chameleon: no HTTP/HTTPS targets found\n"
-                )
-        elif not self.chameleon_scanner.available:
-            print(
-                f"\033[93m[!]\033[0m chameleon not found \u2013 skipping content discovery"
-            )
-            print(
-                f"\033[90m    Install: curl -sL https://raw.githubusercontent.com/iustin24/chameleon/master/install.sh | bash\033[0m\n"
             )
 
         # ── Dirsearch directory brute-force (domain mode) ────────────────
@@ -3134,7 +3084,14 @@ class ReconEngine:
             )
 
         # ── WPScan WordPress scanning (direct mode) ──────────────────────
-        if (self.wpscan_scanner.available and self.result.nmap_available and self.result.nmap_results
+        if self.wpscan_scanner.available and not self.wpscan_scanner.api_token:
+            print(
+                "\033[93m[!]\033[0m wpscan: \033[93mWPSCAN_API_TOKEN not set in .env\033[0m \u2013 skipping"
+            )
+            print(
+                "\033[90m    Get a free token at: https://wpscan.com/api\033[0m\n"
+            )
+        elif (self.wpscan_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("wpscan")):
             from .scanner.wpscan import WPScanner as _WPS
             # In direct mode, detect WP from nmap HTTP/HTTPS services
@@ -3287,51 +3244,6 @@ class ReconEngine:
             )
             print(
                 f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
-            )
-
-        # ── Chameleon web content discovery (direct mode) ────────────────
-        if (self.chameleon_scanner.available and self.result.nmap_available and self.result.nmap_results
-                and not self._phase_done("chameleon")):
-            from .scanner.katana_scan import KatanaScanner as _KAT2_C
-            chameleon_targets = _KAT2_C.get_http_targets_from_nmap(self.result.nmap_results)
-
-            if chameleon_targets:
-                chameleon_output_dir = self._target_output_dir(label.replace("/", "_"))
-                os.makedirs(chameleon_output_dir, exist_ok=True)
-
-                chameleon_results = self._safe_scan(
-                    "chameleon", self.chameleon_scanner.scan,
-                    sorted(chameleon_targets), output_dir=chameleon_output_dir,
-                )
-
-                if chameleon_results is not None:
-                    chameleon_stats = self.chameleon_scanner.stats
-                    self.result.chameleon_results = chameleon_results
-                    self.result.chameleon_stats = chameleon_stats.to_dict()
-                    self.result.chameleon_available = True
-                    self._save_phase("chameleon")
-
-                    total = chameleon_stats.total_findings
-                    print(
-                        f"\033[92m[+]\033[0m chameleon: "
-                        f"\033[92m{total} finding(s)\033[0m "
-                        f"from \033[96m{chameleon_stats.targets_scanned}\033[0m target(s) "
-                        f"\033[90m({chameleon_stats.scan_time:.1f}s)\033[0m\n"
-                    )
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m chameleon: skipped by user\n"
-                    )
-            else:
-                print(
-                    f"\033[90m[\u00b7]\033[0m chameleon: no HTTP/HTTPS services found\n"
-                )
-        elif not self.chameleon_scanner.available and self.result.nmap_available:
-            print(
-                f"\033[93m[!]\033[0m chameleon not found \u2013 skipping content discovery"
-            )
-            print(
-                f"\033[90m    Install: curl -sL https://raw.githubusercontent.com/iustin24/chameleon/master/install.sh | bash\033[0m\n"
             )
 
         # ── Dirsearch directory brute-force (direct mode) ────────────────

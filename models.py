@@ -379,11 +379,6 @@ class ScanResult:
     katana_stats: Dict = field(default_factory=dict)
     katana_available: bool = False
 
-    # Chameleon web content discovery
-    chameleon_results: List = field(default_factory=list)
-    chameleon_stats: Dict = field(default_factory=dict)
-    chameleon_available: bool = False
-
     # Dirsearch directory brute-force
     dirsearch_results: List = field(default_factory=list)
     dirsearch_stats: Dict = field(default_factory=dict)

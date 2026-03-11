@@ -358,19 +358,6 @@ def install_metasploit() -> bool:
     )
 
 
-def install_chameleon() -> bool:
-    """Install chameleon content discovery tool."""
-    return _run(
-        "tmpdir=$(mktemp -d) && "
-        "cd \"$tmpdir\" && "
-        "curl -sL https://raw.githubusercontent.com/iustin24/chameleon/master/install.sh | bash && "
-        "mkdir -p ~/.local/bin && "
-        "install -m 755 ./chameleon ~/.local/bin/chameleon",
-        label="chameleon (installer)",
-        timeout=300,
-    )
-
-
 def install_dirsearch() -> bool:
     """Install dirsearch directory brute-force tool."""
     if _run("sudo apt-get install -y dirsearch", label="dirsearch (apt)"):
@@ -395,7 +382,6 @@ TOOL_INSTALLERS = {
     "cme": install_crackmapexec,
     "wpscan": install_wpscan,
     "msfconsole": install_metasploit,
-    "chameleon": install_chameleon,
     "dirsearch": install_dirsearch,
 }
 

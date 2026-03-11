@@ -20,7 +20,6 @@ from .smb_brute import SMBBruteScanner
 from .wpscan import WPScanner
 from .smbclient_scan import SMBClientScanner
 from .katana_scan import KatanaScanner
-from .chameleon_scan import ChameleonScanner
 from .dirsearch_scan import DirsearchScanner
 from .snmp_login import SNMPLoginScanner
 from .snmp_enum import SNMPEnumScanner
@@ -45,7 +44,6 @@ __all__ = [
     "WPScanner",
     "SMBClientScanner",
     "KatanaScanner",
-    "ChameleonScanner",
     "DirsearchScanner",
     "SNMPLoginScanner",
     "SNMPEnumScanner",

@@ -291,8 +291,8 @@ class Enum4linuxScanner:
         host_start = time.time()
 
         try:
-            # Build enum4linux command
-            cmd = [self.enum4linux_path, "-a", ip]
+            # Build enum4linux command (null session — no user/pass)
+            cmd = [self.enum4linux_path, "-a", "-u", "", "-p", "", ip]
 
             # Run enum4linux
             timeout_secs = 300  # 5 minutes per host
@@ -300,6 +300,7 @@ class Enum4linuxScanner:
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
             )
 
             try:

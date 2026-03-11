@@ -89,7 +89,6 @@ class FileExporter:
         self._export_vnc(domain_dir, result)
         self._export_smb_brute(domain_dir, result)
         self._export_smbclient(domain_dir, result)
-        self._export_chameleon(domain_dir, result)
         self._export_dirsearch(domain_dir, result)
         self._export_snmp_login(domain_dir, result)
         self._export_snmp_enum(domain_dir, result)
@@ -1714,37 +1713,6 @@ class FileExporter:
             "stats": katana_stats,
             "total_urls": len(katana_results),
             "urls": katana_results,
-        }
-        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
-
-    def _export_chameleon(self, outdir: str, result: ScanResult):
-        """Export chameleon web content discovery results."""
-        chameleon_stats = getattr(result, 'chameleon_stats', {})
-        chameleon_results = getattr(result, 'chameleon_results', [])
-        if not getattr(result, 'chameleon_available', False) or not chameleon_results:
-            return
-
-        domain = result.target_domain
-
-        # ── chameleon_summary.txt ─────────────────────────────────────
-        filepath = os.path.join(outdir, "chameleon_summary.txt")
-        lines = [f"# ReconX - Chameleon Content Discovery for {domain}"]
-        lines.append(f"# Total findings: {chameleon_stats.get('total_findings', 0)}")
-        lines.append(f"# Targets scanned: {chameleon_stats.get('targets_scanned', 0)}")
-        lines.append(f"# Scan time: {chameleon_stats.get('scan_time', 0.0):.1f}s")
-        lines.append("")
-        lines.append(f"── Results ({len(chameleon_results)}) ──")
-        for r in chameleon_results:
-            lines.append(f"  {r}")
-        self._write(filepath, "\n".join(lines) + "\n")
-
-        # ── chameleon_summary.json ────────────────────────────────────
-        filepath_json = os.path.join(outdir, "chameleon_summary.json")
-        json_data = {
-            "domain": domain,
-            "stats": chameleon_stats,
-            "total_findings": len(chameleon_results),
-            "results": chameleon_results,
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 

@@ -251,14 +251,20 @@ class WPScanner:
             if self._verify_wpscan(path):
                 return path
 
-        # Auto-install wpscan if not found
+        return None
+
+    def ensure_available(self) -> bool:
+        """Attempt auto-install if wpscan is not available. Returns True if now available."""
+        if self.available:
+            return True
         from .auto_install import ensure_tool
         if ensure_tool("wpscan"):
             found = shutil.which("wpscan")
             if found and self._verify_wpscan(found):
-                return found
-
-        return None
+                self.wpscan_path = found
+                self.available = True
+                return True
+        return False
 
     def _verify_wpscan(self, path: str) -> bool:
         """Verify the binary is actually wpscan."""
@@ -465,6 +471,15 @@ class WPScanner:
         if not wp_targets:
             return {}
 
+        if not self.api_token:
+            print(
+                "\033[93m[!]\033[0m wpscan: \033[93mWPSCAN_API_TOKEN not set in .env\033[0m – skipping"
+            )
+            print(
+                "\033[90m    Get a free token at: https://wpscan.com/api\033[0m"
+            )
+            return {}
+
         # Reset
         self.results = {}
         self.stats = WPScanStats()
@@ -491,20 +506,16 @@ class WPScanner:
         result = WPScanHostResult(url=url)
         target_start = _time.time()
 
-        txt_output = routed_path(output_dir, "wpscan_summary.txt")
+        json_output = routed_path(output_dir, f"wpscan_{url.replace('://', '_').replace('/', '_').replace(':', '_')}.json")
 
-        # One-liner (shell=True so spaces after commas work like manual):
-        #   wpscan --url <URL> --api-token <TOKEN>
-        #     --enumerate vp, ap, vt, at, tt, cb, dbe
-        #     --plugins-detection mixed --output wpscan_summary.txt -v
         cmd = (
             f'{self.wpscan_path}'
             f' --url {url}'
             f' --api-token {self.api_token}'
-            f' --enumerate vp, ap, vt, at, tt, cb, dbe'
+            f' --enumerate vp,ap,vt,at,tt,cb,dbe'
             f' --plugins-detection mixed'
-            f' --output {txt_output}'
-            f' -v'
+            f' --format json'
+            f' --output {json_output}'
         )
 
         print(
@@ -516,8 +527,8 @@ class WPScanner:
             proc = subprocess.Popen(
                 cmd,
                 shell=True,
-                stdout=sys.stderr,        # Show live output on terminal
-                stderr=sys.stderr,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
             )
             try:
                 proc.wait(timeout=timeout_secs)
@@ -526,9 +537,9 @@ class WPScanner:
                 proc.wait()
                 result.error = "timeout"
 
-            # Parse the text output file for results
-            if os.path.isfile(txt_output) and os.path.getsize(txt_output) > 0:
-                self._parse_text_output(txt_output, result)
+            # Parse the JSON output file for results
+            if os.path.isfile(json_output) and os.path.getsize(json_output) > 0:
+                self._parse_json_result(json_output, result)
 
         except FileNotFoundError:
             self.available = False
