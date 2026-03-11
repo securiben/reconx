@@ -1671,52 +1671,52 @@ class ReconEngine:
             self.nuclei_scanner.ensure_available()
 
         if self.nuclei_scanner.available and not self._phase_done("nuclei"):
-            # Collect full URLs (scheme + host + port) for nuclei
+            # Collect targets for nuclei:
+            #   - subdomain (bare hostname or httpx URL)
+            #   - ip address (bare IP)
+            #   - ip:port (all open ports from nmap)
             nuclei_targets: list = []
             seen: set = set()
 
-            # From httpx results: use full URLs (http://domain:port)
+            # Subdomains: use httpx URL if available, else bare hostname
             if hasattr(self.result, 'subdomains') and self.result.subdomains:
                 for sub in self.result.subdomains:
-                    if sub.is_alive and sub.http_url:
-                        url = sub.http_url.rstrip("/")
-                        if url not in seen:
-                            nuclei_targets.append(url)
-                            seen.add(url)
+                    if sub.is_alive:
+                        if sub.http_url:
+                            target = sub.http_url.rstrip("/")
+                        else:
+                            target = sub.hostname
+                        if target not in seen:
+                            nuclei_targets.append(target)
+                            seen.add(target)
 
-            # Fallback: if no httpx URLs, build from hostnames with https://
+            # Fallback: bare hostnames if nothing from httpx
             if not nuclei_targets:
                 for sub in subdomain_objects:
-                    if sub.is_alive:
-                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
-                        url = f"{scheme}://{sub.hostname}"
-                        if url not in seen:
-                            nuclei_targets.append(url)
-                            seen.add(url)
+                    if sub.is_alive and sub.hostname not in seen:
+                        nuclei_targets.append(sub.hostname)
+                        seen.add(sub.hostname)
                 if not nuclei_targets:
                     for sub in subdomain_objects:
-                        url = f"https://{sub.hostname}"
-                        if url not in seen:
-                            nuclei_targets.append(url)
-                            seen.add(url)
+                        if sub.hostname not in seen:
+                            nuclei_targets.append(sub.hostname)
+                            seen.add(sub.hostname)
 
-            # Add IP:port URLs from nmap results (http/https services)
+            # Add ALL open ip:port from nmap results
             if self.result.nmap_available and self.result.nmap_results:
                 for ip, host_result in self.result.nmap_results.items():
+                    # Add bare IP
+                    if ip not in seen:
+                        nuclei_targets.append(ip)
+                        seen.add(ip)
+                    # Add ip:port for every open port
                     if hasattr(host_result, 'ports'):
                         for port_obj in host_result.ports:
                             if port_obj.state == "open":
-                                svc = (port_obj.service or "").lower()
-                                p = port_obj.port
-                                if "https" in svc or "ssl" in svc or p in (443, 8443):
-                                    url = f"https://{ip}:{p}"
-                                elif "http" in svc or p in (80, 8080, 8000, 8888, 3000, 5000, 9090):
-                                    url = f"http://{ip}:{p}"
-                                else:
-                                    continue
-                                if url not in seen:
-                                    nuclei_targets.append(url)
-                                    seen.add(url)
+                                target = f"{ip}:{port_obj.port}"
+                                if target not in seen:
+                                    nuclei_targets.append(target)
+                                    seen.add(target)
 
             if nuclei_targets:
                 nuclei_output_dir = self._ensure_output_dir()
@@ -3056,28 +3056,26 @@ class ReconEngine:
 
         if (self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("nuclei")):
-            # Build full URLs (scheme + IP:port) from nmap results for nuclei
+            # Build targets: bare IP + ip:port for every open port
             nuclei_targets: list = []
             seen: set = set()
             for ip, host_result in self.result.nmap_results.items():
+                # Add bare IP
+                if ip not in seen:
+                    nuclei_targets.append(ip)
+                    seen.add(ip)
+                # Add ip:port for every open port
                 if hasattr(host_result, 'ports'):
                     for port_obj in host_result.ports:
                         if port_obj.state == "open":
-                            svc = (port_obj.service or "").lower()
-                            p = port_obj.port
-                            if "https" in svc or "ssl" in svc or p in (443, 8443):
-                                url = f"https://{ip}:{p}"
-                            elif "http" in svc or p in (80, 8080, 8000, 8888, 3000, 5000, 9090):
-                                url = f"http://{ip}:{p}"
-                            else:
-                                continue
-                            if url not in seen:
-                                nuclei_targets.append(url)
-                                seen.add(url)
-            # Fallback: if no HTTP services found, use http://ip for each host
+                            target = f"{ip}:{port_obj.port}"
+                            if target not in seen:
+                                nuclei_targets.append(target)
+                                seen.add(target)
+            # Fallback: if no results at all
             if not nuclei_targets:
                 for ip in sorted(self.result.nmap_results.keys()):
-                    nuclei_targets.append(f"http://{ip}")
+                    nuclei_targets.append(ip)
             if nuclei_targets:
                 nuclei_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(nuclei_output_dir, exist_ok=True)
