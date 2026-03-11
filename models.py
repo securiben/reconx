@@ -409,6 +409,11 @@ class ScanResult:
     ftp_login_stats: Dict = field(default_factory=dict)
     ftp_login_available: bool = False
 
+    # PostgreSQL login (msfconsole)
+    postgres_login_results: Dict = field(default_factory=dict)
+    postgres_login_stats: Dict = field(default_factory=dict)
+    postgres_login_available: bool = False
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -553,6 +558,14 @@ class ScanResult:
                 "hosts": {
                     key: r.to_dict() if hasattr(r, 'to_dict') else r
                     for key, r in self.ftp_login_results.items()
+                },
+            }
+        if self.postgres_login_results:
+            d["postgres_login"] = {
+                "stats": self.postgres_login_stats,
+                "hosts": {
+                    key: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for key, r in self.postgres_login_results.items()
                 },
             }
         return d

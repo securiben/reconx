@@ -306,7 +306,7 @@ def install_nmap() -> bool:
 
 def install_enum4linux() -> bool:
     """Install enum4linux."""
-    return _run("sudo apt-get install -y enum4linux", label="enum4linux (apt)")
+    return _run("apt-get install -y enum4linux", label="enum4linux (apt)")
 
 
 def install_smbclient() -> bool:

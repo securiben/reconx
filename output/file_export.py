@@ -95,6 +95,7 @@ class FileExporter:
         self._export_ssh_login(domain_dir, result)
         self._export_mongodb_login(domain_dir, result)
         self._export_ftp_login(domain_dir, result)
+        self._export_postgres_login(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -2214,6 +2215,91 @@ class FileExporter:
             "hosts": {
                 key: r.to_dict() if hasattr(r, 'to_dict') else r
                 for key, r in ftp_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_postgres_login(self, outdir: str, result: ScanResult):
+        """Export PostgreSQL login results. Only exports when valid credentials found."""
+        pg_stats = getattr(result, 'postgres_login_stats', {})
+        pg_results = getattr(result, 'postgres_login_results', {})
+        if not getattr(result, 'postgres_login_available', False) or not pg_results:
+            return
+
+        if pg_stats.get('credentials_found', 0) == 0:
+            return
+
+        domain = result.target_domain
+
+        # ── postgres_login.txt ── Human-readable report ───────────────
+        filepath = os.path.join(outdir, "postgres_login.txt")
+        lines = [
+            f"# PostgreSQL Login — {domain}",
+            f"# Hosts tested: {pg_stats.get('hosts_tested', 0)}/{pg_stats.get('total_postgres_hosts', 0)}",
+            f"# Hosts skipped: {pg_stats.get('hosts_skipped', 0)}",
+            f"# Credentials found: {pg_stats.get('credentials_found', 0)}",
+            f"# Scan time: {pg_stats.get('scan_time', 0.0):.1f}s",
+            "",
+        ]
+
+        # Valid credentials section
+        all_creds = []
+        for key in sorted(pg_results.keys()):
+            host_result = pg_results[key]
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            for cred in creds:
+                if hasattr(cred, 'to_dict'):
+                    all_creds.append(cred.to_dict())
+                elif isinstance(cred, dict):
+                    all_creds.append(cred)
+
+        if all_creds:
+            lines.append("## Valid Credentials")
+            lines.append("")
+            for cred in all_creds:
+                ip = cred.get('ip', '?')
+                port = cred.get('port', 5432)
+                user = cred.get('username', '?')
+                passwd = cred.get('password', '?') or '(blank)'
+                lines.append(f"  {ip}:{port} → {user}:{passwd}")
+            lines.append("")
+
+        # Per-host summary
+        lines.append("## Per-Host Summary")
+        lines.append("")
+        for key in sorted(pg_results.keys()):
+            host_result = pg_results[key]
+            ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', key)
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', 5432)
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+            creds = host_result.credentials if hasattr(host_result, 'credentials') else host_result.get('credentials', [])
+            scan_time = host_result.scan_time if hasattr(host_result, 'scan_time') else host_result.get('scan_time', 0)
+
+            status = "SKIPPED" if skipped else f"{len(creds)} credential(s)"
+            lines.append(f"  [{ip}:{port}] {status}")
+            if skipped and skip_reason:
+                lines.append(f"    Reason: {skip_reason}")
+            for cred in creds:
+                if hasattr(cred, 'username'):
+                    pw = cred.password if cred.password else '(blank)'
+                    lines.append(f"    → {cred.username}:{pw}")
+                elif isinstance(cred, dict):
+                    pw = cred.get('password', '?') or '(blank)'
+                    lines.append(f"    → {cred.get('username', '?')}:{pw}")
+            lines.append(f"    Time: {scan_time:.1f}s")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        # ── postgres_login_summary.json ── Structured JSON ────────────
+        filepath_json = os.path.join(outdir, "postgres_login_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": pg_stats,
+            "hosts": {
+                key: r.to_dict() if hasattr(r, 'to_dict') else r
+                for key, r in pg_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

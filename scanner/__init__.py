@@ -26,6 +26,7 @@ from .snmp_enum import SNMPEnumScanner
 from .ssh_login import SSHLoginScanner
 from .mongodb_login import MongoDBLoginScanner
 from .ftp_login import FTPLoginScanner
+from .postgres_login import PostgresLoginScanner
 
 __all__ = [
     "InfrastructureScanner",
@@ -50,4 +51,5 @@ __all__ = [
     "SSHLoginScanner",
     "MongoDBLoginScanner",
     "FTPLoginScanner",
+    "PostgresLoginScanner",
 ]

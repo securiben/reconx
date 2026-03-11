@@ -40,6 +40,7 @@ from .scanner import (
     SSHLoginScanner,
     MongoDBLoginScanner,
     FTPLoginScanner,
+    PostgresLoginScanner,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -96,6 +97,7 @@ class ReconEngine:
         self.ssh_login_scanner = SSHLoginScanner(config.scanner)
         self.mongodb_login_scanner = MongoDBLoginScanner(config.scanner)
         self.ftp_login_scanner = FTPLoginScanner(config.scanner)
+        self.postgres_login_scanner = PostgresLoginScanner(config.scanner)
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -403,6 +405,8 @@ class ReconEngine:
                 fe._export_mongodb_login(d, r)
             elif phase == "ftp_login":
                 fe._export_ftp_login(d, r)
+            elif phase == "postgres_login":
+                fe._export_postgres_login(d, r)
             elif phase == "summary":
                 fe._export_summary(d, r)
             self._completed_phases.add(phase)
@@ -824,7 +828,7 @@ class ReconEngine:
                 f"\033[93m[!]\033[0m enum4linux not found – skipping SMB/Windows enumeration"
             )
             print(
-                f"\033[90m    Install: sudo apt install enum4linux\033[0m\n"
+                f"\033[90m    Install: apt install enum4linux\033[0m\n"
             )
 
         # ── Phase 9a-2: SMBClient null session detection ─────────────────────
@@ -1462,16 +1466,70 @@ class ReconEngine:
                     f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
                 )
 
+        # ── Phase 9b-5: PostgreSQL login (msfconsole) ────────────────────
+        if (self.postgres_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results
+                and not self._phase_done("postgres_login")):
+            pg_output_dir = self._ensure_output_dir()
+            os.makedirs(pg_output_dir, exist_ok=True)
+
+            pg_results = self._safe_scan(
+                "postgres-login", self.postgres_login_scanner.scan,
+                self.result.nmap_results, output_dir=pg_output_dir,
+            )
+
+            if pg_results:
+                pg_stats = self.postgres_login_scanner.stats
+
+                self.result.postgres_login_results = pg_results
+                self.result.postgres_login_stats = pg_stats.to_dict()
+                self.result.postgres_login_available = True
+                self._save_phase("postgres_login")
+
+                if pg_stats.credentials_found > 0:
+                    print(
+                        f"\033[92m[+]\033[0m postgres-login: "
+                        f"\033[1;92m{pg_stats.credentials_found} credential(s)\033[0m | "
+                        f"{pg_stats.hosts_tested}/{pg_stats.total_postgres_hosts} hosts "
+                        f"\033[90m({pg_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.postgres_login_scanner.get_all_credentials():
+                        pw = cred.password if cred.password else '(blank)'
+                        print(
+                            f"\033[1;92m[+]\033[0m postgres-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{pw}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m postgres-login: no valid credentials | "
+                        f"{pg_stats.hosts_tested}/{pg_stats.total_postgres_hosts} hosts tested | "
+                        f"{pg_stats.hosts_skipped} skipped "
+                        f"\033[90m({pg_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif pg_results is None:
+                print(
+                    f"\033[93m[!]\033[0m postgres-login: skipped by user\n"
+                )
+        elif (not self.postgres_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.postgres_login import PostgresLoginScanner as _PG2
+            pg_check = _PG2(self.config.scanner)._get_postgres_hosts(self.result.nmap_results)
+            if pg_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping PostgreSQL login "
+                    f"({len(pg_check)} PostgreSQL host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
         # ── Phase 9b: RDP brute-force (netexec) ─────────────────────────────
         if (self.rdp_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("rdp")):
-            rdp_output_dir = self._ensure_output_dir()
-            os.makedirs(rdp_output_dir, exist_ok=True)
-
-            rdp_results = self._safe_scan(
-                "rdp-brute", self.rdp_scanner.scan,
-                self.result.nmap_results, output_dir=rdp_output_dir,
-            )
 
             if rdp_results:
                 rdp_stats = self.rdp_scanner.stats
@@ -2803,6 +2861,67 @@ class ReconEngine:
                 print(
                     f"\033[93m[!]\033[0m msfconsole not found – skipping FTP login "
                     f"({len(ftp_check)} FTP host(s) detected)"
+                )
+                print(
+                    f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
+                )
+
+        # ── PostgreSQL login (direct mode) ─────────────────────────────────
+        if (self.postgres_login_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results
+                and not self._phase_done("postgres_login")):
+            pg_output_dir = self._target_output_dir(label.replace("/", "_"))
+            os.makedirs(pg_output_dir, exist_ok=True)
+
+            pg_results = self._safe_scan(
+                "postgres-login", self.postgres_login_scanner.scan,
+                self.result.nmap_results, output_dir=pg_output_dir,
+            )
+
+            if pg_results:
+                pg_stats = self.postgres_login_scanner.stats
+
+                self.result.postgres_login_results = pg_results
+                self.result.postgres_login_stats = pg_stats.to_dict()
+                self.result.postgres_login_available = True
+                self._save_phase("postgres_login")
+
+                if pg_stats.credentials_found > 0:
+                    print(
+                        f"\033[92m[+]\033[0m postgres-login: "
+                        f"\033[1;92m{pg_stats.credentials_found} credential(s)\033[0m | "
+                        f"{pg_stats.hosts_tested}/{pg_stats.total_postgres_hosts} hosts "
+                        f"\033[90m({pg_stats.scan_time:.1f}s)\033[0m"
+                    )
+                    for cred in self.postgres_login_scanner.get_all_credentials():
+                        pw = cred.password if cred.password else '(blank)'
+                        print(
+                            f"\033[1;92m[+]\033[0m postgres-login: "
+                            f"\033[96m{cred.ip}:{cred.port}\033[0m → "
+                            f"\033[1;92m{cred.username}:{pw}\033[0m"
+                        )
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m postgres-login: no valid credentials | "
+                        f"{pg_stats.hosts_tested}/{pg_stats.total_postgres_hosts} hosts tested | "
+                        f"{pg_stats.hosts_skipped} skipped "
+                        f"\033[90m({pg_stats.scan_time:.1f}s)\033[0m"
+                    )
+                print()
+            elif pg_results is None:
+                print(
+                    f"\033[93m[!]\033[0m postgres-login: skipped by user\n"
+                )
+        elif (not self.postgres_login_scanner.available
+              and self.result.nmap_available
+              and self.result.nmap_results):
+            from .scanner.postgres_login import PostgresLoginScanner as _PG3
+            pg_check = _PG3(self.config.scanner)._get_postgres_hosts(self.result.nmap_results)
+            if pg_check:
+                print(
+                    f"\033[93m[!]\033[0m msfconsole not found – skipping PostgreSQL login "
+                    f"({len(pg_check)} PostgreSQL host(s) detected)"
                 )
                 print(
                     f"\033[90m    Install: https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html\033[0m\n"
