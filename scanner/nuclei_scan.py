@@ -391,26 +391,18 @@ class NucleiScanner:
                     # Keep full URLs (scheme + host + port) for nuclei
                     f.write(h.rstrip("/") + "\n")
 
-            # Custom templates directory (prv8_nuclei_templates at repo root)
-            _pkg_dir = os.path.dirname(os.path.abspath(__file__))
-            _custom_tpl_dir = os.path.join(os.path.dirname(_pkg_dir), "prv8_nuclei_templates")
-
-            # nuclei -l targets.txt -bs 50 -c 30 -s low,medium,high,critical -etags application-dos -o nuclei_results.txt
+            # nuclei -l targets.txt -bs 50 -c 30 -s critical,high,medium,low -etags application-dos -o nuclei_results.txt
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
                 "-bs", "50",
                 "-c", "30",
-                "-s", "low,medium,high,critical",
+                "-s", "critical,high,medium,low",
                 "-etags", "application-dos",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
                 "-silent",
             ]
-
-            # Append custom template directory if it exists
-            if os.path.isdir(_custom_tpl_dir):
-                cmd.extend(["-t", _custom_tpl_dir])
 
             # Run nuclei with live findings log
             timeout_secs = max(600, len(alive_hostnames) * 10)
@@ -468,19 +460,9 @@ class NucleiScanner:
                                 continue
                             with lock:
                                 findings[0] += 1
-                                sev = m.group(3).lower()
-                                url = m.group(4)
-                                color = sev_colors.get(sev, "\033[37m")
-                                # Pad severity tag to align template names
-                                sev_tag = f"[{sev}]"
-                                sev_padded = sev_tag.ljust(10)
-                                # Clear status line, print finding, redraw status
+                                # Print raw nuclei output (original format)
                                 sys.stdout.write(f"\r\033[K")
-                                sys.stdout.write(
-                                    f"    {color}{sev_padded}\033[0m "
-                                    f"\033[97m{tmpl}\033[0m → "
-                                    f"\033[96m{url}\033[0m\n"
-                                )
+                                sys.stdout.write(f"    {line.strip()}\n")
                                 _draw_status()
 
             reader_t = threading.Thread(target=_reader, daemon=True)
