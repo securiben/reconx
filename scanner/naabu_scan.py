@@ -1,12 +1,13 @@
 """
 Naabu Fast Port Scanner for ReconX.
 Uses ProjectDiscovery's naabu CLI tool for fast port discovery.
-Can be used as an alternative or complement to nmap.
+Can be used as a full replacement for nmap (--naabu flag).
 
 When used with --naabu flag:
-  1) naabu runs first for fast port discovery across all IPs
-  2) nmap then runs ONLY on IPs that have open ports (with -p for exact ports)
-  This dramatically reduces total scan time for large IP sets.
+  - naabu replaces nmap entirely (nmap is skipped)
+  - naabu results are converted to nmap-compatible format
+  - downstream scanners (enum4linux, smbclient, vnc, snmp, ssh, nuclei)
+    still work because they see the same nmap_results structure
 
 Command: naabu -l <targets> -rate 3000 -retries 3 -warm-up-time 0
                 -c 50 -top-ports 1000 -silent -o <output>
@@ -401,3 +402,90 @@ class NaabuScanner:
     def get_all_open_ips(self) -> Set[str]:
         """Return set of IPs that have at least one open port."""
         return {ip for ip, host in self.results.items() if host.ports}
+
+    # ── Well-known port → service name mapping (for nmap compat) ─────────
+
+    _PORT_SERVICE_MAP = {
+        21: "ftp", 22: "ssh", 23: "telnet", 25: "smtp", 53: "domain",
+        80: "http", 110: "pop3", 111: "rpcbind", 119: "nntp",
+        135: "msrpc", 137: "netbios-ns", 138: "netbios-dgm",
+        139: "netbios-ssn", 143: "imap", 161: "snmp", 162: "snmptrap",
+        389: "ldap", 443: "https", 445: "microsoft-ds",
+        465: "smtps", 514: "syslog", 515: "printer",
+        587: "submission", 631: "ipp", 636: "ldapssl",
+        993: "imaps", 995: "pop3s", 1080: "socks",
+        1433: "ms-sql-s", 1434: "ms-sql-m", 1521: "oracle",
+        1723: "pptp", 2049: "nfs", 2181: "zookeeper",
+        3000: "ppp", 3306: "mysql", 3389: "ms-wbt-server",
+        3690: "svn", 4443: "https-alt", 5000: "upnp",
+        5432: "postgresql", 5555: "freeciv", 5672: "amqp",
+        5900: "vnc", 5901: "vnc-1", 5985: "wsman", 5986: "wsmans",
+        6379: "redis", 6667: "irc", 8000: "http-alt",
+        8080: "http-proxy", 8081: "blackice-icecap",
+        8082: "blackice-alerts", 8443: "https-alt",
+        8888: "sun-answerbook", 9090: "zeus-admin",
+        9200: "wap-wsp", 9300: "vrace", 9443: "tungsten-https",
+        11211: "memcache", 27017: "mongod", 27018: "mongod",
+    }
+
+    def to_nmap_results(self) -> dict:
+        """
+        Convert naabu results to nmap-compatible format.
+
+        Returns a Dict[str, NmapHostResult] so downstream scanners
+        (enum4linux, smbclient, vnc, snmp, ssh, nuclei) can work
+        without any changes.
+        """
+        from .nmap_scan import NmapPort, NmapHostResult
+
+        nmap_compat: dict = {}
+        for ip, host in self.results.items():
+            if not host.ports:
+                continue
+            ports = []
+            for p in sorted(host.ports):
+                svc = self._PORT_SERVICE_MAP.get(p, "")
+                ports.append(NmapPort(
+                    port=p,
+                    protocol="tcp",
+                    state="open",
+                    service=svc,
+                    version="",
+                    extra_info="naabu",
+                ))
+            nmap_compat[ip] = NmapHostResult(
+                ip=ip,
+                hostname="",
+                state="up",
+                ports=ports,
+            )
+        return nmap_compat
+
+    def to_nmap_stats(self) -> dict:
+        """
+        Convert naabu stats to nmap_stats-compatible dict.
+        """
+        from collections import Counter
+        port_counter = Counter()
+        svc_counter = Counter()
+        for ip, host in self.results.items():
+            for p in host.ports:
+                port_counter[p] += 1
+                svc = self._PORT_SERVICE_MAP.get(p, f"unknown-{p}")
+                svc_counter[svc] += 1
+
+        return {
+            "total_ips_scanned": self.stats.total_ips_scanned,
+            "hosts_up": self.stats.hosts_with_ports,
+            "total_open_ports": self.stats.total_open_ports,
+            "unique_services": len(svc_counter),
+            "scan_time": self.stats.scan_time,
+            "top_ports": [
+                {"port": port, "count": cnt}
+                for port, cnt in sorted(port_counter.items(), key=lambda x: -x[1])[:10]
+            ],
+            "top_services": [
+                {"service": svc, "count": cnt}
+                for svc, cnt in sorted(svc_counter.items(), key=lambda x: -x[1])[:10]
+            ],
+        }

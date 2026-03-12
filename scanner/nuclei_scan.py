@@ -391,20 +391,44 @@ class NucleiScanner:
                     # Keep full URLs (scheme + host + port) for nuclei
                     f.write(h.rstrip("/") + "\n")
 
-            # nuclei -l targets.txt -bs 50 -c 30 -s critical,high,medium,low -etags application-dos -o nuclei_results.txt
+            # nuclei -l targets.txt ... -o nuclei_results.txt
+            #
+            # Tuning rationale:
+            #   -bs  25        : hosts processed in parallel (lower = less pressure)
+            #   -c   25        : template concurrency per host
+            #   -rl  150       : rate-limit (requests/second)
+            #   -timeout 15    : per-request timeout in seconds (default 10)
+            #   -retries 3     : retry failed requests (default 1)
+            #   -mhe 0         : disable max-host-errors (0 = never skip a host)
+            #   -page-timeout 30 : headless page render timeout
+            #   -no-mhe        : (fallback) explicitly disable host-error skipping
+            #
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-bs", "50",
-                "-c", "30",
+                "-bs", "25",
+                "-c", "25",
+                "-rl", "150",
+                "-timeout", "15",
+                "-retries", "3",
+                "-mhe", "0",
+                "-page-timeout", "30",
                 "-s", "critical,high,medium,low",
                 "-etags", "application-dos",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
             ]
 
+            # If a local custom templates folder exists, add it
+            custom_tpl_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "prv8_nuclei_templates",
+            )
+            if os.path.isdir(custom_tpl_dir):
+                cmd.extend(["-t", custom_tpl_dir])
+
             # Run nuclei with live findings log
-            timeout_secs = max(600, len(alive_hostnames) * 10)
+            timeout_secs = max(900, len(alive_hostnames) * 15)
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -428,17 +452,31 @@ class NucleiScanner:
             bar_width = 30
             spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
             spinner_idx = [0]
+            progress_start = time.time()
 
             scan_label = f"nuclei: \033[92m{len(alive_hostnames)}\033[0m targets"
+
+            def _fmt_elapsed():
+                """Format elapsed time as human-readable string."""
+                elapsed = time.time() - progress_start
+                if elapsed < 60:
+                    return f"{elapsed:.0f}s"
+                m, s = divmod(int(elapsed), 60)
+                if m < 60:
+                    return f"{m}m{s:02d}s"
+                h, m = divmod(m, 60)
+                return f"{h}h{m:02d}m"
 
             def _draw_status():
                 si = spinner_chars[spinner_idx[0] % len(spinner_chars)]
                 spinner_idx[0] += 1
                 f_count = findings[0]
                 bar = "\033[92m━\033[0m" * bar_width
+                elapsed_str = _fmt_elapsed()
                 sys.stdout.write(
                     f"\r\033[96m[{si}]\033[0m {scan_label} [{bar}] "
-                    f"\033[92m{f_count}\033[0m findings\033[K"
+                    f"\033[92m{f_count}\033[0m findings "
+                    f"\033[90m{elapsed_str}\033[0m\033[K"
                 )
                 sys.stdout.flush()
 
@@ -478,6 +516,7 @@ class NucleiScanner:
 
             # Final state
             f_count = findings[0]
+            elapsed_str = _fmt_elapsed()
             success = proc.returncode == 0
             if success:
                 bar = "\033[92m━\033[0m" * bar_width
@@ -491,6 +530,13 @@ class NucleiScanner:
                     f"\r\033[91m[✗]\033[0m {scan_label} [{bar}] "
                     f"\033[91m{f_count}\033[0m findings\033[K\n"
                 )
+            # Summary line with elapsed time
+            print(
+                f"\033[92m[+]\033[0m nuclei: "
+                f"\033[92m{f_count}\033[0m findings on "
+                f"\033[92m{len(alive_hostnames)}\033[0m hosts "
+                f"({elapsed_str})"
+            )
             sys.stdout.flush()
 
             # Parse JSONL results for structured data

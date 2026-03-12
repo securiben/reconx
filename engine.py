@@ -684,8 +684,11 @@ class ReconEngine:
         self._save_phase("tech")
         self._save_phase("flagged")
 
-        # ── Phase 9: Nmap port & service scanning ──────────────────────────
-        if self.nmap_scanner.available and not self._phase_done("nmap"):
+        # ── Phase 9: Port & service scanning (naabu or nmap) ────────────────
+        use_naabu = getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available
+        port_scanner_available = use_naabu or self.nmap_scanner.available
+
+        if port_scanner_available and not self._phase_done("nmap"):
             # Collect all unique IP addresses from resolved subdomains
             all_ips = set()
             for sub in subdomain_objects:
@@ -696,9 +699,8 @@ class ReconEngine:
                 nmap_output_dir = self._ensure_output_dir()
                 os.makedirs(nmap_output_dir, exist_ok=True)
 
-                # ── Optional Naabu pre-scan for fast port discovery ────────
-                naabu_ips = None
-                if getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available:
+                if use_naabu:
+                    # ── Naabu replaces nmap (--naabu mode) ─────────────────
                     naabu_results = self._safe_scan(
                         "naabu", self.naabu_scanner.scan,
                         all_ips, output_dir=nmap_output_dir,
@@ -712,78 +714,83 @@ class ReconEngine:
                             f"\033[92m{naabu_stats.total_open_ports} open ports\033[0m "
                             f"\033[90m({naabu_stats.scan_time:.1f}s)\033[0m"
                         )
-                        if naabu_ips:
-                            print(
-                                f"\033[92m[+]\033[0m naabu: narrowing nmap to \033[96m{len(naabu_ips)}\033[0m "
-                                f"hosts (from {len(all_ips)})\n"
+                        top_ports_str = ", ".join(
+                            f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                            for p in naabu_stats.top_ports[:5]
+                        )
+                        if top_ports_str:
+                            print(f"\033[92m[+]\033[0m naabu: top ports = {top_ports_str}")
+                        print()
+
+                        # Convert naabu → nmap-compatible results for downstream scanners
+                        self.result.nmap_results = self.naabu_scanner.to_nmap_results()
+                        self.result.nmap_stats = self.naabu_scanner.to_nmap_stats()
+                        self.result.nmap_available = True
+                        self.result.nmap_scanned_ips = sorted(all_ips)
+                        self._save_phase("nmap")
+                    else:
+                        print(f"\033[93m[!]\033[0m naabu: skipped by user\n")
+                else:
+                    # ── Standard nmap scan ──────────────────────────────────
+                    # Run nmap with output directed to the domain results folder
+                    nmap_results = self._safe_scan(
+                        "nmap", self.nmap_scanner.scan,
+                        all_ips, output_dir=nmap_output_dir,
+                    )
+
+                    if nmap_results is not None:
+                        nmap_stats = self.nmap_scanner.stats
+
+                        self.result.nmap_results = nmap_results
+                        self.result.nmap_stats = nmap_stats.to_dict()
+                        self.result.nmap_available = True
+                        self.result.nmap_scanned_ips = sorted(all_ips)
+                        self._save_phase("nmap")
+
+                        # Print nmap summary
+                        if nmap_stats.hosts_up > 0:
+                            svc_str = ", ".join(
+                                f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
+                                for s in nmap_stats.top_services[:5]
                             )
+                            port_str = ", ".join(
+                                f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                                for p in nmap_stats.top_ports[:5]
+                            )
+                            print(
+                                f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
+                                f"{nmap_stats.total_ips_scanned} scanned | "
+                                f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
+                                f"{nmap_stats.unique_services} services "
+                                f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
+                            )
+                            if svc_str:
+                                print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
+                            if port_str:
+                                print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
+                            print()
                         else:
                             print(
-                                f"\033[93m[!]\033[0m naabu: no open ports found – "
-                                f"running nmap on all {len(all_ips)} IPs\n"
+                                f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
+                                f"{nmap_stats.total_ips_scanned} scanned "
+                                f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
                             )
-
-                # Determine which IPs to nmap-scan
-                scan_ips = naabu_ips if naabu_ips else all_ips
-
-                # Run nmap with output directed to the domain results folder
-                nmap_results = self._safe_scan(
-                    "nmap", self.nmap_scanner.scan,
-                    scan_ips, output_dir=nmap_output_dir,
-                )
-
-                if nmap_results is not None:
-                    nmap_stats = self.nmap_scanner.stats
-
-                    self.result.nmap_results = nmap_results
-                    self.result.nmap_stats = nmap_stats.to_dict()
-                    self.result.nmap_available = True
-                    self.result.nmap_scanned_ips = sorted(all_ips)
-                    self._save_phase("nmap")
-
-                    # Print nmap summary
-                    if nmap_stats.hosts_up > 0:
-                        svc_str = ", ".join(
-                            f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
-                            for s in nmap_stats.top_services[:5]
-                        )
-                        port_str = ", ".join(
-                            f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
-                            for p in nmap_stats.top_ports[:5]
-                        )
-                        print(
-                            f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
-                            f"{nmap_stats.total_ips_scanned} scanned | "
-                            f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
-                            f"{nmap_stats.unique_services} services "
-                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
-                        )
-                        if svc_str:
-                            print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
-                        if port_str:
-                            print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
-                        print()
                     else:
                         print(
-                            f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
-                            f"{nmap_stats.total_ips_scanned} scanned "
-                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                            f"\033[93m[!]\033[0m nmap: skipped by user\n"
                         )
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m nmap: skipped by user\n"
-                    )
             else:
                 print(
                     f"\033[93m[!]\033[0m nmap: no IP addresses resolved – skipping port scan\n"
                 )
         else:
-            print(
-                f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
-            )
-            print(
-                f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
-            )
+            if not use_naabu:
+                print(
+                    f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
+                )
+                print(
+                    f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
+                )
 
         # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
         if (self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results
@@ -2151,17 +2158,19 @@ class ReconEngine:
             f"jumping to nmap, enum4linux, smbclient, smb-brute, vnc-brute, RDP-brute, MSF-brute, CME, Nuclei & WPScan\n"
         )
 
-        # ── Nmap port & service scanning ───────────────────────────────────
-        if self.nmap_scanner.available and not self._phase_done("nmap"):
+        # ── Nmap / Naabu port & service scanning ──────────────────────────
+        use_naabu = getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available
+        port_scanner_available = use_naabu or self.nmap_scanner.available
+
+        if port_scanner_available and not self._phase_done("nmap"):
             all_ips = set(targets)
 
             if all_ips:
                 nmap_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(nmap_output_dir, exist_ok=True)
 
-                # ── Optional Naabu pre-scan for fast port discovery ────────
-                naabu_ips = None
-                if getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available:
+                if use_naabu:
+                    # ── Naabu replaces nmap (--naabu mode) ─────────────────
                     naabu_results = self._safe_scan(
                         "naabu", self.naabu_scanner.scan,
                         all_ips, output_dir=nmap_output_dir,
@@ -2175,72 +2184,77 @@ class ReconEngine:
                             f"\033[92m{naabu_stats.total_open_ports} open ports\033[0m "
                             f"\033[90m({naabu_stats.scan_time:.1f}s)\033[0m"
                         )
-                        if naabu_ips:
-                            print(
-                                f"\033[92m[+]\033[0m naabu: narrowing nmap to \033[96m{len(naabu_ips)}\033[0m "
-                                f"hosts (from {len(all_ips)})\n"
+                        top_ports_str = ", ".join(
+                            f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                            for p in naabu_stats.top_ports[:5]
+                        )
+                        if top_ports_str:
+                            print(f"\033[92m[+]\033[0m naabu: top ports = {top_ports_str}")
+                        print()
+
+                        # Convert naabu → nmap-compatible results for downstream scanners
+                        self.result.nmap_results = self.naabu_scanner.to_nmap_results()
+                        self.result.nmap_stats = self.naabu_scanner.to_nmap_stats()
+                        self.result.nmap_available = True
+                        self.result.nmap_scanned_ips = sorted(all_ips)
+                        self._save_phase("nmap")
+                    else:
+                        print(f"\033[93m[!]\033[0m naabu: skipped by user\n")
+                else:
+                    # ── Standard nmap scan ──────────────────────────────────
+                    nmap_results = self._safe_scan(
+                        "nmap", self.nmap_scanner.scan,
+                        all_ips, output_dir=nmap_output_dir,
+                    )
+
+                    if nmap_results is not None:
+                        nmap_stats = self.nmap_scanner.stats
+
+                        self.result.nmap_results = nmap_results
+                        self.result.nmap_stats = nmap_stats.to_dict()
+                        self.result.nmap_available = True
+                        self.result.nmap_scanned_ips = sorted(all_ips)
+                        self._save_phase("nmap")
+
+                        if nmap_stats.hosts_up > 0:
+                            svc_str = ", ".join(
+                                f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
+                                for s in nmap_stats.top_services[:5]
                             )
+                            port_str = ", ".join(
+                                f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
+                                for p in nmap_stats.top_ports[:5]
+                            )
+                            print(
+                                f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
+                                f"{nmap_stats.total_ips_scanned} scanned | "
+                                f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
+                                f"{nmap_stats.unique_services} services "
+                                f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
+                            )
+                            if svc_str:
+                                print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
+                            if port_str:
+                                print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
+                            print()
                         else:
                             print(
-                                f"\033[93m[!]\033[0m naabu: no open ports found – "
-                                f"running nmap on all {len(all_ips)} IPs\n"
+                                f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
+                                f"{nmap_stats.total_ips_scanned} scanned "
+                                f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
                             )
-
-                # Determine which IPs to nmap-scan
-                scan_ips = naabu_ips if naabu_ips else all_ips
-
-                nmap_results = self._safe_scan(
-                    "nmap", self.nmap_scanner.scan,
-                    scan_ips, output_dir=nmap_output_dir,
-                )
-
-                if nmap_results is not None:
-                    nmap_stats = self.nmap_scanner.stats
-
-                    self.result.nmap_results = nmap_results
-                    self.result.nmap_stats = nmap_stats.to_dict()
-                    self.result.nmap_available = True
-                    self.result.nmap_scanned_ips = sorted(all_ips)
-                    self._save_phase("nmap")
-
-                    if nmap_stats.hosts_up > 0:
-                        svc_str = ", ".join(
-                            f"\033[96m{s['service']}\033[0m(\033[37m{s['count']}\033[0m)"
-                            for s in nmap_stats.top_services[:5]
-                        )
-                        port_str = ", ".join(
-                            f"\033[93m{p['port']}\033[0m(\033[37m{p['count']}\033[0m)"
-                            for p in nmap_stats.top_ports[:5]
-                        )
-                        print(
-                            f"\033[92m[+]\033[0m nmap: \033[92m{nmap_stats.hosts_up} hosts up\033[0m / "
-                            f"{nmap_stats.total_ips_scanned} scanned | "
-                            f"\033[92m{nmap_stats.total_open_ports} open ports\033[0m | "
-                            f"{nmap_stats.unique_services} services "
-                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m"
-                        )
-                        if svc_str:
-                            print(f"\033[92m[+]\033[0m nmap: services = {svc_str}")
-                        if port_str:
-                            print(f"\033[92m[+]\033[0m nmap: top ports = {port_str}")
-                        print()
                     else:
                         print(
-                            f"\033[92m[+]\033[0m nmap: \033[37m0 hosts up\033[0m / "
-                            f"{nmap_stats.total_ips_scanned} scanned "
-                            f"\033[90m({nmap_stats.scan_time:.1f}s)\033[0m\n"
+                            f"\033[93m[!]\033[0m nmap: skipped by user\n"
                         )
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m nmap: skipped by user\n"
-                    )
         else:
-            print(
-                f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
-            )
-            print(
-                f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
-            )
+            if not use_naabu:
+                print(
+                    f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
+                )
+                print(
+                    f"\033[90m    Install: https://nmap.org/download.html\033[0m\n"
+                )
 
         # ── Enum4linux SMB/Windows enumeration (direct mode) ───────────────
         if (self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results
