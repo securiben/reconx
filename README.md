@@ -310,11 +310,10 @@ When the input is an IP address, CIDR range, or file of IPs, subdomain enumerati
 
 | Phase | Name | Description |
 |-------|------|-------------|
-| 1 | **Naabu** | Optional fast port discovery pre-scan (with `--naabu` flag) |
-| 2 | **Nmap** | Port & service scanning on all target IPs (or only hosts with open ports if naabu ran) |
-| 3 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Dirsearch, WPScan |
-| 4 | **Brute-Force** | All login brute-force modules based on discovered open ports |
-| 5 | **Output** | Terminal rendering + JSON export + per-target file export |
+| 1 | **Nmap** | Port & service scanning on all target IPs |
+| 2 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Dirsearch, WPScan |
+| 3 | **Brute-Force** | All login brute-force modules based on discovered open ports |
+| 4 | **Output** | Terminal rendering + JSON export + per-target file export |
 
 ---
 

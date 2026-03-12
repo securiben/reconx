@@ -689,21 +689,25 @@ class ReconEngine:
         port_scanner_available = use_naabu or self.nmap_scanner.available
 
         if port_scanner_available and not self._phase_done("nmap"):
-            # Collect all unique IP addresses from resolved subdomains
-            all_ips = set()
-            for sub in subdomain_objects:
-                for ip in sub.ip_addresses:
-                    all_ips.add(ip)
+            if use_naabu:
+                # ── naabu + nmap-cli (default) ─────────────────────────────
+                # Collect targets: alive hostnames + resolved IPs.
+                # Naabu resolves hostnames internally, so we don't need
+                # pre-resolved IPs from the infra scanner.
+                naabu_targets = set()
+                for sub in subdomain_objects:
+                    if sub.is_alive or sub.ip_addresses:
+                        naabu_targets.add(sub.hostname)
+                    for ip in sub.ip_addresses:
+                        naabu_targets.add(ip)
 
-            if all_ips:
-                nmap_output_dir = self._ensure_output_dir()
-                os.makedirs(nmap_output_dir, exist_ok=True)
+                if naabu_targets:
+                    nmap_output_dir = self._ensure_output_dir()
+                    os.makedirs(nmap_output_dir, exist_ok=True)
 
-                if use_naabu:
-                    # ── naabu + nmap-cli (default) ─────────────────────
                     naabu_results = self._safe_scan(
                         "naabu", self.naabu_scanner.scan,
-                        all_ips, output_dir=nmap_output_dir,
+                        naabu_targets, output_dir=nmap_output_dir,
                     )
                     if naabu_results is not None:
                         naabu_stats = self.naabu_scanner.stats
@@ -727,13 +731,26 @@ class ReconEngine:
                         self.result.nmap_results = self.naabu_scanner.to_nmap_results()
                         self.result.nmap_stats = self.naabu_scanner.to_nmap_stats()
                         self.result.nmap_available = True
-                        self.result.nmap_scanned_ips = sorted(all_ips)
+                        self.result.nmap_scanned_ips = sorted(naabu_targets)
                         self._save_phase("nmap")
                     else:
                         print(f"\033[93m[!]\033[0m naabu: skipped by user\n")
                 else:
-                    # ── Standalone nmap (--nmap-only) ───────────────────────
-                    # Run nmap with output directed to the domain results folder
+                    print(
+                        f"\033[93m[!]\033[0m naabu: no targets resolved – skipping port scan\n"
+                    )
+            else:
+                # ── Standalone nmap (--nmap-only) ──────────────────────────
+                # nmap needs pre-resolved IPs
+                all_ips = set()
+                for sub in subdomain_objects:
+                    for ip in sub.ip_addresses:
+                        all_ips.add(ip)
+
+                if all_ips:
+                    nmap_output_dir = self._ensure_output_dir()
+                    os.makedirs(nmap_output_dir, exist_ok=True)
+
                     nmap_results = self._safe_scan(
                         "nmap", self.nmap_scanner.scan,
                         all_ips, output_dir=nmap_output_dir,
@@ -780,12 +797,20 @@ class ReconEngine:
                         print(
                             f"\033[93m[!]\033[0m nmap: skipped by user\n"
                         )
-            else:
-                print(
-                    f"\033[93m[!]\033[0m nmap: no IP addresses resolved – skipping port scan\n"
-                )
+                else:
+                    print(
+                        f"\033[93m[!]\033[0m nmap: no IP addresses resolved – skipping port scan\n"
+                    )
         else:
-            if not use_naabu:
+            _want_naabu = getattr(self.config.scanner, 'use_naabu', False)
+            if _want_naabu and not self.naabu_scanner.available:
+                print(
+                    f"\033[93m[!]\033[0m naabu not found – skipping port & service scan"
+                )
+                print(
+                    f"\033[90m    Install: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n"
+                )
+            elif not _want_naabu and not self.nmap_scanner.available:
                 print(
                     f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
                 )
@@ -2250,7 +2275,15 @@ class ReconEngine:
                             f"\033[93m[!]\033[0m nmap: skipped by user\n"
                         )
         else:
-            if not use_naabu:
+            _want_naabu = getattr(self.config.scanner, 'use_naabu', False)
+            if _want_naabu and not self.naabu_scanner.available:
+                print(
+                    f"\033[93m[!]\033[0m naabu not found – skipping port & service scan"
+                )
+                print(
+                    f"\033[90m    Install: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n"
+                )
+            elif not _want_naabu and not self.nmap_scanner.available:
                 print(
                     f"\033[93m[!]\033[0m nmap not found – skipping port & service scan"
                 )

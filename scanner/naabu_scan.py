@@ -116,7 +116,7 @@ class NaabuScanner:
         return None
 
     def scan(
-        self, ip_addresses: Set[str], output_dir: str = ""
+        self, targets: Set[str], output_dir: str = ""
     ) -> Dict[str, NaabuHostResult]:
         """
         Run naabu + nmap-cli for port discovery and service detection.
@@ -128,7 +128,7 @@ class NaabuScanner:
         When nmap is not installed, runs naabu-only (no service detection).
 
         Args:
-            ip_addresses: Set of IP addresses to scan.
+            targets: Set of IPs or hostnames to scan (naabu resolves hostnames).
             output_dir: Directory to place output files.
 
         Returns:
@@ -137,7 +137,7 @@ class NaabuScanner:
         if not self.available:
             return {}
 
-        if not ip_addresses:
+        if not targets:
             return {}
 
         # Reset state
@@ -146,7 +146,7 @@ class NaabuScanner:
         self.used_nmap_cli = False
 
         scan_start = time.time()
-        self.stats.total_ips_scanned = len(ip_addresses)
+        self.stats.total_ips_scanned = len(targets)
 
         # Prepare temp dir
         tmpdir = tempfile.mkdtemp(prefix="reconx_naabu_")
@@ -163,9 +163,9 @@ class NaabuScanner:
 
         try:
             self._run_naabu_scan(
-                ip_addresses, input_file, output_file,
+                targets, input_file, output_file,
                 nmap_output_file=nmap_output,
-                label="IPs",
+                label="targets",
             )
 
             # Parse naabu port discovery results (IP:PORT)
@@ -205,7 +205,7 @@ class NaabuScanner:
 
     def _run_naabu_scan(
         self,
-        ip_addresses: Set[str],
+        targets: Set[str],
         input_file: str,
         output_file: str,
         nmap_output_file: str = "",
@@ -215,21 +215,21 @@ class NaabuScanner:
         Run naabu with a live progress bar and optional -nmap-cli.
 
         Args:
-            ip_addresses: IPs to scan.
-            input_file: Path to write target IPs.
+            targets: IPs or hostnames to scan.
+            input_file: Path to write targets list.
             output_file: Path for naabu output.
             nmap_output_file: Path for nmap -oN output (via -nmap-cli).
             label: Display label for the scan.
         """
-        if not ip_addresses:
+        if not targets:
             return
 
         # Write targets file
         with open(input_file, "w", encoding="utf-8") as f:
-            for ip in sorted(ip_addresses):
-                f.write(ip + "\n")
+            for t in sorted(targets):
+                f.write(t + "\n")
 
-        total_hosts = len(ip_addresses)
+        total_hosts = len(targets)
 
         cmd = [
             self.naabu_path,
