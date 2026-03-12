@@ -1,21 +1,28 @@
 """
-Naabu Fast Port Scanner for ReconX.
-Uses ProjectDiscovery's naabu CLI tool for fast port discovery.
-Can be used as a full replacement for nmap (--naabu flag).
+Naabu + Nmap Port & Service Scanner for ReconX.
 
-When used with --naabu flag:
-  - naabu replaces nmap entirely (nmap is skipped)
-  - naabu results are converted to nmap-compatible format
-  - downstream scanners (enum4linux, smbclient, vnc, snmp, ssh, nuclei)
-    still work because they see the same nmap_results structure
+Default port scanning pipeline (replaces standalone nmap):
+  1. naabu  - fast SYN port discovery on top-1000 ports
+  2. nmap   - service detection + vuln scripts on discovered ports
+               (automatically via naabu's -nmap-cli flag)
 
-Command: naabu -l <targets> -rate 3000 -retries 3 -warm-up-time 0
-                -c 50 -top-ports 1000 -silent -o <output>
+Command:
+  naabu -l targets.txt -top-ports 1000 -rate 3000 -c 50
+        -nmap-cli 'nmap -sV --script vuln -oN nmap-vuln.txt'
+
+Fallback: when nmap is not installed, runs naabu-only
+  (port discovery without service/version detection).
+
+Provides nmap-compatible output so downstream scanners
+(enum4linux, smbclient, vnc-brute, snmp, ssh, nuclei, etc.)
+work transparently.
 
 Requires: naabu from ProjectDiscovery installed in PATH
   Install: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
   Or:      sudo apt install naabu
   Or:      https://github.com/projectdiscovery/naabu/releases
+Optional: nmap for service detection + vuln scanning
+  Install: sudo apt install nmap
 """
 
 import os
@@ -81,6 +88,8 @@ class NaabuScanner:
         self.available = self.naabu_path is not None
         self.results: Dict[str, NaabuHostResult] = {}  # ip → result
         self.stats = NaabuStats()
+        self._nmap_services: Dict[str, Dict] = {}  # "ip:port" → {service, version}
+        self.used_nmap_cli: bool = False  # True when scan used -nmap-cli
 
     def _find_naabu(self) -> Optional[str]:
         """Find the naabu binary in PATH or common install locations."""
@@ -110,14 +119,17 @@ class NaabuScanner:
         self, ip_addresses: Set[str], output_dir: str = ""
     ) -> Dict[str, NaabuHostResult]:
         """
-        Run naabu against a set of IP addresses for fast port discovery.
+        Run naabu + nmap-cli for port discovery and service detection.
 
-        Command: naabu -l <file> -rate 3000 -retries 3 -warm-up-time 0
-                       -c 50 -top-ports 1000 -silent -o <output>
+        Pipeline:
+          naabu -l targets.txt -top-ports 1000 -rate 3000 -c 50
+                -nmap-cli 'nmap -sV --script vuln -oN nmap-vuln.txt'
+
+        When nmap is not installed, runs naabu-only (no service detection).
 
         Args:
             ip_addresses: Set of IP addresses to scan.
-            output_dir: Directory to place naabu output files.
+            output_dir: Directory to place output files.
 
         Returns:
             Dict mapping IP → NaabuHostResult.
@@ -128,29 +140,43 @@ class NaabuScanner:
         if not ip_addresses:
             return {}
 
+        # Reset state
+        self.results = {}
+        self._nmap_services = {}
+        self.used_nmap_cli = False
+
         scan_start = time.time()
         self.stats.total_ips_scanned = len(ip_addresses)
 
         # Prepare temp dir
         tmpdir = tempfile.mkdtemp(prefix="reconx_naabu_")
-
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
         output_file = os.path.join(tmpdir, "naabu_results.txt")
         input_file = os.path.join(tmpdir, "naabu_targets.txt")
 
+        # nmap output goes to output_dir (or tmpdir as fallback)
+        nmap_output = os.path.join(
+            output_dir if output_dir else tmpdir, "nmap-vuln.txt"
+        )
+
         try:
             self._run_naabu_scan(
                 ip_addresses, input_file, output_file,
+                nmap_output_file=nmap_output,
                 label="IPs",
             )
 
-            # Parse results
+            # Parse naabu port discovery results (IP:PORT)
             if os.path.isfile(output_file):
                 self._parse_output(output_file)
 
-            # Copy output to output_dir
+            # Parse nmap output for service/version enrichment
+            if os.path.isfile(nmap_output) and os.path.getsize(nmap_output) > 0:
+                self._parse_nmap_output(nmap_output)
+
+            # Copy naabu results to output_dir/txt/
             if output_dir and os.path.isfile(output_file):
                 txt_dir = os.path.join(output_dir, "txt")
                 os.makedirs(txt_dir, exist_ok=True)
@@ -162,7 +188,7 @@ class NaabuScanner:
         except Exception:
             pass
         finally:
-            # Cleanup temp files
+            # Cleanup temp files (keep files in output_dir)
             try:
                 for f in os.listdir(tmpdir):
                     fp = os.path.join(tmpdir, f)
@@ -182,15 +208,17 @@ class NaabuScanner:
         ip_addresses: Set[str],
         input_file: str,
         output_file: str,
+        nmap_output_file: str = "",
         label: str = "",
     ):
         """
-        Run naabu with a live progress bar.
+        Run naabu with a live progress bar and optional -nmap-cli.
 
         Args:
             ip_addresses: IPs to scan.
             input_file: Path to write target IPs.
             output_file: Path for naabu output.
+            nmap_output_file: Path for nmap -oN output (via -nmap-cli).
             label: Display label for the scan.
         """
         if not ip_addresses:
@@ -206,13 +234,26 @@ class NaabuScanner:
         cmd = [
             self.naabu_path,
             "-l", input_file,
+            "-top-ports", "1000",
             "-rate", "3000",
+            "-c", "50",
             "-retries", "3",
             "-warm-up-time", "0",
-            "-c", "50",
-            "-top-ports", "1000",
             "-o", output_file,
         ]
+
+        # Add nmap service detection + vuln scanning via -nmap-cli
+        nmap_path = shutil.which("nmap")
+        has_nmap_cli = False
+        if nmap_path and nmap_output_file:
+            nmap_script = getattr(self.config, 'nmap_script', '') or 'vuln'
+            nmap_out = f'"{nmap_output_file}"' if " " in nmap_output_file else nmap_output_file
+            nmap_cli = f"nmap -sV --script {nmap_script} -oN {nmap_out}"
+            cmd.extend(["-nmap-cli", nmap_cli])
+            has_nmap_cli = True
+            self.used_nmap_cli = True
+
+        bar_label = "naabu+nmap" if has_nmap_cli else "naabu"
 
         # Use non-silent mode to stderr for progress, output goes to file
         proc = subprocess.Popen(
@@ -264,10 +305,16 @@ class NaabuScanner:
         stderr_t.start()
 
         # Animate progress bar
-        scan_label = (
-            f"naabu: \033[96m{total_hosts}\033[0m {label} "
-            f"\033[90m-rate 3000 -c 50 -top-ports 1000\033[0m"
-        )
+        if has_nmap_cli:
+            scan_label = (
+                f"{bar_label}: \033[96m{total_hosts}\033[0m {label} "
+                f"\033[90m-top-ports 1000 -sV --script vuln\033[0m"
+            )
+        else:
+            scan_label = (
+                f"{bar_label}: \033[96m{total_hosts}\033[0m {label} "
+                f"\033[90m-top-ports 1000\033[0m"
+            )
         sys.stdout.write(f"\033[96m[*]\033[0m {scan_label}\n")
         sys.stdout.flush()
 
@@ -293,7 +340,7 @@ class NaabuScanner:
                 elapsed_s = f"{elapsed:.0f}s"
 
             sys.stdout.write(
-                f"\r\033[96m[{spinner}]\033[0m naabu: [{bar}] "
+                f"\r\033[96m[{spinner}]\033[0m {bar_label}: [{bar}] "
                 f"\033[93m{est_pct:5.1f}%\033[0m "
                 f"\033[96mhost {hs}/{total_hosts}\033[0m "
                 f"\033[92m{pf} ports\033[0m "
@@ -321,7 +368,7 @@ class NaabuScanner:
         if success:
             bar = "\033[92m━\033[0m" * bar_width
             sys.stdout.write(
-                f"\r\033[96m[⠏]\033[0m naabu: [{bar}] \033[92m100.0%\033[0m "
+                f"\r\033[96m[⠏]\033[0m {bar_label}: [{bar}] \033[92m100.0%\033[0m "
                 f"\033[96mhost {hs}/{total_hosts}\033[0m "
                 f"\033[92m{pf} ports\033[0m "
                 f"\033[90m{elapsed_s}\033[0m\033[K\n"
@@ -331,7 +378,7 @@ class NaabuScanner:
             filled = int(bar_width * est_pct / 100)
             bar = "\033[91m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
             sys.stdout.write(
-                f"\r\033[91m[✗]\033[0m naabu: [{bar}] \033[91m{est_pct:5.1f}%\033[0m "
+                f"\r\033[91m[✗]\033[0m {bar_label}: [{bar}] \033[91m{est_pct:5.1f}%\033[0m "
                 f"\033[96mhost {hs}/{total_hosts}\033[0m "
                 f"\033[92m{pf} ports\033[0m "
                 f"\033[90m{elapsed_s}\033[0m\033[K\n"
@@ -363,6 +410,60 @@ class NaabuScanner:
                         self.results[ip] = NaabuHostResult(ip=ip)
                     if port not in self.results[ip].ports:
                         self.results[ip].ports.append(port)
+        except Exception:
+            pass
+
+    def _parse_nmap_output(self, filepath: str):
+        """
+        Parse nmap normal output (-oN) for service/version enrichment.
+
+        Extracts service names and versions from nmap output produced
+        by naabu's -nmap-cli, enriching the port-only results with
+        real service detection data.
+        """
+        try:
+            current_ip = None
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.rstrip()
+
+                    # Detect scan report header
+                    # "Nmap scan report for hostname (IP)" or "... for IP"
+                    if line.startswith("Nmap scan report for"):
+                        rest = line.replace("Nmap scan report for ", "").strip()
+                        if "(" in rest and ")" in rest:
+                            current_ip = rest.split("(")[1].split(")")[0]
+                        else:
+                            current_ip = rest.split()[0] if rest else None
+                        continue
+
+                    # Parse port lines: "80/tcp  open  http  Apache/2.4.41"
+                    if (current_ip and "/" in line
+                            and ("open" in line or "filtered" in line)):
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            try:
+                                port_num = int(parts[0].split("/")[0])
+                            except (ValueError, IndexError):
+                                continue
+                            state = parts[1]
+                            if state not in ("open", "open|filtered"):
+                                continue
+                            service = parts[2] if len(parts) > 2 else ""
+                            version = " ".join(parts[3:]) if len(parts) > 3 else ""
+
+                            # Store enrichment data
+                            key = f"{current_ip}:{port_num}"
+                            self._nmap_services[key] = {
+                                "service": service,
+                                "version": version,
+                            }
+
+                            # Also ensure this port is in naabu results
+                            if current_ip not in self.results:
+                                self.results[current_ip] = NaabuHostResult(ip=current_ip)
+                            if port_num not in self.results[current_ip].ports:
+                                self.results[current_ip].ports.append(port_num)
         except Exception:
             pass
 
@@ -432,6 +533,9 @@ class NaabuScanner:
         """
         Convert naabu results to nmap-compatible format.
 
+        Uses real service/version data from -nmap-cli output when
+        available, falling back to well-known port mappings.
+
         Returns a Dict[str, NmapHostResult] so downstream scanners
         (enum4linux, smbclient, vnc, snmp, ssh, nuclei) can work
         without any changes.
@@ -444,14 +548,17 @@ class NaabuScanner:
                 continue
             ports = []
             for p in sorted(host.ports):
-                svc = self._PORT_SERVICE_MAP.get(p, "")
+                key = f"{ip}:{p}"
+                enriched = self._nmap_services.get(key, {})
+                svc = enriched.get("service", self._PORT_SERVICE_MAP.get(p, ""))
+                ver = enriched.get("version", "")
                 ports.append(NmapPort(
                     port=p,
                     protocol="tcp",
                     state="open",
                     service=svc,
-                    version="",
-                    extra_info="naabu",
+                    version=ver,
+                    extra_info="naabu+nmap" if enriched else "naabu",
                 ))
             nmap_compat[ip] = NmapHostResult(
                 ip=ip,

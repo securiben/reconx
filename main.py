@@ -174,9 +174,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--naabu",
+        "--nmap-only",
         action="store_true",
-        help="Use naabu for fast port discovery before nmap service detection",
+        help="Use standalone nmap instead of naabu + nmap-cli for port scanning",
     )
 
     parser.add_argument(
@@ -313,7 +313,8 @@ def _run_single_target(target: str, args):
     config.scanner.collapse_threshold = args.collapse_threshold
     config.scanner.nmap_pn = args.Pn
     config.scanner.nmap_script = args.script or ""
-    config.scanner.use_naabu = args.naabu
+    if args.nmap_only:
+        config.scanner.use_naabu = False
 
     # Print scan start info
     print_scan_start(label, direct=is_direct)

@@ -82,7 +82,7 @@ class ScannerConfig:
     timeout: int = 8            # per-request timeout in seconds (fast default)
     nmap_pn: bool = False        # pass -Pn to nmap (skip host discovery)
     nmap_script: str = ""          # pass --script=<value> to nmap (e.g. "vuln")
-    use_naabu: bool = False        # use naabu for fast port discovery before nmap
+    use_naabu: bool = True         # naabu + nmap-cli (default port scanner)
 
 
 @dataclass

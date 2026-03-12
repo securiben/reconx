@@ -406,8 +406,8 @@ class NucleiScanner:
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-bs", "25",
-                "-c", "25",
+                "-bs", "50",
+                "-c", "30",
                 "-rl", "150",
                 "-timeout", "15",
                 "-retries", "3",

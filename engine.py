@@ -700,7 +700,7 @@ class ReconEngine:
                 os.makedirs(nmap_output_dir, exist_ok=True)
 
                 if use_naabu:
-                    # ── Naabu replaces nmap (--naabu mode) ─────────────────
+                    # ── naabu + nmap-cli (default) ─────────────────────
                     naabu_results = self._safe_scan(
                         "naabu", self.naabu_scanner.scan,
                         all_ips, output_dir=nmap_output_dir,
@@ -708,8 +708,9 @@ class ReconEngine:
                     if naabu_results is not None:
                         naabu_stats = self.naabu_scanner.stats
                         naabu_ips = self.naabu_scanner.get_all_open_ips()
+                        _lbl = "naabu+nmap" if self.naabu_scanner.used_nmap_cli else "naabu"
                         print(
-                            f"\033[92m[+]\033[0m naabu: \033[92m{naabu_stats.hosts_with_ports} hosts\033[0m "
+                            f"\033[92m[+]\033[0m {_lbl}: \033[92m{naabu_stats.hosts_with_ports} hosts\033[0m "
                             f"with open ports / {naabu_stats.total_ips_scanned} scanned | "
                             f"\033[92m{naabu_stats.total_open_ports} open ports\033[0m "
                             f"\033[90m({naabu_stats.scan_time:.1f}s)\033[0m"
@@ -719,7 +720,7 @@ class ReconEngine:
                             for p in naabu_stats.top_ports[:5]
                         )
                         if top_ports_str:
-                            print(f"\033[92m[+]\033[0m naabu: top ports = {top_ports_str}")
+                            print(f"\033[92m[+]\033[0m {_lbl}: top ports = {top_ports_str}")
                         print()
 
                         # Convert naabu → nmap-compatible results for downstream scanners
@@ -731,7 +732,7 @@ class ReconEngine:
                     else:
                         print(f"\033[93m[!]\033[0m naabu: skipped by user\n")
                 else:
-                    # ── Standard nmap scan ──────────────────────────────────
+                    # ── Standalone nmap (--nmap-only) ───────────────────────
                     # Run nmap with output directed to the domain results folder
                     nmap_results = self._safe_scan(
                         "nmap", self.nmap_scanner.scan,
@@ -2170,7 +2171,7 @@ class ReconEngine:
                 os.makedirs(nmap_output_dir, exist_ok=True)
 
                 if use_naabu:
-                    # ── Naabu replaces nmap (--naabu mode) ─────────────────
+                    # ── naabu + nmap-cli (default) ─────────────────────
                     naabu_results = self._safe_scan(
                         "naabu", self.naabu_scanner.scan,
                         all_ips, output_dir=nmap_output_dir,
@@ -2178,8 +2179,9 @@ class ReconEngine:
                     if naabu_results is not None:
                         naabu_stats = self.naabu_scanner.stats
                         naabu_ips = self.naabu_scanner.get_all_open_ips()
+                        _lbl = "naabu+nmap" if self.naabu_scanner.used_nmap_cli else "naabu"
                         print(
-                            f"\033[92m[+]\033[0m naabu: \033[92m{naabu_stats.hosts_with_ports} hosts\033[0m "
+                            f"\033[92m[+]\033[0m {_lbl}: \033[92m{naabu_stats.hosts_with_ports} hosts\033[0m "
                             f"with open ports / {naabu_stats.total_ips_scanned} scanned | "
                             f"\033[92m{naabu_stats.total_open_ports} open ports\033[0m "
                             f"\033[90m({naabu_stats.scan_time:.1f}s)\033[0m"
@@ -2189,7 +2191,7 @@ class ReconEngine:
                             for p in naabu_stats.top_ports[:5]
                         )
                         if top_ports_str:
-                            print(f"\033[92m[+]\033[0m naabu: top ports = {top_ports_str}")
+                            print(f"\033[92m[+]\033[0m {_lbl}: top ports = {top_ports_str}")
                         print()
 
                         # Convert naabu → nmap-compatible results for downstream scanners
@@ -2201,7 +2203,7 @@ class ReconEngine:
                     else:
                         print(f"\033[93m[!]\033[0m naabu: skipped by user\n")
                 else:
-                    # ── Standard nmap scan ──────────────────────────────────
+                    # ── Standalone nmap (--nmap-only) ───────────────────────
                     nmap_results = self._safe_scan(
                         "nmap", self.nmap_scanner.scan,
                         all_ips, output_dir=nmap_output_dir,
