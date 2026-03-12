@@ -259,10 +259,15 @@ class NmapScanner:
 
         # Shared state for progress
         pct = [0.0]
+        hosts_done = [0]
+        total_hosts = len(ip_addresses)
         bar_width = 30
         spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         spinner_idx = [0]
         pct_re = re.compile(r'About\s+([\d.]+)%\s+done')
+        host_re = re.compile(r'Nmap scan report for\s+')
+        eta_str = [""]
+        scan_start_t = time.time()
         done = threading.Event()
 
         def _reader():
@@ -279,6 +284,21 @@ class NmapScanner:
                     m = pct_re.search(line)
                     if m:
                         pct[0] = max(pct[0], float(m.group(1)))
+                    # Count completed hosts
+                    if host_re.search(line):
+                        hosts_done[0] += 1
+                        # Estimate ETA from completed hosts
+                        elapsed = time.time() - scan_start_t
+                        if hosts_done[0] > 0 and hosts_done[0] < total_hosts:
+                            remaining = (elapsed / hosts_done[0]) * (total_hosts - hosts_done[0])
+                            if remaining >= 3600:
+                                eta_str[0] = f"{remaining/3600:.1f}h"
+                            elif remaining >= 60:
+                                eta_str[0] = f"{remaining/60:.0f}m"
+                            else:
+                                eta_str[0] = f"{remaining:.0f}s"
+                        elif hosts_done[0] >= total_hosts:
+                            eta_str[0] = ""
             done.set()
 
         reader_t = threading.Thread(target=_reader, daemon=True)
@@ -293,12 +313,25 @@ class NmapScanner:
         sys.stdout.flush()
         while proc.poll() is None:
             p = pct[0]
+            hd = hosts_done[0]
             spinner = spinner_chars[spinner_idx[0] % len(spinner_chars)]
             spinner_idx[0] += 1
             filled = int(bar_width * p / 100)
             bar = "\033[92m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
+            # Elapsed time
+            elapsed = time.time() - scan_start_t
+            if elapsed >= 3600:
+                elapsed_s = f"{elapsed/3600:.1f}h"
+            elif elapsed >= 60:
+                elapsed_s = f"{elapsed/60:.0f}m{int(elapsed)%60:02d}s"
+            else:
+                elapsed_s = f"{elapsed:.0f}s"
+            # Host counter + ETA
+            host_info = f" \033[96mhost {hd}/{total_hosts}\033[0m"
+            eta_info = f" \033[90mETA {eta_str[0]}\033[0m" if eta_str[0] else ""
             sys.stdout.write(
-                f"\r\033[96m[{spinner}]\033[0m nmap: [{bar}] \033[93m{p:5.1f}%\033[0m\033[K"
+                f"\r\033[96m[{spinner}]\033[0m nmap: [{bar}] \033[93m{p:5.1f}%\033[0m"
+                f"{host_info}{eta_info} \033[90m{elapsed_s}\033[0m\033[K"
             )
             sys.stdout.flush()
             time.sleep(0.15)
@@ -306,18 +339,30 @@ class NmapScanner:
         reader_t.join(timeout=5)
 
         # Final state
+        hd = hosts_done[0]
+        elapsed = time.time() - scan_start_t
+        if elapsed >= 3600:
+            elapsed_s = f"{elapsed/3600:.1f}h"
+        elif elapsed >= 60:
+            elapsed_s = f"{int(elapsed)//60}m{int(elapsed)%60:02d}s"
+        else:
+            elapsed_s = f"{elapsed:.0f}s"
         success = proc.returncode == 0
         if success:
             bar = "\033[92m━\033[0m" * bar_width
             sys.stdout.write(
-                f"\r\033[96m[⠏]\033[0m nmap: [{bar}] \033[92m100.0%\033[0m\033[K\n"
+                f"\r\033[96m[⠏]\033[0m nmap: [{bar}] \033[92m100.0%\033[0m"
+                f" \033[96mhost {hd}/{total_hosts}\033[0m"
+                f" \033[90m{elapsed_s}\033[0m\033[K\n"
             )
         else:
             p = pct[0]
             filled = int(bar_width * p / 100)
             bar = "\033[91m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
             sys.stdout.write(
-                f"\r\033[91m[✗]\033[0m nmap: [{bar}] \033[91m{p:5.1f}%\033[0m\033[K\n"
+                f"\r\033[91m[✗]\033[0m nmap: [{bar}] \033[91m{p:5.1f}%\033[0m"
+                f" \033[96mhost {hd}/{total_hosts}\033[0m"
+                f" \033[90m{elapsed_s}\033[0m\033[K\n"
             )
         sys.stdout.flush()
 

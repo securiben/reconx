@@ -174,6 +174,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--naabu",
+        action="store_true",
+        help="Use naabu for fast port discovery before nmap service detection",
+    )
+
+    parser.add_argument(
         "--no-redact",
         action="store_true",
         help="Show full subdomain names (don't redact)",
@@ -307,6 +313,7 @@ def _run_single_target(target: str, args):
     config.scanner.collapse_threshold = args.collapse_threshold
     config.scanner.nmap_pn = args.Pn
     config.scanner.nmap_script = args.script or ""
+    config.scanner.use_naabu = args.naabu
 
     # Print scan start info
     print_scan_start(label, direct=is_direct)

@@ -34,7 +34,7 @@ from .sources.base import BaseSource
 from .scanner import (
     InfrastructureScanner, CTLogScanner,
     TakeoverScanner, TechProfiler, HttpxProbe,
-    NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
+    NmapScanner, NaabuScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
     MSFSMBBruteScanner, RDPBruteScanner, VNCBruteScanner, SMBBruteScanner, WPScanner, SMBClientScanner,
     KatanaScanner, DirsearchScanner, SNMPLoginScanner, SNMPEnumScanner,
     SSHLoginScanner,
@@ -82,6 +82,7 @@ class ReconEngine:
         self.httpx_probe = HttpxProbe(config.scanner)
         self.nuclei_scanner = NucleiScanner(config.scanner)
         self.nmap_scanner = NmapScanner(config.scanner)
+        self.naabu_scanner = NaabuScanner(config.scanner)
         self.enum4linux_scanner = Enum4linuxScanner(config.scanner)
         self.cme_scanner = CMEScanner(config.scanner)
         self.msf_scanner = MSFSMBBruteScanner(config.scanner)
@@ -692,12 +693,43 @@ class ReconEngine:
                     all_ips.add(ip)
 
             if all_ips:
-                # Run nmap with output directed to the domain results folder
                 nmap_output_dir = self._ensure_output_dir()
                 os.makedirs(nmap_output_dir, exist_ok=True)
+
+                # ── Optional Naabu pre-scan for fast port discovery ────────
+                naabu_ips = None
+                if getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available:
+                    naabu_results = self._safe_scan(
+                        "naabu", self.naabu_scanner.scan,
+                        all_ips, output_dir=nmap_output_dir,
+                    )
+                    if naabu_results is not None:
+                        naabu_stats = self.naabu_scanner.stats
+                        naabu_ips = self.naabu_scanner.get_all_open_ips()
+                        print(
+                            f"\033[92m[+]\033[0m naabu: \033[92m{naabu_stats.hosts_with_ports} hosts\033[0m "
+                            f"with open ports / {naabu_stats.total_ips_scanned} scanned | "
+                            f"\033[92m{naabu_stats.total_open_ports} open ports\033[0m "
+                            f"\033[90m({naabu_stats.scan_time:.1f}s)\033[0m"
+                        )
+                        if naabu_ips:
+                            print(
+                                f"\033[92m[+]\033[0m naabu: narrowing nmap to \033[96m{len(naabu_ips)}\033[0m "
+                                f"hosts (from {len(all_ips)})\n"
+                            )
+                        else:
+                            print(
+                                f"\033[93m[!]\033[0m naabu: no open ports found – "
+                                f"running nmap on all {len(all_ips)} IPs\n"
+                            )
+
+                # Determine which IPs to nmap-scan
+                scan_ips = naabu_ips if naabu_ips else all_ips
+
+                # Run nmap with output directed to the domain results folder
                 nmap_results = self._safe_scan(
                     "nmap", self.nmap_scanner.scan,
-                    all_ips, output_dir=nmap_output_dir,
+                    scan_ips, output_dir=nmap_output_dir,
                 )
 
                 if nmap_results is not None:
@@ -2126,9 +2158,40 @@ class ReconEngine:
             if all_ips:
                 nmap_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(nmap_output_dir, exist_ok=True)
+
+                # ── Optional Naabu pre-scan for fast port discovery ────────
+                naabu_ips = None
+                if getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available:
+                    naabu_results = self._safe_scan(
+                        "naabu", self.naabu_scanner.scan,
+                        all_ips, output_dir=nmap_output_dir,
+                    )
+                    if naabu_results is not None:
+                        naabu_stats = self.naabu_scanner.stats
+                        naabu_ips = self.naabu_scanner.get_all_open_ips()
+                        print(
+                            f"\033[92m[+]\033[0m naabu: \033[92m{naabu_stats.hosts_with_ports} hosts\033[0m "
+                            f"with open ports / {naabu_stats.total_ips_scanned} scanned | "
+                            f"\033[92m{naabu_stats.total_open_ports} open ports\033[0m "
+                            f"\033[90m({naabu_stats.scan_time:.1f}s)\033[0m"
+                        )
+                        if naabu_ips:
+                            print(
+                                f"\033[92m[+]\033[0m naabu: narrowing nmap to \033[96m{len(naabu_ips)}\033[0m "
+                                f"hosts (from {len(all_ips)})\n"
+                            )
+                        else:
+                            print(
+                                f"\033[93m[!]\033[0m naabu: no open ports found – "
+                                f"running nmap on all {len(all_ips)} IPs\n"
+                            )
+
+                # Determine which IPs to nmap-scan
+                scan_ips = naabu_ips if naabu_ips else all_ips
+
                 nmap_results = self._safe_scan(
                     "nmap", self.nmap_scanner.scan,
-                    all_ips, output_dir=nmap_output_dir,
+                    scan_ips, output_dir=nmap_output_dir,
                 )
 
                 if nmap_results is not None:

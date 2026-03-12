@@ -18,22 +18,23 @@ Its main goal is to make the recon phase faster, more consistent, and easier to 
 
 ## Tools Used
 
-ReconX mengintegrasikan **12 external tools** ke dalam satu alur kerja otomatis:
+ReconX mengintegrasikan **13 external tools** ke dalam satu alur kerja otomatis:
 
 | # | Tool | Fungsi di ReconX | Modul / Protokol |
 |---|------|-----------------|------------------|
 | 1 | **Nmap** | Port scanning & service/version detection | TCP top-1000, `-sCV`, custom `--script` |
-| 2 | **httpx** | HTTP probing — status code, title, tech, CDN, favicon | ProjectDiscovery |
-| 3 | **Nuclei** | Template-based vulnerability scanning | Severity: critical, high, medium, low |
-| 4 | **Katana** | Web crawling — endpoint & parameter discovery | ProjectDiscovery |
-| 5 | **Dirsearch** | Directory & file brute-forcing | Wordlist-based |
-| 6 | **WPScan** | WordPress vulnerability scanner | Theme, plugin, user enum + WPVulnDB API |
-| 7 | **enum4linux** | SMB/Windows enumeration | Shares, users, groups, null sessions, OS info |
-| 8 | **NetExec** (CrackMapExec) | Multi-protocol enumeration | SMB, SSH, RDP, MSSQL, WinRM — signing, guest, NULL |
-| 9 | **smbclient** | SMB share listing | Anonymous access verification |
-| 10 | **Metasploit** (`msfconsole`) | Login brute-force & enumeration | SMB login, SSH login, FTP login, PostgreSQL login, MongoDB login, SNMP login, SNMP enum |
-| 11 | **Crowbar** | RDP & VNC brute-force | Common/default credential testing |
-| 12 | **Hydra** | SMB brute-force | Fast network login cracker |
+| 2 | **Naabu** | Fast port discovery (optional pre-scan) | `-rate 3000 -c 50 -top-ports 1000` |
+| 3 | **httpx** | HTTP probing — status code, title, tech, CDN, favicon | ProjectDiscovery |
+| 4 | **Nuclei** | Template-based vulnerability scanning | Severity: critical, high, medium, low |
+| 5 | **Katana** | Web crawling — endpoint & parameter discovery | ProjectDiscovery |
+| 6 | **Dirsearch** | Directory & file brute-forcing | Wordlist-based |
+| 7 | **WPScan** | WordPress vulnerability scanner | Theme, plugin, user enum + WPVulnDB API |
+| 8 | **enum4linux** | SMB/Windows enumeration | Shares, users, groups, null sessions, OS info |
+| 9 | **NetExec** (CrackMapExec) | Multi-protocol enumeration | SMB, SSH, RDP, MSSQL, WinRM — signing, guest, NULL |
+| 10 | **smbclient** | SMB share listing | Anonymous access verification |
+| 11 | **Metasploit** (`msfconsole`) | Login brute-force & enumeration | SMB login, SSH login, FTP login, PostgreSQL login, MongoDB login, SNMP login, SNMP enum |
+| 12 | **Crowbar** | RDP & VNC brute-force | Common/default credential testing |
+| 13 | **Hydra** | SMB brute-force | Fast network login cracker |
 
 ### Metasploit Modules Detail
 
@@ -92,6 +93,7 @@ ReconX mengintegrasikan **12 external tools** ke dalam satu alur kerja otomatis:
 | Module | Tool | Description |
 |--------|------|-------------|
 | **Port Scan** | Nmap | `-sCV --top-ports 1000` with service/version detection, custom `--script` support |
+| **Fast Port Discovery** | Naabu | Optional pre-scan (`--naabu`) — discovers open ports first, then nmap only scans hosts with open ports |
 | **Vuln Scan** | Nuclei | Template-based vulnerability scanning (critical/high/medium/low severity) |
 | **Web Crawl** | Katana | ProjectDiscovery web crawler — endpoint & parameter discovery |
 | **Dir Brute** | Dirsearch | Directory/file brute-forcing with wordlists |
@@ -138,7 +140,7 @@ ReconX mengintegrasikan **12 external tools** ke dalam satu alur kerja otomatis:
 - **Kali Linux** (VM, bare-metal, or WSL)
 - Python 3.10+
 - External tools (auto-installed if missing):
-  `nmap` `httpx` `nuclei` `katana` `dirsearch` `enum4linux` `crackmapexec`/`netexec` `msfconsole` `crowbar` `hydra` `wpscan` `smbclient`
+  `nmap` `naabu` `httpx` `nuclei` `katana` `dirsearch` `enum4linux` `crackmapexec`/`netexec` `msfconsole` `crowbar` `hydra` `wpscan` `smbclient`
 
 ### Install
 
@@ -173,6 +175,12 @@ python main.py 'a.txt,"file 2.txt",c.txt'
 # Skip host discovery (for hosts that block ICMP)
 python main.py 10.10.0.5 --Pn
 
+# Use naabu for fast port discovery before nmap (great for large IP sets)
+python main.py targets.txt --naabu
+
+# Combine naabu with nmap options
+python main.py 10.10.0.0/24 --naabu --Pn --script=vuln
+
 # Run nmap with NSE vuln scripts
 python main.py 10.10.0.5 --script=vuln
 
@@ -189,6 +197,7 @@ python main.py target.com -o results.json -c 100 -t 15
 | `target` | Target: domain, IP, CIDR range, or file of targets | *required* |
 | `-o, --output` | Output JSON filename | `<domain>/<domain>.json` |
 | `--Pn` | Nmap: skip host discovery (treat all hosts as online) | `false` |
+| `--naabu` | Use naabu for fast port discovery before nmap service detection | `false` |
 | `--script <name>` | Nmap: run NSE script (e.g. `--script=vuln`) | — |
 | `--no-redact` | Show full subdomain names (don't redact) | `false` |
 | `-v, --verbose` | Verbose output | `false` |
@@ -231,13 +240,14 @@ reconx/
 │   ├── zoomeye_source.py          # ZoomEye cyberspace search
 │   └── asn_source.py              # ASN-based IP range expansion
 │
-├── scanner/                       # 25 scanner modules
+├── scanner/                       # 26 scanner modules
 │   ├── infrastructure.py          # Cloud provider classification (DNS + IP ranges)
 │   ├── ct_logs.py                 # CT log triage (stale/aged/fresh)
 │   ├── takeover.py                # Subdomain takeover detection (11+ providers)
 │   ├── tech_profiler.py           # Technology stack profiling (15+ signatures)
 │   ├── httpx_probe.py             # ProjectDiscovery httpx CLI wrapper
 │   ├── nmap_scan.py               # Nmap port & service scanner (+ custom --script)
+│   ├── naabu_scan.py              # Naabu fast port scanner (pre-scan for nmap)
 │   ├── nuclei_scan.py             # ProjectDiscovery Nuclei vuln scanner
 │   ├── katana_scan.py             # ProjectDiscovery Katana web crawler
 │   ├── dirsearch_scan.py          # Dirsearch directory brute-forcer
@@ -288,6 +298,7 @@ When the input is a domain name, the engine runs a multi-phase pipeline:
 | 7 | **Takeover** | Subdomain takeover detection (11+ cloud providers) |
 | 8 | **Tech Profile** | Technology stack detection on alive subdomains (15+ signatures) |
 | 9 | **Nmap** | Port & service scanning (`-sCV --top-ports 1000`, optional `--script`) |
+| 9a | **Naabu** | Optional fast port discovery pre-scan (with `--naabu` flag) |
 | 10 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Dirsearch, WPScan |
 | 11 | **Brute-Force** | MSF SMB, RDP, VNC, SMB, SSH, FTP, PostgreSQL, MongoDB, SNMP brute-force |
 | 12 | **Statistics** | Compute final stats (timing, counts, DB stats) |
@@ -299,10 +310,11 @@ When the input is an IP address, CIDR range, or file of IPs, subdomain enumerati
 
 | Phase | Name | Description |
 |-------|------|-------------|
-| 1 | **Nmap** | Port & service scanning on all target IPs |
-| 2 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Dirsearch, WPScan |
-| 3 | **Brute-Force** | All login brute-force modules based on discovered open ports |
-| 4 | **Output** | Terminal rendering + JSON export + per-target file export |
+| 1 | **Naabu** | Optional fast port discovery pre-scan (with `--naabu` flag) |
+| 2 | **Nmap** | Port & service scanning on all target IPs (or only hosts with open ports if naabu ran) |
+| 3 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Dirsearch, WPScan |
+| 4 | **Brute-Force** | All login brute-force modules based on discovered open ports |
+| 5 | **Output** | Terminal rendering + JSON export + per-target file export |
 
 ---
 
