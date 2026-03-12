@@ -171,6 +171,9 @@ class NmapScanner:
 
         try:
             extra = ["-Pn"] if getattr(self.config, 'nmap_pn', False) else []
+            nmap_script = getattr(self.config, 'nmap_script', '')
+            if nmap_script:
+                extra.extend(["--script", nmap_script])
             self._run_nmap_scan(
                 ip_addresses, output_prefix, tmpdir,
                 extra_flags=extra, label="IPs",

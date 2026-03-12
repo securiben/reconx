@@ -12,6 +12,7 @@ Examples:
     python main.py 10.10.0.0/24             # CIDR range → nmap + CME
     python main.py 'a.txt,"file 2.txt",c.txt'  # Multiple files (comma-separated)
     python main.py example.com --Pn         # Skip host discovery (ICMP dead)
+    python main.py example.com --script=vuln  # Run nmap with --script=vuln
     python main.py example.com -o results.json
 """
 
@@ -166,6 +167,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--script",
+        type=str,
+        default=None,
+        help="Nmap: run NSE script (e.g. --script=vuln)",
+    )
+
+    parser.add_argument(
         "--no-redact",
         action="store_true",
         help="Show full subdomain names (don't redact)",
@@ -298,6 +306,7 @@ def _run_single_target(target: str, args):
     config.scanner.timeout = args.timeout
     config.scanner.collapse_threshold = args.collapse_threshold
     config.scanner.nmap_pn = args.Pn
+    config.scanner.nmap_script = args.script or ""
 
     # Print scan start info
     print_scan_start(label, direct=is_direct)
