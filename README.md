@@ -16,6 +16,63 @@ Its main goal is to make the recon phase faster, more consistent, and easier to 
 
 ---
 
+## Tools Used
+
+ReconX mengintegrasikan **12 external tools** ke dalam satu alur kerja otomatis:
+
+| # | Tool | Fungsi di ReconX | Modul / Protokol |
+|---|------|-----------------|------------------|
+| 1 | **Nmap** | Port scanning & service/version detection | TCP top-1000, `-sCV`, custom `--script` |
+| 2 | **httpx** | HTTP probing — status code, title, tech, CDN, favicon | ProjectDiscovery |
+| 3 | **Nuclei** | Template-based vulnerability scanning | Severity: critical, high, medium, low |
+| 4 | **Katana** | Web crawling — endpoint & parameter discovery | ProjectDiscovery |
+| 5 | **Dirsearch** | Directory & file brute-forcing | Wordlist-based |
+| 6 | **WPScan** | WordPress vulnerability scanner | Theme, plugin, user enum + WPVulnDB API |
+| 7 | **enum4linux** | SMB/Windows enumeration | Shares, users, groups, null sessions, OS info |
+| 8 | **NetExec** (CrackMapExec) | Multi-protocol enumeration | SMB, SSH, RDP, MSSQL, WinRM — signing, guest, NULL |
+| 9 | **smbclient** | SMB share listing | Anonymous access verification |
+| 10 | **Metasploit** (`msfconsole`) | Login brute-force & enumeration | SMB login, SSH login, FTP login, PostgreSQL login, MongoDB login, SNMP login, SNMP enum |
+| 11 | **Crowbar** | RDP & VNC brute-force | Common/default credential testing |
+| 12 | **Hydra** | SMB brute-force | Fast network login cracker |
+
+### Metasploit Modules Detail
+
+| Auxiliary Module | Target Service | Deskripsi |
+|-----------------|----------------|-----------|
+| `auxiliary/scanner/smb/smb_login` | SMB (445) | Blank/anonymous credential testing |
+| `auxiliary/scanner/ssh/ssh_login` | SSH (22) | Common credential brute-force |
+| `auxiliary/scanner/ftp/anonymous` | FTP (21) | Anonymous FTP access check |
+| `auxiliary/scanner/ftp/ftp_login` | FTP (21) | FTP credential brute-force |
+| `auxiliary/scanner/postgres/postgres_login` | PostgreSQL (5432) | Anonymous/blank password testing |
+| `auxiliary/scanner/mongodb/mongodb_login` | MongoDB (27017) | Default credential testing |
+| `auxiliary/scanner/snmp/snmp_login` | SNMP (161) | Community string brute-force |
+| `auxiliary/scanner/snmp/snmp_enum` | SNMP (161) | SNMP information enumeration |
+
+### Data Sources (Subdomain Enumeration)
+
+| # | Source | Tipe | API Key |
+|---|--------|------|---------|
+| 1 | **crt.sh** | Certificate Transparency | — |
+| 2 | **Certspotter** | Certificate Transparency | — |
+| 3 | **AlienVault OTX** | Passive DNS | — |
+| 4 | **HackerTarget** | Host search | — |
+| 5 | **Wayback Machine** | CDX index | — |
+| 6 | **VirusTotal** | Subdomain API | Optional |
+| 7 | **Anubis** | Subdomain DB | — |
+| 8 | **ThreatMiner** | Threat intel | — |
+| 9 | **RapidDNS** | DNS database | — |
+| 10 | **Shodan** | DNS + SSL cert | Optional |
+| 11 | **Censys** | Certificate + host search | Optional |
+| 12 | **SecurityTrails** | Subdomain enum | Optional |
+| 13 | **URLScan.io** | Web intelligence | Optional |
+| 14 | **Chaos** | ProjectDiscovery dataset | Optional |
+| 15 | **CommonCrawl** | Web crawl index | — |
+| 16 | **FOFA** | Cyberspace search | Optional |
+| 17 | **ZoomEye** | Cyberspace search | Optional |
+| 18 | **ASN Expansion** | ASN-based IP range | — |
+
+---
+
 ## Features
 
 ### Reconnaissance & Enumeration
