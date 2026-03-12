@@ -1766,6 +1766,7 @@ class ReconEngine:
 
             # Add ALL open ip:port from nmap results
             if self.result.nmap_available and self.result.nmap_results:
+                HTTP_PORTS_D = {80, 443, 8080, 8443, 8000, 8888, 8081, 8082, 3000, 5000, 9090, 9443, 3333, 5555}
                 for ip, host_result in self.result.nmap_results.items():
                     # Add bare IP
                     if ip not in seen:
@@ -1775,10 +1776,18 @@ class ReconEngine:
                     if hasattr(host_result, 'ports'):
                         for port_obj in host_result.ports:
                             if port_obj.state == "open":
-                                target = f"{ip}:{port_obj.port}"
-                                if target not in seen:
-                                    nuclei_targets.append(target)
-                                    seen.add(target)
+                                pnum = port_obj.port
+                                if pnum in HTTP_PORTS_D or 'http' in (getattr(port_obj, 'service', '') or '').lower():
+                                    scheme = "https" if pnum in {443, 8443, 9443} else "http"
+                                    http_target = f"{scheme}://{ip}:{pnum}"
+                                    if http_target not in seen:
+                                        nuclei_targets.append(http_target)
+                                        seen.add(http_target)
+                                else:
+                                    target = f"{ip}:{pnum}"
+                                    if target not in seen:
+                                        nuclei_targets.append(target)
+                                        seen.add(target)
 
             if nuclei_targets:
                 nuclei_output_dir = self._ensure_output_dir()
@@ -3132,11 +3141,12 @@ class ReconEngine:
 
         if (self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results
                 and not self._phase_done("nuclei")):
-            # Build targets: bare IP + ip:port for every open port
+            # Build targets: bare IP + http://ip:port for HTTP + ip:port for non-HTTP
+            HTTP_PORTS = {80, 443, 8080, 8443, 8000, 8888, 8081, 8082, 3000, 5000, 9090, 9443, 3333, 5555}
             nuclei_targets: list = []
             seen: set = set()
             for ip, host_result in self.result.nmap_results.items():
-                # Add bare IP
+                # Add bare IP (for javascript/network protocol templates like pgsql-*)
                 if ip not in seen:
                     nuclei_targets.append(ip)
                     seen.add(ip)
@@ -3144,10 +3154,20 @@ class ReconEngine:
                 if hasattr(host_result, 'ports'):
                     for port_obj in host_result.ports:
                         if port_obj.state == "open":
-                            target = f"{ip}:{port_obj.port}"
-                            if target not in seen:
-                                nuclei_targets.append(target)
-                                seen.add(target)
+                            pnum = port_obj.port
+                            # HTTP-like ports get http(s):// prefix for HTTP templates
+                            if pnum in HTTP_PORTS or 'http' in (getattr(port_obj, 'service', '') or '').lower():
+                                scheme = "https" if pnum in {443, 8443, 9443} else "http"
+                                http_target = f"{scheme}://{ip}:{pnum}"
+                                if http_target not in seen:
+                                    nuclei_targets.append(http_target)
+                                    seen.add(http_target)
+                            else:
+                                # Non-HTTP: bare ip:port for javascript/network templates
+                                target = f"{ip}:{pnum}"
+                                if target not in seen:
+                                    nuclei_targets.append(target)
+                                    seen.add(target)
             # Fallback: if no results at all
             if not nuclei_targets:
                 for ip in sorted(self.result.nmap_results.keys()):

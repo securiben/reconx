@@ -401,7 +401,6 @@ class NucleiScanner:
                 "-etags", "application-dos",
                 "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
-                "-silent",
             ]
 
             # Run nuclei with live findings log
