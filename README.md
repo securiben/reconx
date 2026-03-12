@@ -6,6 +6,14 @@ Multi-source subdomain enumeration, HTTP probing, port scanning, vulnerability s
 
 Built for **Kali Linux**. One target in, full recon out.
 
+## What is ReconX?
+
+ReconX is an **automation tool for reconnaissance and enumeration** used in **pentesting** and **security assessments**. It acts as a central orchestrator that combines multiple security tools into a single workflow, so users do not need to run each tool manually one by one.
+
+In practice, ReconX helps collect target intelligence such as subdomains, live web services, open ports, running technologies, potential vulnerabilities, SMB/Windows exposure, and weak or default credentials across multiple protocols.
+
+Its main goal is to make the recon phase faster, more consistent, and easier to repeat for domain targets, single IPs, CIDR ranges, or target lists.
+
 ---
 
 ## Features
