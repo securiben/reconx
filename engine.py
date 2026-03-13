@@ -688,6 +688,11 @@ class ReconEngine:
         use_naabu = getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available
         port_scanner_available = use_naabu or self.nmap_scanner.available
 
+        # Warn when naabu is the configured scanner but not installed
+        if getattr(self.config.scanner, 'use_naabu', False) and not self.naabu_scanner.available and self.nmap_scanner.available:
+            print(f"\033[93m[!]\033[0m naabu not found – falling back to nmap")
+            print(f"\033[90m    Install naabu: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n")
+
         if port_scanner_available and not self._phase_done("nmap"):
             if use_naabu:
                 # ── naabu port discovery (default) ─────────────────────────
@@ -2181,12 +2186,17 @@ class ReconEngine:
         )
         print(
             f"\033[1;97m[»]\033[0m Skipping subdomain enumeration — "
-            f"jumping to nmap, enum4linux, smbclient, smb-brute, vnc-brute, RDP-brute, MSF-brute, CME, Nuclei & WPScan\n"
+            f"jumping to naabu/nmap, enum4linux, smbclient, smb-brute, vnc-brute, RDP-brute, MSF-brute, CME, Nuclei & WPScan\n"
         )
 
         # ── Nmap / Naabu port & service scanning ──────────────────────────
         use_naabu = getattr(self.config.scanner, 'use_naabu', False) and self.naabu_scanner.available
         port_scanner_available = use_naabu or self.nmap_scanner.available
+
+        # Warn when naabu is the configured scanner but not installed
+        if getattr(self.config.scanner, 'use_naabu', False) and not self.naabu_scanner.available and self.nmap_scanner.available:
+            print(f"\033[93m[!]\033[0m naabu not found – falling back to nmap")
+            print(f"\033[90m    Install naabu: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n")
 
         if port_scanner_available and not self._phase_done("nmap"):
             all_ips = set(targets)
