@@ -516,13 +516,46 @@ class FileExporter:
           - httpx_redirects.txt     Redirecting subdomains + locations
         """
         stats = getattr(result, 'httpx_stats', {})
-        if not getattr(result, 'httpx_available', False) or not stats:
-            return
 
         alive_subs = [s for s in result.subdomains if s.is_alive and getattr(s, 'http_url', '')]
 
-        if not alive_subs:
+        # ── Build http_port_targets from port scan results (naabu/nmap) ──────
+        HTTP_PORTS = {
+            80, 8080, 8000, 8008, 8081, 8082, 8083, 8084, 8085, 8086,
+            8087, 8088, 8888, 8890, 3000, 5000, 4000, 9090, 7070, 7080,
+            81, 82, 83, 84, 85, 86, 87, 88, 89, 8180, 8280, 8480,
+            8090, 8100, 8118,
+        }
+        HTTPS_PORTS = {443, 8443, 4443, 9443, 10443, 8444}
+
+        http_port_targets = []
+        _nmap_res = getattr(result, 'nmap_results', {}) or {}
+        for _ip, _host in _nmap_res.items():
+            _ports = _host.ports if hasattr(_host, 'ports') else []
+            for _p in _ports:
+                _pnum = _p.port if hasattr(_p, 'port') else _p.get('port', 0)
+                _svc = (_p.service if hasattr(_p, 'service') else _p.get('service', '')) or ''
+                _ver = (_p.version if hasattr(_p, 'version') else _p.get('version', '')) or ''
+                if _pnum in HTTPS_PORTS or 'https' in _svc.lower() or 'ssl' in _svc.lower():
+                    _scheme = 'https'
+                elif _pnum in HTTP_PORTS or 'http' in _svc.lower():
+                    _scheme = 'http'
+                else:
+                    continue
+                http_port_targets.append({
+                    'url': f'{_scheme}://{_ip}:{_pnum}',
+                    'port': _pnum,
+                    'service': _svc,
+                    'version': _ver,
+                })
+
+        # Skip entirely only if both httpx and port-scan produce nothing
+        if not alive_subs and not http_port_targets:
             return
+
+        if not getattr(result, 'httpx_available', False) or not stats:
+            if not http_port_targets:
+                return
 
         # ── httpx_probe.txt ── comprehensive per-host results ─────────────
         filepath = os.path.join(outdir, "httpx_probe.txt")
