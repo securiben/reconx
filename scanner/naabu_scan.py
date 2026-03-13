@@ -26,6 +26,7 @@ Optional: nmap for service detection + vuln scanning
 import os
 import re
 import sys
+import json
 import shutil
 import subprocess
 import tempfile
@@ -87,6 +88,7 @@ class NaabuScanner:
         self.results: Dict[str, NaabuHostResult] = {}  # ip → result
         self.stats = NaabuStats()
         self._nmap_services: Dict[str, Dict] = {}  # "ip:port" → {service, version}
+        self._hostname_to_ip: Dict[str, str] = {}   # hostname → resolved IP
         self.used_nmap_cli: bool = False  # True when scan used -nmap-cli
 
     def _find_naabu(self) -> Optional[str]:
@@ -141,6 +143,7 @@ class NaabuScanner:
         # Reset state
         self.results = {}
         self._nmap_services = {}
+        self._hostname_to_ip = {}
         self.used_nmap_cli = False
 
         scan_start = time.time()
@@ -174,12 +177,17 @@ class NaabuScanner:
             if os.path.isfile(nmap_output) and os.path.getsize(nmap_output) > 0:
                 self._parse_nmap_output(nmap_output)
 
-            # Copy naabu results to output_dir/txt/
-            if output_dir and os.path.isfile(output_file):
+            # Copy naabu results to output_dir/txt/ as ip:port format
+            if output_dir and self.results:
                 txt_dir = os.path.join(output_dir, "txt")
                 os.makedirs(txt_dir, exist_ok=True)
-                import shutil as _shutil
-                _shutil.copy2(output_file, os.path.join(txt_dir, "naabu_scan.txt"))
+                naabu_txt = os.path.join(txt_dir, "naabu_scan.txt")
+                ip_port_lines = []
+                for ip, hr in sorted(self.results.items()):
+                    for port in sorted(hr.ports):
+                        ip_port_lines.append(f"{ip}:{port}")
+                with open(naabu_txt, "w", encoding="utf-8") as _f:
+                    _f.write("\n".join(ip_port_lines) + "\n")
 
         except FileNotFoundError:
             self.available = False
@@ -237,6 +245,7 @@ class NaabuScanner:
             "-c", "50",
             "-retries", "3",
             "-warm-up-time", "0",
+            "-json",       # output JSON lines: {"ip":"...","port":N,"host":"..."}
             "-o", output_file,
         ]
 
@@ -271,7 +280,7 @@ class NaabuScanner:
         scan_start_t = time.time()
 
         def _reader_stdout():
-            """Read stdout for IP:PORT lines (naabu outputs discovered ports here)."""
+            """Read stdout for JSON lines (naabu -json outputs ports here)."""
             buf = ""
             while True:
                 chunk = proc.stdout.read(256)
@@ -282,8 +291,21 @@ class NaabuScanner:
                 while "\n" in buf:
                     line, buf = buf.split("\n", 1)
                     line = line.strip()
-                    if ":" in line:
-                        # Format: IP:PORT
+                    if not line:
+                        continue
+                    # JSON format: {"ip":"1.2.3.4","port":443,"host":"sub.example.com"}
+                    if line.startswith("{"):
+                        try:
+                            obj = json.loads(line)
+                            ip_val = obj.get("ip", "")
+                            if ip_val:
+                                ports_found[0] += 1
+                                with hosts_seen_lock:
+                                    hosts_seen.add(ip_val)
+                        except Exception:
+                            pass
+                    elif ":" in line:
+                        # Fallback: plain host:port (non-JSON mode)
                         ip_part = line.rsplit(":", 1)[0]
                         ports_found[0] += 1
                         with hosts_seen_lock:
@@ -386,23 +408,45 @@ class NaabuScanner:
 
     def _parse_output(self, filepath: str):
         """
-        Parse naabu output file.
-        Each line is: IP:PORT
+        Parse naabu JSON output file.
+        Each line is a JSON object: {"ip":"1.2.3.4","port":443,"host":"sub.example.com"}
+        Falls back to plain host:port format if not JSON.
+        Results are always keyed by IP address.
         """
         try:
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
                     line = line.strip()
-                    if not line or ":" not in line:
+                    if not line:
                         continue
-                    # Format: IP:PORT
-                    parts = line.rsplit(":", 1)
-                    if len(parts) != 2:
-                        continue
-                    ip = parts[0].strip()
-                    try:
-                        port = int(parts[1].strip())
-                    except ValueError:
+
+                    ip = ""
+                    port = 0
+
+                    if line.startswith("{"):
+                        # JSON format: {"ip":"1.2.3.4","port":443,"host":"sub.example.com"}
+                        try:
+                            obj = json.loads(line)
+                            ip = obj.get("ip", "").strip()
+                            port = int(obj.get("port", 0))
+                            hostname = obj.get("host", "").strip()
+                            # Store hostname → IP mapping
+                            if hostname and ip and hostname != ip:
+                                self._hostname_to_ip[hostname] = ip
+                        except Exception:
+                            continue
+                    elif ":" in line:
+                        # Fallback: plain host:port
+                        parts = line.rsplit(":", 1)
+                        if len(parts) != 2:
+                            continue
+                        ip = parts[0].strip()
+                        try:
+                            port = int(parts[1].strip())
+                        except ValueError:
+                            continue
+
+                    if not ip or not port:
                         continue
 
                     if ip not in self.results:
