@@ -268,11 +268,35 @@ class NucleiScanner:
         except Exception:
             return False
 
+    def _has_templates_dir(self) -> bool:
+        """Return True if a nuclei templates directory already exists locally."""
+        template_dirs = [
+            os.path.expanduser("~/nuclei-templates"),
+            os.path.expanduser("~/.local/nuclei-templates"),
+            os.path.expanduser("~/.config/nuclei/templates"),
+            os.path.expanduser("~/.nuclei-templates"),
+        ]
+
+        for path in template_dirs:
+            if os.path.isdir(path):
+                try:
+                    if any(os.scandir(path)):
+                        return True
+                except Exception:
+                    return True
+        return False
+
     def _ensure_templates(self):
-        """Download/update nuclei templates if not already present."""
+        """Ensure nuclei templates exist without forcing an update on every scan."""
         if self._templates_checked:
             return
         self._templates_checked = True
+
+        # Avoid running a slow template update every time ReconX scans.
+        # If templates already exist locally, use them as-is.
+        if self._has_templates_dir():
+            return
+
         try:
             subprocess.run(
                 [self.nuclei_path, "-update-templates"],
@@ -368,13 +392,26 @@ class NucleiScanner:
         self.results = []
         self.stats = NucleiStats()
 
+        # Deduplicate while preserving order and normalize trailing slashes.
+        normalized_targets = []
+        seen_targets = set()
+        for host in alive_hostnames:
+            target = (host or "").strip().rstrip("/")
+            if not target or target in seen_targets:
+                continue
+            seen_targets.add(target)
+            normalized_targets.append(target)
+
+        if not normalized_targets:
+            return []
+
         import time as _time
         scan_start = _time.time()
 
         # Ensure nuclei templates are downloaded
         self._ensure_templates()
 
-        self.stats.hosts_scanned = len(alive_hostnames)
+        self.stats.hosts_scanned = len(normalized_targets)
 
         # Write targets to temp file
         tmpdir = tempfile.mkdtemp(prefix="reconx_nuclei_")
@@ -384,12 +421,16 @@ class NucleiScanner:
         # Plain-text output in the domain results folder
         os.makedirs(output_dir, exist_ok=True)
         txt_output = routed_path(output_dir, "nuclei_results.txt")
+        targets_output = routed_path(output_dir, "nuclei_targets.txt")
 
         try:
             with open(input_file, "w", encoding="utf-8") as f:
-                for h in alive_hostnames:
+                for h in normalized_targets:
                     # Keep full URLs (scheme + host + port) for nuclei
                     f.write(h.rstrip("/") + "\n")
+
+            with open(targets_output, "w", encoding="utf-8") as f:
+                f.write("\n".join(normalized_targets) + "\n")
 
             # nuclei -l targets.txt ... -o nuclei_results.txt
             #
@@ -406,10 +447,11 @@ class NucleiScanner:
             cmd = [
                 self.nuclei_path,
                 "-l", input_file,
-                "-bs", "50",
-                "-c", "30",
-                "-rl", "10",
-                "-timeout", "15",
+                "-bs", "25",
+                "-c", "25",
+                "-rl", "150",
+                "-timeout", "10",
+                "-retries", "2",
                 "-s", "critical,high,medium,low",
                 "-etags", "application-dos",
                 "-o", txt_output,
@@ -424,8 +466,21 @@ class NucleiScanner:
             if os.path.isdir(custom_tpl_dir):
                 cmd.extend(["-t", custom_tpl_dir])
 
+            preview = ", ".join(normalized_targets[:5])
+            if len(normalized_targets) > 5:
+                preview += f", ... (+{len(normalized_targets) - 5} more)"
+            print(
+                f"\033[96m[*]\033[0m nuclei targets: \033[92m{len(normalized_targets)}\033[0m | "
+                f"severity=critical,high,medium,low"
+            )
+            if preview:
+                print(f"\033[90m    {preview}\033[0m")
+            print(
+                f"\033[90m    cmd: nuclei -l targets.txt -bs 25 -c 25 -rl 150 -timeout 10 -retries 2\033[0m"
+            )
+
             # Run nuclei with live findings log
-            timeout_secs = max(900, len(alive_hostnames) * 15)
+            timeout_secs = max(900, len(normalized_targets) * 15)
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -451,7 +506,7 @@ class NucleiScanner:
             spinner_idx = [0]
             progress_start = time.time()
 
-            scan_label = f"nuclei: \033[92m{len(alive_hostnames)}\033[0m targets"
+            scan_label = f"nuclei: \033[92m{len(normalized_targets)}\033[0m targets"
 
             def _fmt_elapsed():
                 """Format elapsed time as human-readable string."""
@@ -531,7 +586,7 @@ class NucleiScanner:
             print(
                 f"\033[92m[+]\033[0m nuclei: "
                 f"\033[92m{f_count}\033[0m findings on "
-                f"\033[92m{len(alive_hostnames)}\033[0m hosts "
+                f"\033[92m{len(normalized_targets)}\033[0m hosts "
                 f"({elapsed_str})"
             )
             sys.stdout.flush()
