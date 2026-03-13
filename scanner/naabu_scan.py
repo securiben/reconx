@@ -16,9 +16,15 @@ Provides nmap-compatible output so downstream scanners
 work transparently.
 
 Requires: naabu from ProjectDiscovery installed in PATH
-  Install: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
-  Or:      sudo apt install naabu
-  Or:      https://github.com/projectdiscovery/naabu/releases
+  Install via pdtm (recommended):
+    sudo apt install -y libpcap-dev
+    pdtm -i naabu
+  Or via go:
+    go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
+  Or via apt:
+    sudo apt install naabu
+  Or download:
+    https://github.com/projectdiscovery/naabu/releases
 Optional: nmap for service detection + vuln scanning
   Install: sudo apt install nmap
 """
@@ -101,7 +107,9 @@ class NaabuScanner:
             "/usr/bin/naabu",
             "/usr/local/bin/naabu",
             os.path.expanduser("~/go/bin/naabu"),
+            os.path.expanduser("~/.pdtm/go/bin/naabu"),  # pdtm install path
             "/root/go/bin/naabu",
+            "/root/.pdtm/go/bin/naabu",
         ]
 
         for path in common_paths:

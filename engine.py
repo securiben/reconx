@@ -691,7 +691,9 @@ class ReconEngine:
         # Warn when naabu is the configured scanner but not installed
         if getattr(self.config.scanner, 'use_naabu', False) and not self.naabu_scanner.available and self.nmap_scanner.available:
             print(f"\033[93m[!]\033[0m naabu not found – falling back to nmap")
-            print(f"\033[90m    Install naabu: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n")
+            print(f"\033[90m    Install naabu:")
+            print(f"\033[90m      sudo apt install -y libpcap-dev && pdtm -i naabu")
+            print(f"\033[90m      or: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n")
 
         if port_scanner_available and not self._phase_done("nmap"):
             if use_naabu:
@@ -2196,7 +2198,9 @@ class ReconEngine:
         # Warn when naabu is the configured scanner but not installed
         if getattr(self.config.scanner, 'use_naabu', False) and not self.naabu_scanner.available and self.nmap_scanner.available:
             print(f"\033[93m[!]\033[0m naabu not found – falling back to nmap")
-            print(f"\033[90m    Install naabu: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n")
+            print(f"\033[90m    Install naabu:")
+            print(f"\033[90m      sudo apt install -y libpcap-dev && pdtm -i naabu")
+            print(f"\033[90m      or: go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\033[0m\n")
 
         if port_scanner_available and not self._phase_done("nmap"):
             all_ips = set(targets)
