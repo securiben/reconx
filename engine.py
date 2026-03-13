@@ -690,7 +690,7 @@ class ReconEngine:
 
         if port_scanner_available and not self._phase_done("nmap"):
             if use_naabu:
-                # ── naabu + nmap-cli (default) ─────────────────────────────
+                # ── naabu port discovery (default) ─────────────────────────
                 # Collect targets: alive hostnames + resolved IPs.
                 # Naabu resolves hostnames internally, so we don't need
                 # pre-resolved IPs from the infra scanner.
@@ -2196,7 +2196,7 @@ class ReconEngine:
                 os.makedirs(nmap_output_dir, exist_ok=True)
 
                 if use_naabu:
-                    # ── naabu + nmap-cli (default) ─────────────────────
+                    # ── naabu port discovery (default) ─────────────────────
                     naabu_results = self._safe_scan(
                         "naabu", self.naabu_scanner.scan,
                         all_ips, output_dir=nmap_output_dir,

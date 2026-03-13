@@ -1,17 +1,15 @@
 """
 Naabu + Nmap Port & Service Scanner for ReconX.
 
-Default port scanning pipeline (replaces standalone nmap):
-  1. naabu  - fast SYN port discovery on top-1000 ports
-  2. nmap   - service detection + vuln scripts on discovered ports
-               (automatically via naabu's -nmap-cli flag)
+Default port scanning pipeline:
+  naabu -l targets.txt -top-ports 1000 -rate 3000 -c 50
 
-Command:
+With --nmap-cli flag:
   naabu -l targets.txt -top-ports 1000 -rate 3000 -c 50
         -nmap-cli 'nmap -sV --script vuln -oN nmap-vuln.txt'
 
-Fallback: when nmap is not installed, runs naabu-only
-  (port discovery without service/version detection).
+The -nmap-cli integration is opt-in (--nmap-cli flag).
+Without it, naabu runs port discovery only (no service detection).
 
 Provides nmap-compatible output so downstream scanners
 (enum4linux, smbclient, vnc-brute, snmp, ssh, nuclei, etc.)
@@ -242,10 +240,11 @@ class NaabuScanner:
             "-o", output_file,
         ]
 
-        # Add nmap service detection + vuln scanning via -nmap-cli
+        # Add nmap service detection + vuln scanning via -nmap-cli (opt-in)
         nmap_path = shutil.which("nmap")
         has_nmap_cli = False
-        if nmap_path and nmap_output_file:
+        want_nmap_cli = getattr(self.config, 'use_nmap_cli', False)
+        if want_nmap_cli and nmap_path and nmap_output_file:
             nmap_script = getattr(self.config, 'nmap_script', '') or 'vuln'
             nmap_out = f'"{nmap_output_file}"' if " " in nmap_output_file else nmap_output_file
             nmap_cli = f"nmap -sV --script {nmap_script} -oN {nmap_out}"
