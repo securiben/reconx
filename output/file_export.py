@@ -197,6 +197,14 @@ class FileExporter:
                     ip_to_subs[ip] = []
                 ip_to_subs[ip].append(sub.hostname)
 
+        # Also include IPs discovered by naabu/nmap port scan
+        # (infra scanner DNS resolution may have been skipped)
+        _nmap_res = getattr(result, 'nmap_results', {}) or {}
+        for ip in _nmap_res.keys():
+            all_ips.add(ip)
+            if ip not in ip_to_subs:
+                ip_to_subs[ip] = []
+
         if not all_ips:
             return
 
@@ -564,6 +572,21 @@ class FileExporter:
                 lines.append(f"  IPs:         {ips}")
             lines.append("")
 
+        # Add port-scan HTTP/HTTPS entries
+        if http_port_targets:
+            lines.append(f"{'─'*70}")
+            lines.append("# HTTP/HTTPS services discovered by port scan (naabu/nmap)")
+            lines.append("")
+            for _t in http_port_targets:
+                lines.append(f"{'─'*70}")
+                lines.append(f"  URL:         {_t['url']}")
+                lines.append(f"  Port:        {_t['port']}")
+                if _t['service']:
+                    lines.append(f"  Service:     {_t['service']}")
+                if _t['version']:
+                    lines.append(f"  Version:     {_t['version']}")
+                lines.append("")
+
         self._write(filepath, "\n".join(lines) + "\n")
 
         # ── httpx_technologies.txt ── tech detection grouped ─────────────
@@ -649,10 +672,19 @@ class FileExporter:
                     srv_map[server] = []
                 srv_map[server].append(sub.hostname)
 
-        if srv_map:
+        # Build port-scan server map from version/service info
+        _port_srv_map: Dict[str, List[str]] = {}
+        for _t in http_port_targets:
+            _srv_key = _t['version'] or _t['service'] or ''
+            if _srv_key:
+                if _srv_key not in _port_srv_map:
+                    _port_srv_map[_srv_key] = []
+                _port_srv_map[_srv_key].append(_t['url'])
+
+        if srv_map or _port_srv_map:
             filepath = os.path.join(outdir, "httpx_servers.txt")
             lines = [f"# ReconX - Server Headers for {result.target_domain}"]
-            lines.append(f"# {len(srv_map)} unique server signatures")
+            lines.append(f"# {len(srv_map) + len(_port_srv_map)} unique server signatures")
             lines.append("")
             for server in sorted(srv_map.keys(), key=lambda x: -len(srv_map[x])):
                 hosts = sorted(srv_map[server])
@@ -660,22 +692,42 @@ class FileExporter:
                 for h in hosts:
                     lines.append(f"  {h}")
                 lines.append("")
+            if _port_srv_map:
+                if srv_map:
+                    lines.append("# Port scan service/version (naabu/nmap):")
+                for srv_key in sorted(_port_srv_map.keys()):
+                    hosts = sorted(_port_srv_map[srv_key])
+                    lines.append(f"[{srv_key}] ({len(hosts)} hosts)")
+                    for h in hosts:
+                        lines.append(f"  {h}")
+                    lines.append("")
             self._write(filepath, "\n".join(lines) + "\n")
 
-        # ── httpx_titles.txt ── page titles for all alive hosts ──────────
+        # ── httpx_titles.txt ── page titles + HTTP port-scan services ──────
         titled_subs = [
             s for s in alive_subs
             if getattr(s, 'http_title', '')
         ]
-        if titled_subs:
+        if titled_subs or http_port_targets:
             filepath = os.path.join(outdir, "httpx_titles.txt")
-            lines = [f"# ReconX - HTTP Page Titles for {result.target_domain}"]
-            lines.append(f"# {len(titled_subs)} hosts with page titles")
+            lines = [f"# ReconX - HTTP Titles & Services for {result.target_domain}"]
+            lines.append(
+                f"# {len(titled_subs)} subdomains with titles, "
+                f"{len(http_port_targets)} additional IP:port from port scan"
+            )
             lines.append("")
             for sub in sorted(titled_subs, key=lambda s: s.hostname):
                 sc = sub.http_status or 0
                 title = getattr(sub, 'http_title', '')
                 lines.append(f"[{sc}] {sub.hostname}  \"{title}\"")
+            if http_port_targets:
+                if titled_subs:
+                    lines.append("")
+                    lines.append("# HTTP/HTTPS services from port scan (naabu/nmap):")
+                for _t in http_port_targets:
+                    _svc_str = f"  [{_t['service']}]" if _t['service'] else ""
+                    _ver_str = f" {_t['version']}" if _t['version'] else ""
+                    lines.append(f"[?] {_t['url']}{_svc_str}{_ver_str}")
             self._write(filepath, "\n".join(lines) + "\n")
 
         # ── httpx_redirects.txt ── redirecting subdomains ────────────────
