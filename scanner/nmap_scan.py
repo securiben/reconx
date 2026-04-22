@@ -266,7 +266,21 @@ class NmapScanner:
         spinner_idx = [0]
         pct_re = re.compile(r'About\s+([\d.]+)%\s+done')
         host_re = re.compile(r'Nmap scan report for\s+')
+        # Matches: "Stats: 0:03:36 elapsed; 2 hosts completed (5 up), 3 undergoing Service Scan"
+        stats_re = re.compile(
+            r'Stats:\s+(\S+)\s+elapsed;\s+(\d+)\s+hosts\s+completed\s+\((\d+)\s+up\),\s+(\d+)\s+undergoing\s+(.+)',
+            re.IGNORECASE,
+        )
+        # Matches: "Service scan Timing: About 4.35% done; ETC: 18:56 (0:01:50 remaining)"
+        timing_re = re.compile(
+            r'([\w][\w ]+?)\s+Timing:\s+About\s+([\d.]+)%\s+done;\s+ETC:\s+(\S+)\s+\((.+?)\s+remaining\)',
+            re.IGNORECASE,
+        )
         eta_str = [""]
+        scan_phase = [""]          # e.g. "Service Scan"
+        phase_pct = [0.0]          # phase-level % from timing line
+        nmap_etc = [""]            # ETC clock from nmap e.g. "18:56"
+        nmap_remaining = [""]      # remaining time string e.g. "0:01:50"
         scan_start_t = time.time()
         done = threading.Event()
 
@@ -281,15 +295,29 @@ class NmapScanner:
                 # Parse nmap stats lines
                 while "\n" in buf:
                     line, buf = buf.split("\n", 1)
+                    # Overall % from any "About X% done" line
                     m = pct_re.search(line)
                     if m:
                         pct[0] = max(pct[0], float(m.group(1)))
+                    # Detailed stats line
+                    ms = stats_re.search(line)
+                    if ms:
+                        hosts_done[0] = int(ms.group(2))
+                        scan_phase[0] = ms.group(5).strip()
+                    # Phase timing line (has ETC and remaining)
+                    mt = timing_re.search(line)
+                    if mt:
+                        scan_phase[0] = mt.group(1).strip()
+                        phase_pct[0] = float(mt.group(2))
+                        pct[0] = max(pct[0], float(mt.group(2)))
+                        nmap_etc[0] = mt.group(3)
+                        nmap_remaining[0] = mt.group(4)
                     # Count completed hosts
                     if host_re.search(line):
                         hosts_done[0] += 1
-                        # Estimate ETA from completed hosts
+                        # Estimate ETA from completed hosts (fallback)
                         elapsed = time.time() - scan_start_t
-                        if hosts_done[0] > 0 and hosts_done[0] < total_hosts:
+                        if hosts_done[0] > 0 and hosts_done[0] < total_hosts and not nmap_remaining[0]:
                             remaining = (elapsed / hosts_done[0]) * (total_hosts - hosts_done[0])
                             if remaining >= 3600:
                                 eta_str[0] = f"{remaining/3600:.1f}h"
@@ -326,12 +354,23 @@ class NmapScanner:
                 elapsed_s = f"{elapsed/60:.0f}m{int(elapsed)%60:02d}s"
             else:
                 elapsed_s = f"{elapsed:.0f}s"
-            # Host counter + ETA
+            # Host counter
             host_info = f" \033[96mhost {hd}/{total_hosts}\033[0m"
-            eta_info = f" \033[90mETA {eta_str[0]}\033[0m" if eta_str[0] else ""
+            # ETA: prefer nmap's own ETC/remaining, fall back to estimate
+            if nmap_remaining[0]:
+                eta_info = f" \033[90mETC {nmap_etc[0]} ({nmap_remaining[0]} remaining)\033[0m"
+            elif eta_str[0]:
+                eta_info = f" \033[90mETA {eta_str[0]}\033[0m"
+            else:
+                eta_info = ""
+            # Phase info (e.g. "Service Scan")
+            phase_info = (
+                f" \033[90m· {scan_phase[0]} {phase_pct[0]:.1f}%\033[0m"
+                if scan_phase[0] else ""
+            )
             sys.stdout.write(
                 f"\r\033[96m[{spinner}]\033[0m nmap: [{bar}] \033[93m{p:5.1f}%\033[0m"
-                f"{host_info}{eta_info} \033[90m{elapsed_s}\033[0m\033[K"
+                f"{host_info}{phase_info}{eta_info} \033[90m{elapsed_s}\033[0m\033[K"
             )
             sys.stdout.flush()
             time.sleep(0.15)
