@@ -588,6 +588,43 @@ class NmapScanner:
             for svc, cnt in sorted(service_counter.items(), key=lambda x: -x[1])[:10]
         ]
 
+    def load_from_file(self, filepath: str) -> Dict[str, "NmapHostResult"]:
+        """
+        Parse an existing nmap normal output file (-oN) and populate results.
+        Skips actual nmap execution — use when you already have scan output.
+
+        Args:
+            filepath: Path to the nmap -oN output file.
+
+        Returns:
+            Dict mapping IP → NmapHostResult parsed from the file.
+        """
+        import time as _time
+        if not os.path.isfile(filepath):
+            print(f"\033[91m[✗]\033[0m --nmap-import: file not found: {filepath}")
+            return {}
+
+        start = _time.time()
+        self.results = {}
+
+        print(
+            f"\033[96m[*]\033[0m nmap-import: \033[90mloading results from "
+            f"\033[97m{os.path.basename(filepath)}\033[90m (skipping scan)\033[0m"
+        )
+
+        self._parse_nmap_normal(filepath)
+        elapsed = _time.time() - start
+        self._compute_stats(elapsed)
+        self.stats.total_ips_scanned = len(self.results)
+
+        print(
+            f"\033[92m[+]\033[0m nmap-import: \033[92m{self.stats.hosts_up} hosts\033[0m, "
+            f"\033[93m{self.stats.total_open_ports} open ports\033[0m "
+            f"\033[90m({elapsed:.2f}s)\033[0m"
+        )
+
+        return self.results
+
     def get_results_by_port(self) -> Dict[int, List[str]]:
         """Group IPs by open port number."""
         groups: Dict[int, List[str]] = defaultdict(list)

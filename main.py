@@ -200,6 +200,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--nmap-import",
+        action="store_true",
+        help="Treat <target> as an existing nmap -oN output file and skip scanning",
+    )
+
+    parser.add_argument(
         "--no-banner",
         action="store_true",
         help="Skip printing the banner",
@@ -289,7 +295,13 @@ def main():
 def _run_single_target(target: str, args):
     """Run a single scan for one target (file, IP, CIDR, or domain)."""
     # ── Detect input type ──────────────────────────────────────────────
-    label, targets, is_direct = resolve_targets(target)
+    if getattr(args, 'nmap_import', False):
+        # target IS the nmap -oN output file — don't parse it as a targets list
+        label = os.path.splitext(os.path.basename(target))[0]
+        targets = []
+        is_direct = True
+    else:
+        label, targets, is_direct = resolve_targets(target)
 
     # Build configuration
     config = ReconConfig(
@@ -307,6 +319,7 @@ def _run_single_target(target: str, args):
     config.scanner.collapse_threshold = args.collapse_threshold
     config.scanner.nmap_pn = args.Pn
     config.scanner.nmap_script = args.script or ""
+    config.scanner.nmap_import_file = target if getattr(args, 'nmap_import', False) else ""
 
     # Print scan start info
     print_scan_start(label, direct=is_direct)

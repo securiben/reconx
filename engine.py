@@ -684,20 +684,26 @@ class ReconEngine:
         self._save_phase("flagged")
 
         # ── Phase 9: Port & service scanning (nmap) ─────────────────────────
+        _nmap_import = getattr(self.config.scanner, 'nmap_import_file', '')
         if self.nmap_scanner.available and not self._phase_done("nmap"):
             all_ips = set()
             for sub in subdomain_objects:
                 for ip in sub.ip_addresses:
                     all_ips.add(ip)
 
-            if all_ips:
+            if _nmap_import or all_ips:
                 nmap_output_dir = self._ensure_output_dir()
                 os.makedirs(nmap_output_dir, exist_ok=True)
 
-                nmap_results = self._safe_scan(
-                    "nmap", self.nmap_scanner.scan,
-                    all_ips, output_dir=nmap_output_dir,
-                )
+                if _nmap_import:
+                    nmap_results = self.nmap_scanner.load_from_file(_nmap_import)
+                    _scan_ips = sorted(nmap_results.keys()) if not all_ips else sorted(all_ips)
+                else:
+                    nmap_results = self._safe_scan(
+                        "nmap", self.nmap_scanner.scan,
+                        all_ips, output_dir=nmap_output_dir,
+                    )
+                    _scan_ips = sorted(all_ips)
 
                 if nmap_results is not None:
                     nmap_stats = self.nmap_scanner.stats
@@ -705,7 +711,7 @@ class ReconEngine:
                     self.result.nmap_results = nmap_results
                     self.result.nmap_stats = nmap_stats.to_dict()
                     self.result.nmap_available = True
-                    self.result.nmap_scanned_ips = sorted(all_ips)
+                    self.result.nmap_scanned_ips = _scan_ips
                     self._save_phase("nmap")
 
                     if nmap_stats.hosts_up > 0:
@@ -2118,17 +2124,23 @@ class ReconEngine:
         )
 
         # ── Nmap port & service scanning ──────────────────────────────────
+        _nmap_import = getattr(self.config.scanner, 'nmap_import_file', '')
         if self.nmap_scanner.available and not self._phase_done("nmap"):
             all_ips = set(targets)
 
-            if all_ips:
+            if _nmap_import or all_ips:
                 nmap_output_dir = self._target_output_dir(label.replace("/", "_"))
                 os.makedirs(nmap_output_dir, exist_ok=True)
 
-                nmap_results = self._safe_scan(
-                    "nmap", self.nmap_scanner.scan,
-                    all_ips, output_dir=nmap_output_dir,
-                )
+                if _nmap_import:
+                    nmap_results = self.nmap_scanner.load_from_file(_nmap_import)
+                    _scan_ips = sorted(nmap_results.keys()) if not all_ips else sorted(all_ips)
+                else:
+                    nmap_results = self._safe_scan(
+                        "nmap", self.nmap_scanner.scan,
+                        all_ips, output_dir=nmap_output_dir,
+                    )
+                    _scan_ips = sorted(all_ips)
 
                 if nmap_results is not None:
                     nmap_stats = self.nmap_scanner.stats
@@ -2136,7 +2148,7 @@ class ReconEngine:
                     self.result.nmap_results = nmap_results
                     self.result.nmap_stats = nmap_stats.to_dict()
                     self.result.nmap_available = True
-                    self.result.nmap_scanned_ips = sorted(all_ips)
+                    self.result.nmap_scanned_ips = _scan_ips
                     self._save_phase("nmap")
 
                     if nmap_stats.hosts_up > 0:
