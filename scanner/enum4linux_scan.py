@@ -300,6 +300,12 @@ class Enum4linuxScanner:
             env["PASSWD"] = ""
             env["SMBPASSWD"] = ""
 
+            # Wrap with setsid so the subprocess has no controlling TTY.
+            # This prevents smbclient from opening /dev/tty directly for the
+            # password prompt — it will fall back to the empty PASSWD env var.
+            if shutil.which("setsid"):
+                cmd = ["setsid"] + cmd
+
             # Run enum4linux
             timeout_secs = 300  # 5 minutes per host
             proc = subprocess.Popen(
