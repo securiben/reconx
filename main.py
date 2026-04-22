@@ -132,7 +132,7 @@ def print_scan_start(label: str, direct: bool = False):
     print(f"\033[1;97m[»]\033[0m Target: \033[1;96m{label}\033[0m")
     if direct:
         print(f"\033[1;97m[»]\033[0m Mode: \033[93mDirect scan\033[0m (IP/CIDR — skipping subdomain enumeration)")
-        print(f"\033[1;97m[»]\033[0m Initializing naabu/nmap, smbclient, RDP-brute, enum4linux, MSF-brute, CME, Nuclei & WPScan ...\n")
+        print(f"\033[1;97m[»]\033[0m Initializing nmap, smbclient, RDP-brute, enum4linux, MSF-brute, CME, Nuclei & WPScan ...\n")
     else:
         print(f"\033[1;97m[»]\033[0m Initializing sources & scanners...")
         print(f"\033[1;97m[»]\033[0m Launching concurrent enumeration...\n")
@@ -171,18 +171,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Nmap: run NSE script (e.g. --script=vuln)",
-    )
-
-    parser.add_argument(
-        "--nmap-cli",
-        action="store_true",
-        help="Enable naabu -nmap-cli mode: run nmap service detection + vuln scripts on discovered ports",
-    )
-
-    parser.add_argument(
-        "--nmap-only",
-        action="store_true",
-        help="Use standalone nmap instead of naabu for port scanning",
     )
 
     parser.add_argument(
@@ -319,10 +307,6 @@ def _run_single_target(target: str, args):
     config.scanner.collapse_threshold = args.collapse_threshold
     config.scanner.nmap_pn = args.Pn
     config.scanner.nmap_script = args.script or ""
-    if args.nmap_cli:
-        config.scanner.use_nmap_cli = True
-    if args.nmap_only:
-        config.scanner.use_naabu = False
 
     # Print scan start info
     print_scan_start(label, direct=is_direct)

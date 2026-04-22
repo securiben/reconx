@@ -10,7 +10,6 @@ from .takeover import TakeoverScanner
 from .tech_profiler import TechProfiler
 from .httpx_probe import HttpxProbe
 from .nmap_scan import NmapScanner
-from .naabu_scan import NaabuScanner
 from .nuclei_scan import NucleiScanner
 from .enum4linux_scan import Enum4linuxScanner
 from .cme_scan import CMEScanner
@@ -36,7 +35,6 @@ __all__ = [
     "TechProfiler",
     "HttpxProbe",
     "NmapScanner",
-    "NaabuScanner",
     "NucleiScanner",
     "Enum4linuxScanner",
     "CMEScanner",
