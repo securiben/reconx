@@ -294,6 +294,12 @@ class Enum4linuxScanner:
             # Build enum4linux command (null session — no user/pass)
             cmd = [self.enum4linux_path, "-a", "-u", "", "-p", "", ip]
 
+            # Set PASSWD env var so smbclient (called internally by enum4linux)
+            # doesn't prompt for a password via /dev/tty
+            env = os.environ.copy()
+            env["PASSWD"] = ""
+            env["SMBPASSWD"] = ""
+
             # Run enum4linux
             timeout_secs = 300  # 5 minutes per host
             proc = subprocess.Popen(
@@ -301,6 +307,7 @@ class Enum4linuxScanner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,
+                env=env,
             )
 
             try:
