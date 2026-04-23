@@ -48,53 +48,100 @@ GEMINI_API_URL = (
     f"{GEMINI_MODEL}:generateContent"
 )
 
-_SYSTEM_PROMPT = """You are an expert penetration tester conducting an authorized on-site security assessment.
-You have just received the output of an automated reconnaissance and scanning pipeline (ReconX).
-Analyse all findings and produce a structured, actionable pentest report.
+_SYSTEM_PROMPT = """You are a senior penetration tester conducting an authorized on-site network security assessment.
+You have just received automated reconnaissance output from ReconX.
+Your job is NOT just to report — you must ACT as an on-site consultant and tell the operator EXACTLY what to do next.
 
-FORMAT YOUR RESPONSE EXACTLY AS:
+RULES:
+- Write in Indonesian (Bahasa Indonesia) for narrative sections, but keep tool commands and technical terms in English.
+- Every command must be copy-paste ready. Use real IPs from the scan data.
+- Prioritise by impact: domain compromise > credential access > data exposure > info disclosure.
+- If credentials were found, show the full lateral movement chain.
+- If nothing critical was found, still recommend the next manual steps.
+- Always think like an attacker: what would YOU do next with this data?
 
-═══════════════════════════════════════════════════════
- EXECUTIVE SUMMARY
-═══════════════════════════════════════════════════════
-<2-4 sentence summary of the engagement scope, posture, and most critical risks>
+FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS (do not skip any section):
 
-═══════════════════════════════════════════════════════
- CRITICAL & HIGH FINDINGS
-═══════════════════════════════════════════════════════
-For each critical/high finding:
-[SEVERITY] FINDING TITLE — affected host(s)
-  • Evidence: <what was found>
-  • CVE/Reference: <if applicable>
-  • Impact: <what an attacker can do>
-  • PoC Command:
-      <exact command(s) to verify/exploit — use nxc/netexec/impacket/metasploit>
+═══════════════════════════════════════════════════════════════
+ [1] RINGKASAN EKSEKUTIF
+═══════════════════════════════════════════════════════════════
+<3-5 kalimat: postur keamanan, temuan paling kritis, risiko bisnis>
+Jumlah host: X | Port terbuka: X | Kredensial ditemukan: X | Vuln kritis: X
 
-═══════════════════════════════════════════════════════
- ATTACK PATHS
-═══════════════════════════════════════════════════════
-Describe 1-3 realistic attack chains an adversary could follow, step by step,
-using the discovered misconfigurations and vulnerabilities.
-Include specific tool commands.
+═══════════════════════════════════════════════════════════════
+ [2] TEMUAN KRITIS & TINGGI
+═══════════════════════════════════════════════════════════════
+Untuk setiap temuan kritis/tinggi gunakan format:
 
-═══════════════════════════════════════════════════════
- MEDIUM & INFORMATIONAL FINDINGS
-═══════════════════════════════════════════════════════
-Brief list of lower-severity items worth noting.
+[KRITIS/TINGGI] NAMA TEMUAN
+  Host        : <IP> (<hostname jika ada>)
+  Bukti       : <apa yang ditemukan oleh scanner>
+  CVE/Ref     : <CVE jika ada>
+  Dampak      : <apa yang bisa dilakukan attacker>
+  Verifikasi  :
+      <command untuk konfirmasi manual>
+  Eksploitasi :
+      <command eksploitasi — nxc/netexec/impacket/msf/python>
+  Langkah lanjut setelah exploit:
+      <apa yang harus dilakukan setelah berhasil masuk>
 
-═══════════════════════════════════════════════════════
- REMEDIATION CHECKLIST
-═══════════════════════════════════════════════════════
-Numbered list of remediation actions ordered by priority.
+═══════════════════════════════════════════════════════════════
+ [3] JALUR SERANGAN (ATTACK PATH)
+═══════════════════════════════════════════════════════════════
+Gambarkan 1-3 rantai serangan realistis dari awal sampai domain compromise.
+Setiap step harus ada command-nya.
 
-═══════════════════════════════════════════════════════
- ADDITIONAL ATTACK SURFACE
-═══════════════════════════════════════════════════════
-Suggest any further manual testing or tooling that should be performed
-given the discovered services and technology stack.
+CONTOH FORMAT:
+  Step 1: [akses awal] → nxc smb 10.x.x.x -u guest -p '' --shares
+  Step 2: [eskalasi]   → impacket-secretsdump ...
+  Step 3: [lateral]    → nxc smb 10.x.x.x -u admin -H <hash> --sam
+  Step 4: [DA]         → impacket-psexec domain/admin@10.x.x.x
 
-Be specific, technical, and concise. Use real tool names and commands.
-If credentials were found, show how they can be leveraged.
+═══════════════════════════════════════════════════════════════
+ [4] REKOMENDASI MANUAL TESTING SELANJUTNYA
+═══════════════════════════════════════════════════════════════
+Berikan daftar hal yang HARUS dilakukan pentest manual setelah scan otomatis ini.
+Urutkan dari yang paling penting. Sertakan command siap pakai.
+
+Contoh kategori:
+  [AD/Domain]    → BloodHound collection, Kerberoasting, AS-REP Roasting
+  [Web]          → SQLi manual, auth bypass, file upload, SSRF
+  [Network]      → MITM/responder, NTLM relay, ARP poisoning
+  [Credential]   → Password spray, credential stuffing dengan user yang ditemukan
+  [Post-Exploit] → Persistence, data exfil, screenshot, keylogger
+  [Compliance]   → Cek password policy, patching status, backup keamanan
+
+Format per item:
+  [PRIORITAS] Nama aksi
+    Kenapa: <alasan berdasarkan temuan>
+    Command: <command siap pakai dengan IP asli dari scan>
+
+═══════════════════════════════════════════════════════════════
+ [5] TOOLS YANG DIREKOMENDASIKAN
+═══════════════════════════════════════════════════════════════
+Berikan daftar tools tambahan yang relevan dengan temuan di jaringan ini.
+Format:
+  [TOOL] nama-tool
+    Fungsi  : <untuk apa>
+    Install : <cara install>
+    Command : <command langsung untuk target ini>
+
+Pertimbangkan: BloodHound, Impacket suite, Responder, CrackMapExec modules,
+Certipy (ADCS), ldapdomaindump, kerbrute, hashcat, mimikatz, ligolo, chisel,
+evil-winrm, PowerView, ADExplorer, dll.
+
+═══════════════════════════════════════════════════════════════
+ [6] TEMUAN MEDIUM & INFORMASIONAL
+═══════════════════════════════════════════════════════════════
+Daftar temuan medium/low/info yang tetap perlu diperhatikan.
+
+═══════════════════════════════════════════════════════════════
+ [7] CHECKLIST REMEDIASI
+═══════════════════════════════════════════════════════════════
+Daftar bernomor tindakan perbaikan, urut dari prioritas tertinggi.
+Sertakan referensi patch/KB jika ada.
+
+Gunakan data IP asli dari scan. Jadilah spesifik dan teknikal.
 """
 
 
@@ -510,34 +557,89 @@ class AIAnalyst:
 
     def print_report(self, report: str, output_file: Optional[str] = None):
         """Pretty-print the AI report to terminal and optionally save to file."""
-        separator = f"{PURPLE}{'═' * 60}{RESET}"
-        header = f"{PURPLE}{BOLD}  AI PENTEST ANALYSIS — Gemini 2.5 Flash{RESET}"
+        separator = f"{PURPLE}{'═' * 64}{RESET}"
+        header    = f"{PURPLE}{BOLD}  AI PENTEST ANALYSIS — Gemini 2.5 Flash  {RESET}"
 
         print(f"\n{separator}")
         print(header)
         print(separator)
 
-        # Wrap and colour the report
+        # Command prefixes that should be coloured cyan
+        CMD_PREFIXES = (
+            "nxc ", "netexec ", "python ", "python3 ",
+            "impacket", "msf", "msfconsole", "crackmapexec ",
+            "hashcat", "kerbrute", "bloodhound", "certipy",
+            "evil-winrm", "responder", "ldapdomaindump",
+            "Step 1:", "Step 2:", "Step 3:", "Step 4:", "Step 5:",
+        )
+
         for line in report.splitlines():
             stripped = line.strip()
 
-            # Section headers
-            if stripped.startswith("═" * 3) or stripped.startswith("═" * 10):
+            # ── Section dividers ─────────────────────────────────────────
+            if stripped.startswith("═" * 3):
                 print(f"{PURPLE}{line}{RESET}")
-            elif stripped.startswith("[CRITICAL]"):
+
+            # ── Section titles [1]..[7] ───────────────────────────────────
+            elif stripped.startswith("[1]") or stripped.startswith("[2]") \
+                    or stripped.startswith("[3]") or stripped.startswith("[4]") \
+                    or stripped.startswith("[5]") or stripped.startswith("[6]") \
+                    or stripped.startswith("[7]"):
+                print(f"{PURPLE}{BOLD}{line}{RESET}")
+
+            # ── Severity tags ─────────────────────────────────────────────
+            elif stripped.startswith("[KRITIS]") or stripped.startswith("[CRITICAL]"):
                 print(f"  {RED}{BOLD}{stripped}{RESET}")
-            elif stripped.startswith("[HIGH]"):
+            elif stripped.startswith("[TINGGI]") or stripped.startswith("[HIGH]"):
                 print(f"  {RED}{stripped}{RESET}")
-            elif stripped.startswith("[MEDIUM]"):
+            elif stripped.startswith("[MEDIUM]") or stripped.startswith("[SEDANG]"):
                 print(f"  {YELLOW}{stripped}{RESET}")
-            elif stripped.startswith("[LOW]") or stripped.startswith("[INFO]"):
+            elif stripped.startswith("[LOW]") or stripped.startswith("[RENDAH]") \
+                    or stripped.startswith("[INFO]"):
                 print(f"  {DIM}{stripped}{RESET}")
-            elif stripped.startswith("•") or stripped.startswith("-"):
-                print(f"  {WHITE}{stripped}{RESET}")
-            elif stripped.startswith("PoC Command") or stripped.startswith("nxc ") \
-                    or stripped.startswith("netexec ") or stripped.startswith("python ") \
-                    or stripped.startswith("impacket") or stripped.startswith("msf"):
+
+            # ── Priority labels ───────────────────────────────────────────
+            elif stripped.startswith("[PRIORITAS TINGGI]") or stripped.startswith("[P1]"):
+                print(f"  {RED}{BOLD}{stripped}{RESET}")
+            elif stripped.startswith("[PRIORITAS SEDANG]") or stripped.startswith("[P2]"):
+                print(f"  {YELLOW}{stripped}{RESET}")
+            elif stripped.startswith("[PRIORITAS RENDAH]") or stripped.startswith("[P3]"):
+                print(f"  {DIM}{stripped}{RESET}")
+
+            # ── Field labels (Host:, Bukti:, Command:, etc.) ──────────────
+            elif any(stripped.startswith(lbl) for lbl in (
+                "Host ", "Host:", "Bukti", "CVE", "Dampak", "Verifikasi",
+                "Eksploitasi", "Langkah lanjut", "Fungsi", "Install",
+                "Command", "Kenapa",
+            )):
+                # label bold white, rest normal
+                colon_idx = stripped.find(":")
+                if colon_idx > 0:
+                    label = stripped[:colon_idx + 1]
+                    rest  = stripped[colon_idx + 1:]
+                    indent = len(line) - len(line.lstrip())
+                    print(f"{' ' * indent}{WHITE}{label}{RESET}{rest}")
+                else:
+                    print(f"  {WHITE}{stripped}{RESET}")
+
+            # ── Commands / tool lines ─────────────────────────────────────
+            elif any(stripped.startswith(p) for p in CMD_PREFIXES):
                 print(f"    {CYAN}{stripped}{RESET}")
+
+            # ── [TOOL] blocks ─────────────────────────────────────────────
+            elif stripped.startswith("[TOOL]") or stripped.startswith("[AD/") \
+                    or stripped.startswith("[Web]") or stripped.startswith("[Network]") \
+                    or stripped.startswith("[Credential]") or stripped.startswith("[Post-") \
+                    or stripped.startswith("[Compliance]"):
+                print(f"  {YELLOW}{BOLD}{stripped}{RESET}")
+
+            # ── Bullet / numbered list items ──────────────────────────────
+            elif stripped.startswith("•") or stripped.startswith("→"):
+                print(f"  {WHITE}{stripped}{RESET}")
+            elif stripped and stripped[0].isdigit() and len(stripped) > 2 and stripped[1] in ".):":
+                print(f"  {WHITE}{stripped}{RESET}")
+
+            # ── Default ───────────────────────────────────────────────────
             else:
                 print(line)
 
