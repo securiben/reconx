@@ -184,6 +184,95 @@ class ReconEngine:
                 # because the subprocess was already killed by Ctrl+C.
                 continue
 
+    def _print_tool_inventory(self):
+        """
+        Print a preflight tool inventory:
+        - which tools are available / missing with install hints
+        - which NetExec modules will be run per protocol
+        Called once at the very start of every scan.
+        """
+        CYAN   = "\033[36m"
+        GREEN  = "\033[92m"
+        RED    = "\033[91m"
+        YELLOW = "\033[93m"
+        DIM    = "\033[2;37m"
+        BOLD   = "\033[1;97m"
+        PURPLE = "\033[95m"
+        RESET  = "\033[0m"
+
+        # ── Tool definitions: (name, available, install_hint) ─────────────
+        tools = [
+            ("nmap",        self.nmap_scanner.available,
+             "apt install nmap"),
+            ("nxc/netexec", self.netexec_module_scanner.available,
+             "pip install netexec"),
+            ("enum4linux",  self.enum4linux_scanner.available,
+             "apt install enum4linux"),
+            ("smbclient",   self.smbclient_scanner.available,
+             "apt install smbclient"),
+            ("httpx",       self.httpx_probe.available,
+             "go install github.com/projectdiscovery/httpx/cmd/httpx@latest"),
+            ("nuclei",      self.nuclei_scanner.available,
+             "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"),
+            ("katana",      self.katana_scanner.available,
+             "go install github.com/projectdiscovery/katana/cmd/katana@latest"),
+            ("dirsearch",   self.dirsearch_scanner.available,
+             "pip install dirsearch"),
+            ("wpscan",      self.wpscan_scanner.available,
+             "gem install wpscan"),
+            ("msfconsole",  self.msf_scanner.available,
+             "https://docs.metasploit.com/docs/using-metasploit/getting-started/nightly-installers.html"),
+        ]
+
+        print(f"{BOLD}{'─' * 60}{RESET}")
+        print(f"{BOLD} Tool Inventory{RESET}")
+        print(f"{BOLD}{'─' * 60}{RESET}")
+
+        missing_tools = []
+        for name, avail, hint in tools:
+            if avail:
+                print(f"  {GREEN}[✓]{RESET} {name:<18}")
+            else:
+                print(f"  {RED}[✗]{RESET} {name:<18} {DIM}→ install: {hint}{RESET}")
+                missing_tools.append((name, hint))
+
+        # AI mode status
+        if self.ai_analyst.available:
+            print(f"  {PURPLE}[✓]{RESET} AI Analyst         {DIM}(Gemini 2.5 Flash — active){RESET}")
+        else:
+            print(f"  {DIM}[·]{RESET} AI Analyst         {DIM}(disabled — use --ai --gemini-key){RESET}")
+
+        # ── NetExec module preview (only when nxc is available) ────────────
+        if self.netexec_module_scanner.available:
+            from .scanner.netexec_modules import NXC_PROTOCOLS, RECON_MODULES, PROTO_COLORS
+
+            print(f"\n{BOLD} NetExec Recon Modules (will run per detected protocol){RESET}")
+            print(f"{BOLD}{'─' * 60}{RESET}")
+
+            for proto in NXC_PROTOCOLS:
+                modules = RECON_MODULES.get(proto, [])
+                if not modules:
+                    continue
+                color = PROTO_COLORS.get(proto, "\033[37m")
+                mods_str = ", ".join(modules)
+                # wrap at 55 chars
+                wrapped = []
+                line = ""
+                for m in modules:
+                    if len(line) + len(m) + 2 > 52:
+                        wrapped.append(line.rstrip(", "))
+                        line = ""
+                    line += m + ", "
+                if line:
+                    wrapped.append(line.rstrip(", "))
+
+                print(f"  {color}{proto.upper():<8}{RESET} ({len(modules)} modules)")
+                for i, w in enumerate(wrapped):
+                    prefix = "           " if i > 0 else "           "
+                    print(f"  {DIM}{prefix}{w}{RESET}")
+
+        print(f"{BOLD}{'─' * 60}{RESET}\n")
+
     def _init_sources(self):
         """Initialize all data source modules."""
         source_classes = {
@@ -431,6 +520,9 @@ class ReconEngine:
         """
         start_time = time.time()
         domain = self.config.target_domain
+
+        # ── Preflight: tool inventory ──────────────────────────────────────
+        self._print_tool_inventory()
 
         # ── Direct mode: IP / CIDR / file-of-IPs → skip enum ──────────────
         if self.config.input_mode == "direct":
