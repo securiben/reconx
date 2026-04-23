@@ -13,6 +13,7 @@ Endpoint: https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-fla
 """
 
 import json
+import ssl
 import time
 import textwrap
 from typing import Optional, Dict, Any
@@ -23,6 +24,12 @@ try:
     _HTTP_OK = True
 except ImportError:
     _HTTP_OK = False
+
+try:
+    import requests as _requests
+    _HAS_REQUESTS = True
+except ImportError:
+    _HAS_REQUESTS = False
 
 
 RESET  = "\033[0m"
@@ -371,12 +378,88 @@ class AIAnalyst:
             )
         return report
 
-    def _call_gemini(self, prompt: str) -> Optional[str]:
-        """Send prompt to Gemini 2.5 Flash API and return response text."""
+    def _http_post(self, url: str, payload_dict: dict) -> Optional[str]:
+        """
+        POST JSON payload to url. Tries requests first (best SSL handling),
+        falls back to urllib with a permissive SSL context.
+        Returns response body as str, or None on error.
+        """
+        payload_bytes = json.dumps(payload_dict).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+
+        # ── Try requests (preferred) ──────────────────────────────────────
+        if _HAS_REQUESTS:
+            try:
+                resp = _requests.post(
+                    url,
+                    data=payload_bytes,
+                    headers=headers,
+                    timeout=180,
+                    verify=True,
+                )
+                if resp.status_code == 200:
+                    return resp.text
+                print(
+                    f"{YELLOW}[!]{RESET} Gemini API error {resp.status_code}: "
+                    f"{resp.text[:200]}"
+                )
+                return None
+            except Exception as exc:
+                print(
+                    f"{YELLOW}[!]{RESET} Gemini (requests) failed: {exc} — "
+                    f"retrying with urllib..."
+                )
+
+        # ── Fallback: urllib with custom SSL context ───────────────────────
         import urllib.request
         import urllib.error
 
-        payload = json.dumps({
+        # Build a context that still validates certs but works around
+        # broken TLS implementations / intermediate proxy UNEXPECTED_EOF issues.
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        # Allow TLS 1.2+ (disable legacy SSLv3/TLS 1.0)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+
+        req = urllib.request.Request(
+            url,
+            data=payload_bytes,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=180, context=ctx) as resp:
+                return resp.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read().decode("utf-8", errors="replace")
+            print(
+                f"{YELLOW}[!]{RESET} Gemini API error {exc.code}: "
+                f"{err_body[:200]}"
+            )
+            return None
+        except ssl.SSLError as exc:
+            # Last resort: retry with cert verification disabled
+            print(
+                f"{YELLOW}[!]{RESET} SSL error ({exc.reason}) — "
+                f"retrying without cert verification..."
+            )
+            ctx_no_verify = ssl.create_default_context()
+            ctx_no_verify.check_hostname = False
+            ctx_no_verify.verify_mode = ssl.CERT_NONE
+            try:
+                with urllib.request.urlopen(req, timeout=180, context=ctx_no_verify) as resp:
+                    return resp.read().decode("utf-8")
+            except Exception as exc2:
+                print(f"{YELLOW}[!]{RESET} Gemini API request failed: {exc2}")
+                return None
+        except Exception as exc:
+            print(f"{YELLOW}[!]{RESET} Gemini API request failed: {exc}")
+            return None
+
+    def _call_gemini(self, prompt: str) -> Optional[str]:
+        """Send prompt to Gemini 2.5 Flash API and return response text."""
+        payload_dict = {
             "contents": [
                 {
                     "role": "user",
@@ -388,29 +471,11 @@ class AIAnalyst:
                 "maxOutputTokens": 8192,
                 "topP": 0.9,
             },
-        }).encode("utf-8")
-
+        }
         url = f"{GEMINI_API_URL}?key={self.api_key}"
 
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-
-        try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                body = resp.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            err_body = exc.read().decode("utf-8", errors="replace")
-            print(
-                f"{YELLOW}[!]{RESET} Gemini API error {exc.code}: "
-                f"{err_body[:200]}"
-            )
-            return None
-        except Exception as exc:
-            print(f"{YELLOW}[!]{RESET} Gemini API request failed: {exc}")
+        body = self._http_post(url, payload_dict)
+        if body is None:
             return None
 
         try:
