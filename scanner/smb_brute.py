@@ -72,6 +72,9 @@ SAM_HASH_PATTERN = re.compile(
     r'^(\S+?):(\d+):([a-fA-F0-9]{32}):([a-fA-F0-9]{32}):::$',
 )
 
+# STATUS_* code extractor
+STATUS_PATTERN = re.compile(r'STATUS_\w+', re.IGNORECASE)
+
 # Account lockout / disabled detection
 LOCKOUT_PATTERNS = [
     re.compile(r'STATUS_ACCOUNT_LOCKED_OUT', re.IGNORECASE),
@@ -415,44 +418,103 @@ class SMBBruteScanner:
                     f"\033[96m{ip}:{smb_port}\033[0m"
                 )
 
-            # ── Step 1: Anonymous/Null auth check ────────────────────────
-            anon_output = self._run_nxc_smb_anon(ip)
-            host_result.raw_output += f"=== Anonymous Check ===\n{anon_output}\n\n"
+            # ── Step 1: Anonymous/Null auth check (--shares, --users, --groups) ──
+            anon_outputs = self._run_nxc_smb_anon(ip)
+            null_outputs = self._run_nxc_smb_null_session(ip)
 
-            # Parse host info from anonymous check
-            self._parse_host_info(host_result, anon_output)
+            # Combine all output for host info parsing
+            anon_combined = "\n".join(anon_outputs.values())
+            null_combined  = "\n".join(null_outputs.values())
+            host_result.raw_output += f"=== Anonymous Check ===\n{anon_combined}\n\n"
+            host_result.raw_output += f"=== Null Session Check ===\n{null_combined}\n\n"
+            self._parse_host_info(host_result, anon_combined)
+            self._parse_host_info(host_result, null_combined)
 
-            # Check if null auth succeeded
-            if self._detect_null_auth(anon_output):
+            anon_succeeded = self._detect_null_auth(anon_combined)
+            null_succeeded = self._detect_null_auth(null_combined)
+
+            # Get per-action statuses for display
+            anon_statuses = self._parse_action_statuses(anon_outputs)
+            null_statuses  = self._parse_action_statuses(null_outputs)
+
+            if anon_succeeded or null_succeeded:
                 host_result.null_auth = True
-                anon_cred = SMBBruteCredential(
-                    ip=ip,
-                    username="Anonymous",
-                    password="Test",
-                    port=smb_port,
-                    hostname=host_result.hostname,
-                    domain=host_result.domain,
-                    anonymous=True,
-                )
-                host_result.credentials.append(anon_cred)
 
-                # Parse shares from anonymous output
-                shares = self._parse_shares(anon_output)
+                if anon_succeeded:
+                    anon_cred = SMBBruteCredential(
+                        ip=ip,
+                        username="Anonymous",
+                        password="Test",
+                        port=smb_port,
+                        hostname=host_result.hostname,
+                        domain=host_result.domain,
+                        anonymous=True,
+                    )
+                    host_result.credentials.append(anon_cred)
+
+                if null_succeeded:
+                    null_cred = SMBBruteCredential(
+                        ip=ip,
+                        username="",
+                        password="",
+                        port=smb_port,
+                        hostname=host_result.hostname,
+                        domain=host_result.domain,
+                        anonymous=True,
+                    )
+                    if not anon_succeeded:
+                        host_result.credentials.append(null_cred)
+
+                # Parse shares from whichever succeeded
+                shares = self._parse_shares(anon_combined if anon_succeeded else null_combined)
                 host_result.shares = shares
 
                 with print_lock:
+                    methods = []
+                    if anon_succeeded:
+                        methods.append("Anonymous:Test")
+                    if null_succeeded:
+                        methods.append("empty creds ('')")
                     print(
                         f"    \033[1;91m[!]\033[0m \033[1;91mNULL AUTH\033[0m: "
                         f"\033[96m{ip}\033[0m → "
-                        f"\033[1;91mAnonymous access allowed!\033[0m"
-                        f"{' — ' + ', '.join(s.name for s in shares[:5]) if shares else ''}"
+                        f"\033[1;91m{', '.join(methods)}\033[0m"
                     )
+                    # Show per-action status for the successful method
+                    statuses = null_statuses if null_succeeded else anon_statuses
+                    for action, status in statuses.items():
+                        color = "\033[92m" if status.startswith("OK") else "\033[93m"
+                        print(
+                            f"      \033[37m{action:<10}\033[0m {color}{status}\033[0m"
+                        )
+                    if shares:
+                        print(
+                            f"      \033[37mshares    \033[0m "
+                            f"\033[96m{', '.join(s.name for s in shares[:5])}\033[0m"
+                        )
             else:
                 with print_lock:
+                    # Show per-action failure statuses
+                    anon_status_str = ", ".join(
+                        f"{a}: {s}" for a, s in anon_statuses.items()
+                    )
+                    null_status_str = ", ".join(
+                        f"{a}: {s}" for a, s in null_statuses.items()
+                    )
                     print(
                         f"    \033[37m[-]\033[0m \033[96m{ip}\033[0m → "
-                        f"anonymous access denied"
+                        f"anonymous/null access denied"
                     )
+                    if anon_status_str:
+                        print(
+                            f"      \033[37mAnonymous:Test  \033[0m "
+                            f"\033[90m{anon_status_str}\033[0m"
+                        )
+                    if null_status_str:
+                        print(
+                            f"      \033[37mempty creds ('') \033[0m "
+                            f"\033[90m{null_status_str}\033[0m"
+                        )
 
             # ── Step 2: Brute-force with users + pass file ───────────────
             for username in test_users:
@@ -614,34 +676,92 @@ class SMBBruteScanner:
 
     # ─── NXC Command Runners ──────────────────────────────────────────────────
 
-    def _run_nxc_smb_anon(self, ip: str) -> str:
+    def _run_nxc_smb_anon(self, ip: str) -> Dict[str, str]:
         """
-        Run: nxc smb <IP> -u Anonymous -p Test --shares
-        Tests anonymous/null authentication and lists shares.
+        Run --shares, --users, --groups with Anonymous:Test.
+        Returns dict mapping action → raw output.
         """
-        cmd = [
-            self.nxc_path,
-            "smb",
-            ip,
-            "-u", "Anonymous",
-            "-p", "Test",
-            "--shares",
-        ]
+        return self._run_nxc_smb_enum(ip, "Anonymous", "Test")
 
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                encoding="utf-8",
-                errors="replace",
-            )
-            return (proc.stdout or "") + (proc.stderr or "")
-        except subprocess.TimeoutExpired:
-            return "[timeout]"
-        except Exception as e:
-            return f"[error: {e}]"
+    def _run_nxc_smb_null_session(self, ip: str) -> Dict[str, str]:
+        """
+        Run --shares, --users, --groups with empty creds.
+        Returns dict mapping action → raw output.
+        """
+        return self._run_nxc_smb_enum(ip, "", "")
+
+    def _run_nxc_smb_enum(self, ip: str, username: str, password: str) -> Dict[str, str]:
+        """
+        Run --shares, --users, --groups for the given credentials.
+        Returns dict mapping action → raw output.
+        """
+        results: Dict[str, str] = {}
+        for action in ["--shares", "--users", "--groups"]:
+            cmd = [
+                self.nxc_path,
+                "smb",
+                ip,
+                "-u", username,
+                "-p", password,
+                action,
+            ]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                results[action] = (proc.stdout or "") + (proc.stderr or "")
+            except subprocess.TimeoutExpired:
+                results[action] = "[timeout]"
+            except Exception as e:
+                results[action] = f"[error: {e}]"
+        return results
+
+    def _parse_action_statuses(self, action_outputs: Dict[str, str]) -> Dict[str, str]:
+        """
+        Extract human-readable status for each action.
+        Returns dict mapping action → status string.
+        E.g. {'--shares': 'STATUS_ACCESS_DENIED', '--users': 'OK', '--groups': '[REMOVED] → use ldap'}
+        """
+        statuses: Dict[str, str] = {}
+        for action, output in action_outputs.items():
+            if not output or output.startswith("[timeout]") or output.startswith("[error:"):
+                statuses[action] = output.strip() if output else "no response"
+                continue
+
+            # Check for STATUS_* code first (failure)
+            status_match = STATUS_PATTERN.search(output)
+            if status_match:
+                statuses[action] = status_match.group(0)
+                continue
+
+            # Removed / moved to different protocol
+            if "[REMOVED]" in output or "moved to" in output.lower() or "ldap protocol" in output.lower():
+                statuses[action] = "[REMOVED] → use ldap"
+                continue
+
+            # Success: count useful data lines (not [*] info or empty)
+            if "[+]" in output:
+                data_lines = [
+                    l.strip() for l in output.splitlines()
+                    if l.strip()
+                    and not l.strip().startswith("[*]")
+                    and not l.strip().startswith("[+]")
+                    and not l.strip().startswith("SMB")
+                    and not l.strip().startswith("Share")
+                    and not l.strip().startswith("----")
+                ]
+                count = len(data_lines)
+                label = action.lstrip("-")
+                statuses[action] = f"OK ({count} {label} found)" if count else "OK"
+                continue
+
+            statuses[action] = "no data"
+        return statuses
 
     def _run_nxc_smb_brute(
         self, ip: str, username: str, pass_file: str,
@@ -737,16 +857,28 @@ class SMBBruteScanner:
         Indicators:
           - (Null Auth:True) in info line
           - [+] line with Anonymous:Test (success)
-          - Share listing present after [+]
+          - [+] domain\: (empty-username null session success)
+          - [+] line without any STATUS_* error
         """
         # Check for Null Auth:True flag
         null_match = NULL_AUTH_PATTERN.search(output)
         if null_match and null_match.group(1).lower() == "true":
             return True
 
-        # Check for [+] success with Anonymous
         for line in output.splitlines():
-            if "[+]" in line and "anonymous" in line.lower():
+            if "[+]" not in line:
+                continue
+            # Skip lines that also contain a STATUS_ failure
+            if STATUS_PATTERN.search(line):
+                continue
+            # Anonymous:Test success
+            if "anonymous" in line.lower():
+                return True
+            # Empty-creds success: [+] domain\: (empty username after backslash colon)
+            if re.search(r'\[\+\]\s+\S*\\:\s*$', line):
+                return True
+            # Empty-creds success: [+] \: (no domain)
+            if re.search(r'\[\+\]\s+\\:\s*$', line):
                 return True
 
         return False
