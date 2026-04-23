@@ -414,6 +414,18 @@ class ScanResult:
     postgres_login_stats: Dict = field(default_factory=dict)
     postgres_login_available: bool = False
 
+    # NetExec module scan (vuln checks per protocol)
+    netexec_module_results: Dict = field(default_factory=dict)
+    netexec_module_stats: Dict = field(default_factory=dict)
+    netexec_module_available: bool = False
+
+    # AI Analysis (Gemini 2.5 Flash)
+    ai_report: str = ""
+    ai_available: bool = False
+
+    # Scanned IPs list (direct mode)
+    nmap_scanned_ips: List[str] = field(default_factory=list)
+
     def to_dict(self) -> dict:
         d = {
             "target_domain": self.target_domain,
@@ -568,4 +580,14 @@ class ScanResult:
                     for key, r in self.postgres_login_results.items()
                 },
             }
+        if self.netexec_module_results:
+            d["netexec_modules"] = {
+                "stats": self.netexec_module_stats,
+                "protocols": {
+                    proto: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for proto, r in self.netexec_module_results.items()
+                },
+            }
+        if self.ai_report:
+            d["ai_analysis"] = self.ai_report
         return d

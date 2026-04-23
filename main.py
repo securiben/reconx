@@ -132,7 +132,7 @@ def print_scan_start(label: str, direct: bool = False):
     print(f"\033[1;97m[»]\033[0m Target: \033[1;96m{label}\033[0m")
     if direct:
         print(f"\033[1;97m[»]\033[0m Mode: \033[93mDirect scan\033[0m (IP/CIDR — skipping subdomain enumeration)")
-        print(f"\033[1;97m[»]\033[0m Initializing nmap, smbclient, RDP-brute, enum4linux, MSF-brute, CME, Nuclei & WPScan ...\n")
+        print(f"\033[1;97m[»]\033[0m Initializing nmap, smbclient, RDP-brute, enum4linux, MSF-brute, CME, netexec-modules, Nuclei & WPScan ...\n")
     else:
         print(f"\033[1;97m[»]\033[0m Initializing sources & scanners...")
         print(f"\033[1;97m[»]\033[0m Launching concurrent enumeration...\n")
@@ -216,6 +216,20 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5,
         help="Minimum entries to collapse into a pattern group (default: 5)",
+    )
+
+    parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Enable AI-assisted pentest analysis using Gemini 2.5 Flash after scan",
+    )
+
+    parser.add_argument(
+        "--gemini-key",
+        type=str,
+        default=None,
+        metavar="API_KEY",
+        help="Gemini 2.5 Flash API key for --ai mode (or set GEMINI_API_KEY in .env)",
     )
 
     return parser
@@ -320,6 +334,22 @@ def _run_single_target(target: str, args):
     config.scanner.nmap_pn = args.Pn
     config.scanner.nmap_script = args.script or ""
     config.scanner.nmap_import_file = target if getattr(args, 'nmap_import', False) else ""
+
+    # AI mode
+    gemini_key = getattr(args, 'gemini_key', None) or os.getenv("GEMINI_API_KEY", "")
+    if getattr(args, 'ai', False):
+        if not gemini_key:
+            print(
+                "\033[93m[!]\033[0m --ai mode requires a Gemini API key.\n"
+                "\033[90m    Pass it with --gemini-key <KEY> or set GEMINI_API_KEY in .env\033[0m"
+            )
+        else:
+            config.scanner.gemini_api_key = gemini_key
+            config.scanner.ai_mode = True
+            print(
+                f"\033[92m[+]\033[0m AI mode: \033[92menabled\033[0m "
+                f"(Gemini 2.5 Flash — analysis runs after all scans complete)\n"
+            )
 
     # Print scan start info
     print_scan_start(label, direct=is_direct)

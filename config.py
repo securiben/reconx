@@ -84,6 +84,8 @@ class ScannerConfig:
     nmap_script: str = ""          # pass --script=<value> to nmap (e.g. "vuln")
     nmap_import_file: str = ""     # import existing nmap -oN output, skip scanning
     use_naabu: bool = False        # naabu disabled; nmap is the default port scanner
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+    ai_mode: bool = False          # Enable AI-assisted analysis after scan
 
 
 @dataclass

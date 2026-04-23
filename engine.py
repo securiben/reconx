@@ -41,6 +41,8 @@ from .scanner import (
     MongoDBLoginScanner,
     FTPLoginScanner,
     PostgresLoginScanner,
+    NetExecModuleScanner,
+    AIAnalyst,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -98,6 +100,10 @@ class ReconEngine:
         self.mongodb_login_scanner = MongoDBLoginScanner(config.scanner)
         self.ftp_login_scanner = FTPLoginScanner(config.scanner)
         self.postgres_login_scanner = PostgresLoginScanner(config.scanner)
+        self.netexec_module_scanner = NetExecModuleScanner(config.scanner)
+        # AI analyst — only initialised when API key is provided
+        gemini_key = getattr(config.scanner, 'gemini_api_key', '')
+        self.ai_analyst: AIAnalyst = AIAnalyst(gemini_key) if gemini_key else AIAnalyst("")
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -407,6 +413,10 @@ class ReconEngine:
                 fe._export_ftp_login(d, r)
             elif phase == "postgres_login":
                 fe._export_postgres_login(d, r)
+            elif phase == "netexec_modules":
+                pass  # results stored in JSON only
+            elif phase == "ai_analysis":
+                pass  # report printed inline; stored in result.ai_report
             elif phase == "summary":
                 fe._export_summary(d, r)
             self._completed_phases.add(phase)
@@ -1728,6 +1738,51 @@ class ReconEngine:
                 f"\033[90m    Install: pip install crackmapexec | or: https://github.com/byt3bl33d3r/CrackMapExec\033[0m\n"
             )
 
+        # ── Phase 9d: NetExec Module Scan (per-protocol vuln checks) ────────
+        if (self.netexec_module_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results
+                and not self._phase_done("netexec_modules")):
+            print(
+                f"\033[36m[>]\033[0m netexec-modules: scanning all protocols with recon modules ..."
+            )
+            nxcmod_output_dir = self._ensure_output_dir()
+            os.makedirs(nxcmod_output_dir, exist_ok=True)
+
+            nxcmod_results = self._safe_scan(
+                "netexec-modules", self.netexec_module_scanner.scan,
+                self.result.nmap_results, output_dir=nxcmod_output_dir,
+            )
+
+            if nxcmod_results:
+                nxcmod_stats = self.netexec_module_scanner.stats
+                self.result.netexec_module_results = {
+                    p: r.to_dict() for p, r in nxcmod_results.items()
+                }
+                self.result.netexec_module_stats = nxcmod_stats.to_dict()
+                self.result.netexec_module_available = True
+                self._save_phase("netexec_modules")
+
+                if nxcmod_stats.total_vulnerable > 0:
+                    cve_map = self.netexec_module_scanner.get_cve_summary()
+                    for module, hosts in sorted(cve_map.items()):
+                        print(
+                            f"\033[1;91m[!]\033[0m nxc-module \033[91m{module}\033[0m "
+                            f"VULNERABLE on: \033[96m{', '.join(hosts[:10])}\033[0m"
+                            + (" ..." if len(hosts) > 10 else "")
+                        )
+                print()
+            elif nxcmod_results is None:
+                print(f"\033[93m[!]\033[0m netexec-modules: skipped by user\n")
+
+        elif not self.netexec_module_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m nxc/netexec not found – skipping module scan"
+            )
+            print(
+                f"\033[90m    Install: pip install netexec\033[0m\n"
+            )
+
         # ── Phase 5d: Nuclei vulnerability scanning (last) ───────────────
         # Attempt auto-install if nuclei is not available
         if not self.nuclei_scanner.available:
@@ -2081,6 +2136,24 @@ class ReconEngine:
         self.result.takeover_db_services = self.takeover_scanner.db_service_count
         self.result.tech_db_signatures = self.tech_profiler.total_signatures
         self.result.scan_time = time.time() - start_time
+
+        # ── Phase 11a: AI Pentest Analysis (Gemini 2.5 Flash) ─────────────
+        if self.ai_analyst.available and not self._phase_done("ai_analysis"):
+            ai_report = self.ai_analyst.analyse(
+                self.result.to_dict(),
+                target=self.config.target_domain,
+            )
+            if ai_report:
+                self.result.ai_report = ai_report
+                self.result.ai_available = True
+                self._save_phase("ai_analysis")
+                # Output directory for AI report file
+                try:
+                    ai_out_dir = self._ensure_output_dir()
+                    ai_report_file = os.path.join(ai_out_dir, "ai_pentest_report.txt")
+                    self.ai_analyst.print_report(ai_report, output_file=ai_report_file)
+                except Exception:
+                    self.ai_analyst.print_report(ai_report)
 
         # ── Phase 11: Render & Export ──────────────────────────────────────
         self._output()
@@ -3450,6 +3523,69 @@ class ReconEngine:
 
         # ── Statistics & Output ────────────────────────────────────────────
         self.result.scan_time = time.time() - start_time
+
+        # ── NetExec Module Scan (direct mode) ─────────────────────────────
+        if (self.netexec_module_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results
+                and not self._phase_done("netexec_modules")):
+            print(
+                f"\033[36m[>]\033[0m netexec-modules: scanning all protocols with recon modules ..."
+            )
+            nxcmod_output_dir = self._target_output_dir(label.replace("/", "_"))
+            os.makedirs(nxcmod_output_dir, exist_ok=True)
+
+            nxcmod_results = self._safe_scan(
+                "netexec-modules", self.netexec_module_scanner.scan,
+                self.result.nmap_results, output_dir=nxcmod_output_dir,
+            )
+
+            if nxcmod_results:
+                nxcmod_stats = self.netexec_module_scanner.stats
+                self.result.netexec_module_results = {
+                    p: r.to_dict() for p, r in nxcmod_results.items()
+                }
+                self.result.netexec_module_stats = nxcmod_stats.to_dict()
+                self.result.netexec_module_available = True
+                self._save_phase("netexec_modules")
+
+                if nxcmod_stats.total_vulnerable > 0:
+                    cve_map = self.netexec_module_scanner.get_cve_summary()
+                    for module, hosts in sorted(cve_map.items()):
+                        print(
+                            f"\033[1;91m[!]\033[0m nxc-module \033[91m{module}\033[0m "
+                            f"VULNERABLE on: \033[96m{', '.join(hosts[:10])}\033[0m"
+                            + (" ..." if len(hosts) > 10 else "")
+                        )
+                print()
+            elif nxcmod_results is None:
+                print(f"\033[93m[!]\033[0m netexec-modules: skipped by user\n")
+
+        elif not self.netexec_module_scanner.available and self.result.nmap_available:
+            print(
+                f"\033[93m[!]\033[0m nxc/netexec not found – skipping module scan"
+            )
+            print(
+                f"\033[90m    Install: pip install netexec\033[0m\n"
+            )
+
+        # ── AI Pentest Analysis (direct mode) ─────────────────────────────
+        if self.ai_analyst.available and not self._phase_done("ai_analysis"):
+            ai_report = self.ai_analyst.analyse(
+                self.result.to_dict(),
+                target=label,
+            )
+            if ai_report:
+                self.result.ai_report = ai_report
+                self.result.ai_available = True
+                self._save_phase("ai_analysis")
+                try:
+                    ai_out_dir = self._target_output_dir(label.replace("/", "_"))
+                    ai_report_file = os.path.join(ai_out_dir, "ai_pentest_report.txt")
+                    self.ai_analyst.print_report(ai_report, output_file=ai_report_file)
+                except Exception:
+                    self.ai_analyst.print_report(ai_report)
+
         self._output()
         self._clear_checkpoint()
 

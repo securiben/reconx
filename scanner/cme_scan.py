@@ -37,22 +37,37 @@ from ..utils import routed_path
 # ─── Port to CME protocol mapping ───────────────────────────────────────────
 
 CME_PORT_MAP: Dict[int, str] = {
-    1433: "mssql",
-    389:  "ldap",
-    636:  "ldap",
-    5985: "winrm",
-    5986: "winrm",
+    # Windows / AD
     445:  "smb",
     139:  "smb",
     135:  "wmi",
     3389: "rdp",
+    # Directory services
+    389:  "ldap",
+    636:  "ldap",
+    3268: "ldap",   # Global Catalog
+    3269: "ldap",   # Global Catalog SSL
+    # Remote management
+    5985: "winrm",
+    5986: "winrm",
+    # Databases
+    1433: "mssql",
+    6379: "redis",
+    6380: "redis",
+    # Network services
     22:   "ssh",
-    5900: "vnc",
     21:   "ftp",
+    # Desktop
+    5900: "vnc",
+    5901: "vnc",
+    5902: "vnc",
 }
 
-# All supported CME protocols
-CME_PROTOCOLS = ["mssql", "ldap", "winrm", "smb", "wmi", "rdp", "ssh", "vnc", "ftp"]
+# All supported CME/NetExec protocols (in scan priority order)
+CME_PROTOCOLS = [
+    "smb", "ldap", "mssql", "winrm", "rdp",
+    "ssh", "ftp", "wmi", "vnc", "redis",
+]
 
 # Protocol display colors (ANSI)
 PROTOCOL_COLORS = {
@@ -65,6 +80,7 @@ PROTOCOL_COLORS = {
     "wmi":   "\033[1;33m",   # Bold dark yellow
     "vnc":   "\033[1;35m",   # Bold dark magenta
     "ftp":   "\033[1;36m",   # Bold dark cyan
+    "redis": "\033[1;31m",   # Bold red-orange
 }
 
 
