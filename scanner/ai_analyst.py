@@ -405,10 +405,24 @@ class AIAnalyst:
             return None
 
         # Skip if there is nothing meaningful to analyse
-        nmap = result_dict.get("nmap_results") or {}
-        subdomains = result_dict.get("subdomains") or []
-        nuclei = result_dict.get("nuclei_results") or []
-        if not nmap and not subdomains and not nuclei:
+        _has_data = any([
+            result_dict.get("nmap_results"),
+            result_dict.get("subdomains"),
+            result_dict.get("nuclei_results"),
+            result_dict.get("cme_results"),
+            result_dict.get("enum4linux_results"),
+            result_dict.get("netexec_module_results"),
+            result_dict.get("smb_brute_results"),
+            result_dict.get("ssh_login_results"),
+            result_dict.get("ftp_login_results"),
+            result_dict.get("mongodb_login_results"),
+            result_dict.get("postgres_login_results"),
+            result_dict.get("snmp_login_results"),
+            result_dict.get("smbclient_results"),
+            result_dict.get("rdp_brute_results"),
+            result_dict.get("vnc_brute_results"),
+        ])
+        if not _has_data:
             print(
                 f"{YELLOW}[!]{RESET} {PURPLE}AI Analyst{RESET}: "
                 f"no scan data found — skipping analysis"
