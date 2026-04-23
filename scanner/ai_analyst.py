@@ -357,6 +357,17 @@ class AIAnalyst:
         if not self.available:
             return None
 
+        # Skip if there is nothing meaningful to analyse
+        nmap = result_dict.get("nmap_results") or {}
+        subdomains = result_dict.get("subdomains") or []
+        nuclei = result_dict.get("nuclei_results") or []
+        if not nmap and not subdomains and not nuclei:
+            print(
+                f"{YELLOW}[!]{RESET} {PURPLE}AI Analyst{RESET}: "
+                f"no scan data found — skipping analysis"
+            )
+            return None
+
         context = _build_context(result_dict, target)
 
         prompt = (
@@ -380,81 +391,72 @@ class AIAnalyst:
 
     def _http_post(self, url: str, payload_dict: dict) -> Optional[str]:
         """
-        POST JSON payload to url. Tries requests first (best SSL handling),
-        falls back to urllib with a permissive SSL context.
-        Returns response body as str, or None on error.
+        POST JSON payload to url.
+        Strategy:
+          1. requests verify=True
+          2. requests verify=False  (SSL inspection / self-signed proxy)
+          3. urllib CERT_NONE       (last resort)
         """
         payload_bytes = json.dumps(payload_dict).encode("utf-8")
         headers = {"Content-Type": "application/json"}
 
-        # ── Try requests (preferred) ──────────────────────────────────────
+        # ── 1. requests with cert verification ────────────────────────────
         if _HAS_REQUESTS:
             try:
                 resp = _requests.post(
-                    url,
-                    data=payload_bytes,
-                    headers=headers,
-                    timeout=180,
-                    verify=True,
+                    url, data=payload_bytes, headers=headers,
+                    timeout=180, verify=True,
                 )
                 if resp.status_code == 200:
                     return resp.text
-                print(
-                    f"{YELLOW}[!]{RESET} Gemini API error {resp.status_code}: "
-                    f"{resp.text[:200]}"
-                )
+                print(f"{YELLOW}[!]{RESET} Gemini API error {resp.status_code}: {resp.text[:200]}")
                 return None
             except Exception as exc:
-                print(
-                    f"{YELLOW}[!]{RESET} Gemini (requests) failed: {exc} — "
-                    f"retrying with urllib..."
-                )
+                _is_ssl = "SSL" in str(exc) or "ssl" in str(exc).lower() or "EOF" in str(exc)
+                if _is_ssl:
+                    print(
+                        f"{YELLOW}[!]{RESET} SSL error detected — "
+                        f"retrying without cert verification..."
+                    )
+                else:
+                    print(f"{YELLOW}[!]{RESET} Gemini (requests) failed: {type(exc).__name__}: {str(exc)[:120]}")
 
-        # ── Fallback: urllib with custom SSL context ───────────────────────
+            # ── 2. requests without cert verification ─────────────────────
+            try:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    resp = _requests.post(
+                        url, data=payload_bytes, headers=headers,
+                        timeout=180, verify=False,
+                    )
+                if resp.status_code == 200:
+                    return resp.text
+                print(f"{YELLOW}[!]{RESET} Gemini API error {resp.status_code}: {resp.text[:200]}")
+                return None
+            except Exception as exc:
+                print(f"{YELLOW}[!]{RESET} Gemini (requests no-verify) failed: {type(exc).__name__}: {str(exc)[:120]}")
+
+        # ── 3. urllib CERT_NONE (final fallback) ──────────────────────────
         import urllib.request
         import urllib.error
 
-        # Build a context that still validates certs but works around
-        # broken TLS implementations / intermediate proxy UNEXPECTED_EOF issues.
         ctx = ssl.create_default_context()
-        ctx.check_hostname = True
-        ctx.verify_mode = ssl.CERT_REQUIRED
-        # Allow TLS 1.2+ (disable legacy SSLv3/TLS 1.0)
-        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
 
         req = urllib.request.Request(
-            url,
-            data=payload_bytes,
-            headers=headers,
-            method="POST",
+            url, data=payload_bytes, headers=headers, method="POST",
         )
         try:
             with urllib.request.urlopen(req, timeout=180, context=ctx) as resp:
                 return resp.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="replace")
-            print(
-                f"{YELLOW}[!]{RESET} Gemini API error {exc.code}: "
-                f"{err_body[:200]}"
-            )
+            print(f"{YELLOW}[!]{RESET} Gemini API error {exc.code}: {err_body[:200]}")
             return None
-        except ssl.SSLError as exc:
-            # Last resort: retry with cert verification disabled
-            print(
-                f"{YELLOW}[!]{RESET} SSL error ({exc.reason}) — "
-                f"retrying without cert verification..."
-            )
-            ctx_no_verify = ssl.create_default_context()
-            ctx_no_verify.check_hostname = False
-            ctx_no_verify.verify_mode = ssl.CERT_NONE
-            try:
-                with urllib.request.urlopen(req, timeout=180, context=ctx_no_verify) as resp:
-                    return resp.read().decode("utf-8")
-            except Exception as exc2:
-                print(f"{YELLOW}[!]{RESET} Gemini API request failed: {exc2}")
-                return None
         except Exception as exc:
-            print(f"{YELLOW}[!]{RESET} Gemini API request failed: {exc}")
+            print(f"{YELLOW}[!]{RESET} Gemini API request failed: {type(exc).__name__}: {str(exc)[:180]}")
             return None
 
     def _call_gemini(self, prompt: str) -> Optional[str]:
