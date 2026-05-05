@@ -302,6 +302,10 @@ class CMEScanner:
         scan_elapsed = time.time() - scan_start
         self._compute_stats(scan_elapsed)
 
+        # Save combined summary only if there are findings
+        if output_dir and any(r.hosts_responded > 0 for r in self.protocol_results.values()):
+            self._save_summary(output_dir)
+
         return self.protocol_results
 
     def _run_protocol(self, protocol: str, ips: List[str],
@@ -537,6 +541,36 @@ class CMEScanner:
             total_hosts += count
 
         self.stats.total_hosts_discovered = total_hosts
+
+    def _save_summary(self, output_dir: str):
+        """Save combined CME scan summary."""
+        summary_file = routed_path(output_dir, "cme_summary.txt")
+        lines = [
+            "# ReconX - CrackMapExec Summary",
+            f"# Protocols scanned: {self.stats.protocols_scanned}",
+            f"# Total hosts discovered: {self.stats.total_hosts_discovered}",
+            f"# Scan time: {self.stats.scan_time:.1f}s",
+            "",
+        ]
+        for proto, result in sorted(self.protocol_results.items()):
+            if not result.host_results:
+                continue
+            lines.append(f"── {proto.upper()} ({result.hosts_responded} hosts) ──")
+            for h in sorted(result.host_results, key=lambda x: x.ip):
+                info = f"  {h.ip}"
+                if h.hostname:
+                    info += f"  {h.hostname}"
+                if h.os_info:
+                    info += f"  [{h.os_info}]"
+                if h.signing:
+                    info += f"  signing={h.signing}"
+                lines.append(info)
+            lines.append("")
+        try:
+            with open(summary_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+        except Exception:
+            pass
 
     def get_smb_signing_disabled(self) -> List[str]:
         """Get list of IPs with SMB signing not required (potential relay targets)."""

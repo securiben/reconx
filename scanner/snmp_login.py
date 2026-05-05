@@ -300,8 +300,8 @@ class SNMPLoginScanner:
         scan_elapsed = time.time() - scan_start
         self._compute_stats(scan_elapsed)
 
-        # Save combined results
-        if output_dir:
+        # Save combined results only if there are findings
+        if output_dir and self.stats.credentials_found:
             self._save_results(output_dir)
 
         return self.results

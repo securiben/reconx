@@ -20,6 +20,7 @@ Requires: smbclient installed in PATH
 import os
 import re
 import sys
+import json
 import shutil
 import subprocess
 import time as _time
@@ -207,8 +208,9 @@ class SMBClientScanner:
         scan_elapsed = _time.time() - scan_start
         self._compute_stats(scan_elapsed)
 
-        # Save raw output
-        self._save_output(output_dir)
+        # Save output only if there are findings
+        if self.stats.hosts_with_null_session or self.stats.accessible_shares:
+            self._save_output(output_dir)
 
         return self.results
 
@@ -598,6 +600,22 @@ class SMBClientScanner:
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
+        except Exception:
+            pass
+
+        # JSON summary
+        json_file = routed_path(output_dir, "smbclient_summary.json")
+        try:
+            summary = {
+                "stats": self.stats.to_dict(),
+                "hosts": {
+                    ip: hr.to_dict() for ip, hr in sorted(self.results.items())
+                    if hr.null_session or hr.accessible_shares > 0
+                },
+            }
+            import json as _json
+            with open(json_file, "w", encoding="utf-8") as f:
+                _json.dump(summary, f, indent=2, ensure_ascii=False)
         except Exception:
             pass
 

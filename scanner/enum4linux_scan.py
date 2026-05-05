@@ -13,6 +13,7 @@ Requires: enum4linux installed in PATH
 
 import os
 import sys
+import json
 import shutil
 import subprocess
 import tempfile
@@ -273,6 +274,10 @@ class Enum4linuxScanner:
 
         scan_elapsed = time.time() - scan_start
         self._compute_stats(scan_elapsed)
+
+        # Save combined summary only if there are findings
+        if output_dir and self.stats.hosts_responded:
+            self._save_results(output_dir)
 
         return self.results
 
@@ -603,6 +608,46 @@ class Enum4linuxScanner:
         self.stats.hosts_with_shares = hosts_with_shares
         self.stats.hosts_with_users = hosts_with_users
         self.stats.null_sessions = null_sessions
+
+    def _save_results(self, output_dir: str):
+        """Save combined enum4linux summary to output directory."""
+        summary_file = routed_path(output_dir, "enum4linux_summary.txt")
+        lines = [
+            "# ReconX - Enum4linux Summary",
+            f"# Hosts responded: {self.stats.hosts_responded}",
+            f"# Null sessions: {self.stats.null_sessions}",
+            f"# Total users: {self.stats.total_users}",
+            f"# Total shares: {self.stats.total_shares}",
+            f"# Total groups: {self.stats.total_groups}",
+            f"# Scan time: {self.stats.scan_time:.1f}s",
+            "",
+        ]
+        for ip in sorted(self.results.keys()):
+            r = self.results[ip]
+            if not r.success:
+                continue
+            lines.append(f"══ {ip} ══")
+            if r.workgroup:
+                lines.append(f"  Workgroup/Domain: {r.workgroup}")
+            if r.os_info:
+                lines.append(f"  OS: {r.os_info}")
+            if r.null_session:
+                lines.append("  [!] NULL SESSION")
+            if r.users:
+                lines.append(f"  Users ({len(r.users)}): " + ", ".join(u.username for u in r.users))
+            extra_rid = [u for u in r.rid_cycling_users if not any(x.username == u for x in r.users)]
+            if extra_rid:
+                lines.append("  RID Users: " + ", ".join(extra_rid))
+            if r.groups:
+                lines.append(f"  Groups ({len(r.groups)}): " + ", ".join(g.name for g in r.groups))
+            if r.shares:
+                lines.append(f"  Shares ({len(r.shares)}): " + ", ".join(s.name for s in r.shares))
+            lines.append("")
+        try:
+            with open(summary_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+        except Exception:
+            pass
 
     def get_null_session_hosts(self) -> List[str]:
         """Get list of IPs where null session was successful."""
