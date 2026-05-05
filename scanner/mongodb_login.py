@@ -614,8 +614,8 @@ class MongoDBLoginScanner:
         result.raw_output = "\n\n".join(raw_parts)
         result.scan_time = time.time() - host_start
 
-        # Save per-host raw output
-        if output_dir and result.raw_output.strip():
+        # Save per-host raw output only if there are findings
+        if output_dir and result.credentials and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
             out_file = routed_path(output_dir, f"mongodb_login_{safe_ip}_{port}.txt")
             try:

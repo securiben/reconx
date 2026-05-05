@@ -408,6 +408,11 @@ class NetExecModuleScanner:
             self.proto_results[protocol] = result
 
         self._compute_stats(time.time() - scan_start)
+
+        # Save summary file if there are any findings
+        if output_dir and self.proto_results:
+            self._save_summary(output_dir)
+
         return self.proto_results
 
     def _run_protocol_modules(self, protocol: str, ips: List[str],
@@ -506,9 +511,17 @@ class NetExecModuleScanner:
                     if line.strip():
                         print(f"    {line.strip()}")
             if output_dir and output.strip():
-                out_file = routed_path(output_dir, f"nxcmod_{protocol}_bare.txt")
-                with open(out_file, "w", encoding="utf-8") as f:
-                    f.write(output)
+                # Only save if there are actual host result lines (e.g. "SMB 10.x.x.x ...")
+                proto_upper = protocol.upper()
+                has_host_lines = any(
+                    line.strip().startswith(proto_upper)
+                    for line in output.splitlines()
+                    if line.strip()
+                )
+                if has_host_lines:
+                    out_file = routed_path(output_dir, f"nxcmod_{protocol}_bare.txt")
+                    with open(out_file, "w", encoding="utf-8") as f:
+                        f.write(output)
         except Exception:
             pass
 
@@ -639,6 +652,27 @@ class NetExecModuleScanner:
         # Remove status markers
         clean = re.sub(r'^\s*[\[+\-\*!\]]+\s*', '', clean).strip()
         return clean[:200]
+
+    def _save_summary(self, output_dir: str):
+        """Save a combined nxcmod_summary.txt with all findings across protocols."""
+        lines = []
+        for proto, result in self.proto_results.items():
+            if not result.findings:
+                continue
+            lines.append(f"=== {proto.upper()} ({result.hosts_scanned} hosts) ===")
+            for f in result.findings:
+                lines.append(f"  [{f.status}] {f.ip} | {proto}/{f.module} | {f.detail}")
+            lines.append("")
+
+        if not lines:
+            return
+
+        try:
+            out_file = routed_path(output_dir, "nxcmod_summary.txt")
+            with open(out_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+        except Exception:
+            pass
 
     def _compute_stats(self, scan_time: float):
         """Aggregate stats across all protocols."""

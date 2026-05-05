@@ -428,8 +428,11 @@ class SNMPEnumScanner:
 
         result.scan_time = time.time() - host_start
 
-        # Save per-host raw output
-        if output_dir and result.raw_output.strip():
+        # Save per-host raw output only if there are findings
+        has_findings = bool(result.system_info or result.network_info or result.processes
+                           or result.software or result.storage or result.user_accounts
+                           or result.shares)
+        if output_dir and has_findings and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
             out_file = routed_path(output_dir, f"snmp_enum_{safe_ip}.txt")
             try:
