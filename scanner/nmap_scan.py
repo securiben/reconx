@@ -355,7 +355,6 @@ class NmapScanner:
             else:
                 elapsed_s = f"{elapsed:.0f}s"
             # Host counter
-            host_info = f" \033[96mhost {hd}/{total_hosts}\033[0m"
             # ETA: prefer nmap's own ETC/remaining, fall back to estimate
             if nmap_remaining[0]:
                 eta_info = f" \033[90mETC {nmap_etc[0]} ({nmap_remaining[0]} remaining)\033[0m"
@@ -370,7 +369,7 @@ class NmapScanner:
             )
             sys.stdout.write(
                 f"\r\033[96m[{spinner}]\033[0m nmap: [{bar}] \033[93m{p:5.1f}%\033[0m"
-                f"{host_info}{phase_info}{eta_info} \033[90m{elapsed_s}\033[0m\033[K"
+                f"{phase_info}{eta_info} \033[90m{elapsed_s}\033[0m\033[K"
             )
             sys.stdout.flush()
             time.sleep(0.15)
@@ -391,7 +390,6 @@ class NmapScanner:
             bar = "\033[92m━\033[0m" * bar_width
             sys.stdout.write(
                 f"\r\033[96m[⠏]\033[0m nmap: [{bar}] \033[92m100.0%\033[0m"
-                f" \033[96mhost {hd}/{total_hosts}\033[0m"
                 f" \033[90m{elapsed_s}\033[0m\033[K\n"
             )
         else:
@@ -400,7 +398,6 @@ class NmapScanner:
             bar = "\033[91m━\033[0m" * filled + "\033[90m━\033[0m" * (bar_width - filled)
             sys.stdout.write(
                 f"\r\033[91m[✗]\033[0m nmap: [{bar}] \033[91m{p:5.1f}%\033[0m"
-                f" \033[96mhost {hd}/{total_hosts}\033[0m"
                 f" \033[90m{elapsed_s}\033[0m\033[K\n"
             )
         sys.stdout.flush()
