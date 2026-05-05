@@ -333,8 +333,8 @@ class Enum4linuxScanner:
                     or result.groups or result.os_info or result.null_session):
                 result.success = True
 
-            # Save raw output to file
-            if output_dir and output.strip():
+            # Save raw output to file only if there are valid findings
+            if output_dir and result.success and output.strip():
                 safe_ip = ip.replace(".", "_").replace(":", "_")
                 out_file = routed_path(output_dir, f"enum4linux_{safe_ip}.txt")
                 with open(out_file, "w", encoding="utf-8") as f:
