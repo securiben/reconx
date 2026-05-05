@@ -817,20 +817,22 @@ class FTPLoginScanner:
             except Exception:
                 pass
 
-        # Full summary JSON
-        summary_file = routed_path(output_dir, "ftp_login_summary.json")
-        try:
-            summary = {
-                "stats": self.stats.to_dict(),
-                "hosts": {
-                    key: r.to_dict()
-                    for key, r in sorted(self.results.items())
-                },
-            }
-            with open(summary_file, "w", encoding="utf-8") as f:
-                json.dump(summary, f, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
+        # Full summary JSON — only if there are findings
+        if all_creds:
+            summary_file = routed_path(output_dir, "ftp_login_summary.json")
+            try:
+                summary = {
+                    "stats": self.stats.to_dict(),
+                    "hosts": {
+                        key: r.to_dict()
+                        for key, r in sorted(self.results.items())
+                        if r.credentials
+                    },
+                }
+                with open(summary_file, "w", encoding="utf-8") as f:
+                    json.dump(summary, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
 
     def get_all_credentials(self) -> List[FTPCredential]:
         """Get all discovered valid credentials across all hosts."""

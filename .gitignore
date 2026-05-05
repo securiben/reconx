@@ -11,6 +11,7 @@ dist/
 build/
 *.egg
 .eggs/
+*.bak
 
 # Virtual environments
 venv/

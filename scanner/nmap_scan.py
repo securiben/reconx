@@ -377,7 +377,6 @@ class NmapScanner:
         reader_t.join(timeout=5)
 
         # Final state
-        hd = hosts_done[0]
         elapsed = time.time() - scan_start_t
         if elapsed >= 3600:
             elapsed_s = f"{elapsed/3600:.1f}h"

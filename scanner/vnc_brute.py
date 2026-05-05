@@ -483,8 +483,9 @@ class VNCBruteScanner:
         result.raw_output = "\n".join(all_output)
         result.scan_time = time.time() - host_start
 
-        # Save per-host raw output
-        if output_dir and result.raw_output.strip():
+        # Save per-host raw output only if there are findings
+        has_findings = result.no_auth or bool(result.credentials)
+        if output_dir and has_findings and result.raw_output.strip():
             safe_ip = ip.replace(".", "_").replace(":", "_")
             out_file = routed_path(output_dir, f"vnc_brute_{safe_ip}.txt")
             try:

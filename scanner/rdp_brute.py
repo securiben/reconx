@@ -394,8 +394,8 @@ class RDPBruteScanner:
         self.stats.pwned_count = sum(1 for c in all_creds if c.pwned)
         self.stats.scan_time = scan_elapsed
 
-        # Save results to output dir
-        if output_dir:
+        # Save results to output dir only if there are findings
+        if output_dir and self.stats.credentials_found:
             self._save_results(output_dir)
 
         return self.results

@@ -668,8 +668,8 @@ class SMBBruteScanner:
         # Compute stats
         self._compute_stats(scan_elapsed)
 
-        # Save results
-        if output_dir:
+        # Save results only if there are findings
+        if output_dir and (self.stats.credentials_found or self.stats.hosts_null_auth or self.stats.sam_hashes_dumped):
             self._save_results(output_dir)
 
         return self.results
