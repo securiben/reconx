@@ -43,7 +43,6 @@ from .scanner import (
     PostgresLoginScanner,
     NetExecModuleScanner,
     ServiceMisconfigScanner,
-    AIAnalyst,
 )
 from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
@@ -103,9 +102,6 @@ class ReconEngine:
         self.postgres_login_scanner = PostgresLoginScanner(config.scanner)
         self.netexec_module_scanner = NetExecModuleScanner(config.scanner)
         self.service_misconfig_scanner = ServiceMisconfigScanner(config.scanner)
-        # AI analyst — only initialised when API key is provided
-        gemini_key = getattr(config.scanner, 'gemini_api_key', '')
-        self.ai_analyst: AIAnalyst = AIAnalyst(gemini_key) if gemini_key else AIAnalyst("")
 
         # Ctrl+C skip state
         self._skip_requested = False
@@ -237,12 +233,6 @@ class ReconEngine:
             else:
                 print(f"  {RED}[✗]{RESET} {name:<18} {DIM}→ install: {hint}{RESET}")
                 missing_tools.append((name, hint))
-
-        # AI mode status
-        if self.ai_analyst.available:
-            print(f"  {PURPLE}[✓]{RESET} AI Analyst         {DIM}(Gemini 2.5 Flash — active){RESET}")
-        else:
-            print(f"  {DIM}[·]{RESET} AI Analyst         {DIM}(disabled — use --ai --gemini-key){RESET}")
 
         # ── NetExec module preview (only when nxc is available) ────────────
         if self.netexec_module_scanner.available:
@@ -508,8 +498,6 @@ class ReconEngine:
                 pass  # results stored in JSON only
             elif phase == "service_misconfig":
                 fe._export_service_misconfig(d, r)
-            elif phase == "ai_analysis":
-                pass  # report printed inline; stored in result.ai_report
             elif phase == "summary":
                 fe._export_summary(d, r)
             self._completed_phases.add(phase)
@@ -2346,24 +2334,6 @@ class ReconEngine:
         self.result.tech_db_signatures = self.tech_profiler.total_signatures
         self.result.scan_time = time.time() - start_time
 
-        # ── Phase 11a: AI Pentest Analysis (Gemini 2.5 Flash) ─────────────
-        if self.ai_analyst.available and not self._phase_done("ai_analysis"):
-            ai_report = self.ai_analyst.analyse(
-                self.result.to_dict(),
-                target=self.config.target_domain,
-            )
-            if ai_report:
-                self.result.ai_report = ai_report
-                self.result.ai_available = True
-                self._save_phase("ai_analysis")
-                # Output directory for AI report file
-                try:
-                    ai_out_dir = self._ensure_output_dir()
-                    ai_report_file = os.path.join(ai_out_dir, "ai_pentest_report.txt")
-                    self.ai_analyst.print_report(ai_report, output_file=ai_report_file)
-                except Exception:
-                    self.ai_analyst.print_report(ai_report)
-
         # ── Phase 11: Render & Export ──────────────────────────────────────
         self._output()
         self._clear_checkpoint()
@@ -3890,23 +3860,6 @@ class ReconEngine:
                 print()
             elif service_results is None:
                 print(f"\033[93m[!]\033[0m service-misconfig: skipped by user\n")
-
-        # ── AI Pentest Analysis (direct mode) ─────────────────────────────
-        if self.ai_analyst.available and not self._phase_done("ai_analysis"):
-            ai_report = self.ai_analyst.analyse(
-                self.result.to_dict(),
-                target=label,
-            )
-            if ai_report:
-                self.result.ai_report = ai_report
-                self.result.ai_available = True
-                self._save_phase("ai_analysis")
-                try:
-                    ai_out_dir = self._target_output_dir(label.replace("/", "_"))
-                    ai_report_file = os.path.join(ai_out_dir, "ai_pentest_report.txt")
-                    self.ai_analyst.print_report(ai_report, output_file=ai_report_file)
-                except Exception:
-                    self.ai_analyst.print_report(ai_report)
 
         self._output()
         self._clear_checkpoint()

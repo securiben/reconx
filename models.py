@@ -424,10 +424,6 @@ class ScanResult:
     service_misconfig_stats: Dict = field(default_factory=dict)
     service_misconfig_available: bool = False
 
-    # AI Analysis (Gemini 2.5 Flash)
-    ai_report: str = ""
-    ai_available: bool = False
-
     # Scanned IPs list (direct mode)
     nmap_scanned_ips: List[str] = field(default_factory=list)
 
@@ -601,6 +597,4 @@ class ScanResult:
                     for key, r in self.service_misconfig_results.items()
                 },
             }
-        if self.ai_report:
-            d["ai_analysis"] = self.ai_report
         return d
