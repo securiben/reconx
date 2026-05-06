@@ -28,6 +28,7 @@ from .mongodb_login import MongoDBLoginScanner
 from .ftp_login import FTPLoginScanner
 from .postgres_login import PostgresLoginScanner
 from .netexec_modules import NetExecModuleScanner
+from .service_misconfig import ServiceMisconfigScanner
 from .ai_analyst import AIAnalyst
 
 __all__ = [
@@ -55,5 +56,6 @@ __all__ = [
     "FTPLoginScanner",
     "PostgresLoginScanner",
     "NetExecModuleScanner",
+    "ServiceMisconfigScanner",
     "AIAnalyst",
 ]

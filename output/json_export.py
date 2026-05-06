@@ -58,6 +58,13 @@ class JSONExporter:
             },
             "takeover_results": [r.to_dict() for r in result.takeover_results],
             "tech_matches": [m.to_dict() for m in result.tech_matches],
+            "service_misconfig": {
+                "stats": getattr(result, "service_misconfig_stats", {}),
+                "hosts": {
+                    key: value.to_dict() if hasattr(value, "to_dict") else value
+                    for key, value in getattr(result, "service_misconfig_results", {}).items()
+                },
+            },
             "sources": {
                 name: stats.to_dict()
                 for name, stats in result.source_stats.items()

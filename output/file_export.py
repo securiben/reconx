@@ -96,6 +96,7 @@ class FileExporter:
         self._export_mongodb_login(domain_dir, result)
         self._export_ftp_login(domain_dir, result)
         self._export_postgres_login(domain_dir, result)
+        self._export_service_misconfig(domain_dir, result)
 
         return os.path.abspath(domain_dir)
 
@@ -2193,6 +2194,103 @@ class FileExporter:
             "hosts": {
                 key: r.to_dict() if hasattr(r, 'to_dict') else r
                 for key, r in mongo_results.items()
+            },
+        }
+        self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
+
+    def _export_service_misconfig(self, outdir: str, result: ScanResult):
+        """Export service misconfiguration findings."""
+        svc_stats = getattr(result, 'service_misconfig_stats', {})
+        svc_results = getattr(result, 'service_misconfig_results', {})
+        if not getattr(result, 'service_misconfig_available', False) or not svc_results:
+            return
+
+        domain = result.target_domain
+
+        filepath = os.path.join(outdir, "service_misconfig_summary.txt")
+        lines = [f"# ReconX - Service Misconfiguration Summary for {domain}"]
+        lines.append(f"# Services scanned: {svc_stats.get('total_hosts', 0)}")
+        lines.append(f"# SMTP hosts: {svc_stats.get('smtp_hosts', 0)}")
+        lines.append(f"# POP3 hosts: {svc_stats.get('pop3_hosts', 0)}")
+        lines.append(f"# MongoDB hosts: {svc_stats.get('mongodb_hosts', 0)}")
+        lines.append(f"# Docker hosts: {svc_stats.get('docker_hosts', 0)}")
+        lines.append(f"# Elasticsearch hosts: {svc_stats.get('elasticsearch_hosts', 0)}")
+        lines.append(f"# etcd hosts: {svc_stats.get('etcd_hosts', 0)}")
+        lines.append(f"# Grafana hosts: {svc_stats.get('grafana_hosts', 0)}")
+        lines.append(f"# IMAP hosts: {svc_stats.get('imap_hosts', 0)}")
+        lines.append(f"# Jenkins hosts: {svc_stats.get('jenkins_hosts', 0)}")
+        lines.append(f"# Kafka/ZooKeeper hosts: {svc_stats.get('kafka_hosts', 0)}")
+        lines.append(f"# Kerberos hosts: {svc_stats.get('kerberos_hosts', 0)}")
+        lines.append(f"# Kubernetes hosts: {svc_stats.get('kubernetes_hosts', 0)}")
+        lines.append(f"# LDAP hosts: {svc_stats.get('ldap_hosts', 0)}")
+        lines.append(f"# Memcached hosts: {svc_stats.get('memcached_hosts', 0)}")
+        lines.append(f"# MSSQL hosts: {svc_stats.get('mssql_hosts', 0)}")
+        lines.append(f"# NetBIOS hosts: {svc_stats.get('netbios_hosts', 0)}")
+        lines.append(f"# NFS hosts: {svc_stats.get('nfs_hosts', 0)}")
+        lines.append(f"# NTP hosts: {svc_stats.get('ntp_hosts', 0)}")
+        lines.append(f"# Oracle hosts: {svc_stats.get('oracle_hosts', 0)}")
+        lines.append(f"# PostgreSQL hosts: {svc_stats.get('postgresql_hosts', 0)}")
+        lines.append(f"# RabbitMQ hosts: {svc_stats.get('rabbitmq_hosts', 0)}")
+        lines.append(f"# RDP hosts: {svc_stats.get('rdp_hosts', 0)}")
+        lines.append(f"# Redis hosts: {svc_stats.get('redis_hosts', 0)}")
+        lines.append(f"# TFTP hosts: {svc_stats.get('tftp_hosts', 0)}")
+        lines.append(f"# Tomcat hosts: {svc_stats.get('tomcat_hosts', 0)}")
+        lines.append(f"# VNC hosts: {svc_stats.get('vnc_hosts', 0)}")
+        lines.append(f"# WebDAV hosts: {svc_stats.get('webdav_hosts', 0)}")
+        lines.append(f"# WinRM hosts: {svc_stats.get('winrm_hosts', 0)}")
+        lines.append(f"# Total findings: {svc_stats.get('findings_total', 0)}")
+        lines.append(f"# Critical: {svc_stats.get('critical', 0)}")
+        lines.append(f"# High: {svc_stats.get('high', 0)}")
+        lines.append(f"# Medium: {svc_stats.get('medium', 0)}")
+        lines.append(f"# Low: {svc_stats.get('low', 0)}")
+        lines.append(f"# Info: {svc_stats.get('info', 0)}")
+        lines.append(f"# Not fully verified checks: {svc_stats.get('checks_not_verified', 0)}")
+        lines.append(f"# Scan time: {svc_stats.get('scan_time', 0.0):.1f}s")
+        lines.append("")
+
+        for key in sorted(svc_results.keys()):
+            host_result = svc_results[key]
+            service = host_result.service if hasattr(host_result, 'service') else host_result.get('service', '')
+            ip = host_result.ip if hasattr(host_result, 'ip') else host_result.get('ip', '')
+            port = host_result.port if hasattr(host_result, 'port') else host_result.get('port', '')
+            banner = host_result.banner if hasattr(host_result, 'banner') else host_result.get('banner', '')
+            skipped = host_result.skipped if hasattr(host_result, 'skipped') else host_result.get('skipped', False)
+            skip_reason = host_result.skip_reason if hasattr(host_result, 'skip_reason') else host_result.get('skip_reason', '')
+            findings = host_result.findings if hasattr(host_result, 'findings') else host_result.get('findings', [])
+            metadata = host_result.metadata if hasattr(host_result, 'metadata') else host_result.get('metadata', {})
+
+            lines.append(f"── {service}:{ip}:{port} ──")
+            if banner:
+                lines.append(f"  Banner: {banner[:250]}")
+            if skipped:
+                lines.append(f"  SKIPPED: {skip_reason}")
+            if findings:
+                for finding in findings:
+                    check = finding.check if hasattr(finding, 'check') else finding.get('check', '')
+                    severity = finding.severity if hasattr(finding, 'severity') else finding.get('severity', 'info')
+                    evidence = finding.evidence if hasattr(finding, 'evidence') else finding.get('evidence', '')
+                    recommendation = finding.recommendation if hasattr(finding, 'recommendation') else finding.get('recommendation', '')
+                    lines.append(f"  [{severity.upper()}] {check}")
+                    if evidence:
+                        lines.append(f"    Evidence: {evidence}")
+                    if recommendation:
+                        lines.append(f"    Fix: {recommendation}")
+            else:
+                lines.append("  No confirmed findings")
+            not_verified = metadata.get('not_fully_verified', []) if isinstance(metadata, dict) else []
+            if not_verified:
+                lines.append(f"  Not fully verified remotely: {', '.join(not_verified)}")
+            lines.append("")
+
+        self._write(filepath, "\n".join(lines) + "\n")
+
+        filepath_json = os.path.join(outdir, "service_misconfig_summary.json")
+        json_data = {
+            "domain": domain,
+            "stats": svc_stats,
+            "hosts": {
+                key: r.to_dict() if hasattr(r, 'to_dict') else r
+                for key, r in svc_results.items()
             },
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")

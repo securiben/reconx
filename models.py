@@ -419,6 +419,11 @@ class ScanResult:
     netexec_module_stats: Dict = field(default_factory=dict)
     netexec_module_available: bool = False
 
+    # Service misconfiguration checks
+    service_misconfig_results: Dict = field(default_factory=dict)
+    service_misconfig_stats: Dict = field(default_factory=dict)
+    service_misconfig_available: bool = False
+
     # AI Analysis (Gemini 2.5 Flash)
     ai_report: str = ""
     ai_available: bool = False
@@ -586,6 +591,14 @@ class ScanResult:
                 "protocols": {
                     proto: r.to_dict() if hasattr(r, 'to_dict') else r
                     for proto, r in self.netexec_module_results.items()
+                },
+            }
+        if self.service_misconfig_results:
+            d["service_misconfig"] = {
+                "stats": self.service_misconfig_stats,
+                "hosts": {
+                    key: r.to_dict() if hasattr(r, 'to_dict') else r
+                    for key, r in self.service_misconfig_results.items()
                 },
             }
         if self.ai_report:

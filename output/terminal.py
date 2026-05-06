@@ -1061,6 +1061,114 @@ class TerminalRenderer:
         content = f" {C.BORDER}|{C.RESET} ".join(parts)
         self._box_line(content)
 
+    def _render_service_misconfig(self, result: ScanResult):
+        """Render service misconfiguration summary."""
+        stats = getattr(result, 'service_misconfig_stats', {})
+        results = getattr(result, 'service_misconfig_results', {})
+        if not getattr(result, 'service_misconfig_available', False) or not stats:
+            return
+
+        total = stats.get('findings_total', 0)
+        hosts = stats.get('total_hosts', 0)
+        if total == 0 and hosts == 0:
+            return
+
+        service_parts = []
+        if stats.get('smtp_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}smtp{C.RESET}({C.WHITE}{stats.get('smtp_hosts', 0)}{C.RESET})")
+        if stats.get('pop3_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}pop3{C.RESET}({C.WHITE}{stats.get('pop3_hosts', 0)}{C.RESET})")
+        if stats.get('mongodb_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}mongodb{C.RESET}({C.WHITE}{stats.get('mongodb_hosts', 0)}{C.RESET})")
+        if stats.get('docker_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}docker{C.RESET}({C.WHITE}{stats.get('docker_hosts', 0)}{C.RESET})")
+        if stats.get('elasticsearch_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}elasticsearch{C.RESET}({C.WHITE}{stats.get('elasticsearch_hosts', 0)}{C.RESET})")
+        if stats.get('etcd_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}etcd{C.RESET}({C.WHITE}{stats.get('etcd_hosts', 0)}{C.RESET})")
+        if stats.get('grafana_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}grafana{C.RESET}({C.WHITE}{stats.get('grafana_hosts', 0)}{C.RESET})")
+        if stats.get('imap_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}imap{C.RESET}({C.WHITE}{stats.get('imap_hosts', 0)}{C.RESET})")
+        if stats.get('jenkins_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}jenkins{C.RESET}({C.WHITE}{stats.get('jenkins_hosts', 0)}{C.RESET})")
+        if stats.get('kafka_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}kafka{C.RESET}({C.WHITE}{stats.get('kafka_hosts', 0)}{C.RESET})")
+        if stats.get('kerberos_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}kerberos{C.RESET}({C.WHITE}{stats.get('kerberos_hosts', 0)}{C.RESET})")
+        if stats.get('kubernetes_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}kubernetes{C.RESET}({C.WHITE}{stats.get('kubernetes_hosts', 0)}{C.RESET})")
+        if stats.get('ldap_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}ldap{C.RESET}({C.WHITE}{stats.get('ldap_hosts', 0)}{C.RESET})")
+        if stats.get('memcached_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}memcached{C.RESET}({C.WHITE}{stats.get('memcached_hosts', 0)}{C.RESET})")
+        if stats.get('mssql_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}mssql{C.RESET}({C.WHITE}{stats.get('mssql_hosts', 0)}{C.RESET})")
+        if stats.get('netbios_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}netbios{C.RESET}({C.WHITE}{stats.get('netbios_hosts', 0)}{C.RESET})")
+        if stats.get('nfs_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}nfs{C.RESET}({C.WHITE}{stats.get('nfs_hosts', 0)}{C.RESET})")
+        if stats.get('ntp_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}ntp{C.RESET}({C.WHITE}{stats.get('ntp_hosts', 0)}{C.RESET})")
+        if stats.get('oracle_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}oracle{C.RESET}({C.WHITE}{stats.get('oracle_hosts', 0)}{C.RESET})")
+        if stats.get('postgresql_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}postgresql{C.RESET}({C.WHITE}{stats.get('postgresql_hosts', 0)}{C.RESET})")
+        if stats.get('rabbitmq_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}rabbitmq{C.RESET}({C.WHITE}{stats.get('rabbitmq_hosts', 0)}{C.RESET})")
+        if stats.get('rdp_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}rdp{C.RESET}({C.WHITE}{stats.get('rdp_hosts', 0)}{C.RESET})")
+        if stats.get('redis_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}redis{C.RESET}({C.WHITE}{stats.get('redis_hosts', 0)}{C.RESET})")
+        if stats.get('tftp_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}tftp{C.RESET}({C.WHITE}{stats.get('tftp_hosts', 0)}{C.RESET})")
+        if stats.get('tomcat_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}tomcat{C.RESET}({C.WHITE}{stats.get('tomcat_hosts', 0)}{C.RESET})")
+        if stats.get('vnc_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}vnc{C.RESET}({C.WHITE}{stats.get('vnc_hosts', 0)}{C.RESET})")
+        if stats.get('webdav_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}webdav{C.RESET}({C.WHITE}{stats.get('webdav_hosts', 0)}{C.RESET})")
+        if stats.get('winrm_hosts', 0):
+            service_parts.append(f"{C.BRIGHT_CYAN}winrm{C.RESET}({C.WHITE}{stats.get('winrm_hosts', 0)}{C.RESET})")
+
+        parts = [
+            f"{C.BRIGHT_GREEN}{total}{C.RESET}{C.WHITE} finding(s){C.RESET}",
+            f"{C.WHITE}{hosts} service(s){C.RESET}",
+        ]
+        if service_parts:
+            parts.append(", ".join(service_parts))
+        content = (
+            f"{C.LABEL}SvcMisconfig:{C.RESET} "
+            f"{f' {C.BORDER}|{C.RESET} '.join(parts)} "
+            f"{C.DIM}({stats.get('scan_time', 0.0):.1f}s){C.RESET}"
+        )
+        self._box_line(content)
+
+        severity_color = {
+            'critical': C.VULN,
+            'high': C.BRIGHT_RED,
+            'medium': C.BRIGHT_YELLOW,
+            'low': C.BRIGHT_CYAN,
+            'info': C.WHITE,
+        }
+        shown = 0
+        for host_result in results.values():
+            findings = host_result.findings if hasattr(host_result, 'findings') else host_result.get('findings', [])
+            for finding in findings:
+                service = finding.service if hasattr(finding, 'service') else finding.get('service', '')
+                ip = finding.ip if hasattr(finding, 'ip') else finding.get('ip', '')
+                port = finding.port if hasattr(finding, 'port') else finding.get('port', '')
+                check = finding.check if hasattr(finding, 'check') else finding.get('check', '')
+                severity = finding.severity if hasattr(finding, 'severity') else finding.get('severity', 'info')
+                color = severity_color.get(severity, C.WHITE)
+                self._box_line(
+                    f"    {color}!! {service}:{ip}:{port}{C.RESET} "
+                    f"{C.WHITE}{check}{C.RESET} {C.DIM}[{severity}]{C.RESET}"
+                )
+                shown += 1
+                if shown >= 8:
+                    return
+
     def _render_sources(self, result: ScanResult):
         """Render the Sources statistics line."""
         parts = []
@@ -1130,6 +1238,9 @@ class TerminalRenderer:
 
         # WPScan WordPress
         self._render_wpscan(result)
+
+        # Service misconfiguration checks
+        self._render_service_misconfig(result)
 
         # Stats
         self._render_stats(result)
