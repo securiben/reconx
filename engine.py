@@ -3778,6 +3778,119 @@ class ReconEngine:
                 f"\033[90m    Install: pip install netexec\033[0m\n"
             )
 
+        # ── Service misconfiguration checks (direct mode) ──────────────────
+        if (self.service_misconfig_scanner.available
+                and self.result.nmap_available
+                and self.result.nmap_results
+                and not self._phase_done("service_misconfig")):
+            service_output_dir = self._target_output_dir(label.replace("/", "_"))
+            os.makedirs(service_output_dir, exist_ok=True)
+
+            service_results = self._safe_scan(
+                "service-misconfig", self.service_misconfig_scanner.scan,
+                self.result.nmap_results, target_domain=self.result.target_domain,
+                output_dir=service_output_dir,
+            )
+
+            if service_results:
+                svc_stats = self.service_misconfig_scanner.stats
+                self.result.service_misconfig_results = service_results
+                self.result.service_misconfig_stats = svc_stats.to_dict()
+                self.result.service_misconfig_available = True
+                self._save_phase("service_misconfig")
+
+                sev_parts = []
+                if svc_stats.critical:
+                    sev_parts.append(f"\033[1;91m{svc_stats.critical} critical\033[0m")
+                if svc_stats.high:
+                    sev_parts.append(f"\033[91m{svc_stats.high} high\033[0m")
+                if svc_stats.medium:
+                    sev_parts.append(f"\033[93m{svc_stats.medium} medium\033[0m")
+                if svc_stats.low:
+                    sev_parts.append(f"\033[36m{svc_stats.low} low\033[0m")
+                if svc_stats.info:
+                    sev_parts.append(f"\033[37m{svc_stats.info} info\033[0m")
+                service_parts = []
+                if svc_stats.smtp_hosts:
+                    service_parts.append(f"smtp({svc_stats.smtp_hosts})")
+                if svc_stats.pop3_hosts:
+                    service_parts.append(f"pop3({svc_stats.pop3_hosts})")
+                if svc_stats.mongodb_hosts:
+                    service_parts.append(f"mongodb({svc_stats.mongodb_hosts})")
+                if svc_stats.docker_hosts:
+                    service_parts.append(f"docker({svc_stats.docker_hosts})")
+                if svc_stats.elasticsearch_hosts:
+                    service_parts.append(f"elasticsearch({svc_stats.elasticsearch_hosts})")
+                if svc_stats.etcd_hosts:
+                    service_parts.append(f"etcd({svc_stats.etcd_hosts})")
+                if svc_stats.grafana_hosts:
+                    service_parts.append(f"grafana({svc_stats.grafana_hosts})")
+                if svc_stats.imap_hosts:
+                    service_parts.append(f"imap({svc_stats.imap_hosts})")
+                if svc_stats.jenkins_hosts:
+                    service_parts.append(f"jenkins({svc_stats.jenkins_hosts})")
+                if svc_stats.kafka_hosts:
+                    service_parts.append(f"kafka({svc_stats.kafka_hosts})")
+                if svc_stats.kerberos_hosts:
+                    service_parts.append(f"kerberos({svc_stats.kerberos_hosts})")
+                if svc_stats.kubernetes_hosts:
+                    service_parts.append(f"kubernetes({svc_stats.kubernetes_hosts})")
+                if svc_stats.ldap_hosts:
+                    service_parts.append(f"ldap({svc_stats.ldap_hosts})")
+                if svc_stats.memcached_hosts:
+                    service_parts.append(f"memcached({svc_stats.memcached_hosts})")
+                if svc_stats.mssql_hosts:
+                    service_parts.append(f"mssql({svc_stats.mssql_hosts})")
+                if svc_stats.netbios_hosts:
+                    service_parts.append(f"netbios({svc_stats.netbios_hosts})")
+                if svc_stats.nfs_hosts:
+                    service_parts.append(f"nfs({svc_stats.nfs_hosts})")
+                if svc_stats.ntp_hosts:
+                    service_parts.append(f"ntp({svc_stats.ntp_hosts})")
+                if svc_stats.oracle_hosts:
+                    service_parts.append(f"oracle({svc_stats.oracle_hosts})")
+                if svc_stats.postgresql_hosts:
+                    service_parts.append(f"postgresql({svc_stats.postgresql_hosts})")
+                if svc_stats.rabbitmq_hosts:
+                    service_parts.append(f"rabbitmq({svc_stats.rabbitmq_hosts})")
+                if svc_stats.rdp_hosts:
+                    service_parts.append(f"rdp({svc_stats.rdp_hosts})")
+                if svc_stats.redis_hosts:
+                    service_parts.append(f"redis({svc_stats.redis_hosts})")
+                if svc_stats.tftp_hosts:
+                    service_parts.append(f"tftp({svc_stats.tftp_hosts})")
+                if svc_stats.tomcat_hosts:
+                    service_parts.append(f"tomcat({svc_stats.tomcat_hosts})")
+                if svc_stats.vnc_hosts:
+                    service_parts.append(f"vnc({svc_stats.vnc_hosts})")
+                if svc_stats.webdav_hosts:
+                    service_parts.append(f"webdav({svc_stats.webdav_hosts})")
+                if svc_stats.winrm_hosts:
+                    service_parts.append(f"winrm({svc_stats.winrm_hosts})")
+
+                print(
+                    f"\033[92m[+]\033[0m service-misconfig: "
+                    f"\033[92m{svc_stats.findings_total} finding(s)\033[0m | "
+                    f"{', '.join(sev_parts) if sev_parts else 'no findings'} | "
+                    f"{', '.join(service_parts)} "
+                    f"\033[90m({svc_stats.scan_time:.1f}s)\033[0m"
+                )
+                shown = 0
+                for host_result in service_results.values():
+                    for finding in host_result.findings:
+                        print(
+                            f"\033[91m[!]\033[0m {finding.service}:{finding.ip}:{finding.port} "
+                            f"{finding.check} \033[90m({finding.severity})\033[0m"
+                        )
+                        shown += 1
+                        if shown >= 10:
+                            break
+                    if shown >= 10:
+                        break
+                print()
+            elif service_results is None:
+                print(f"\033[93m[!]\033[0m service-misconfig: skipped by user\n")
+
         # ── AI Pentest Analysis (direct mode) ─────────────────────────────
         if self.ai_analyst.available and not self._phase_done("ai_analysis"):
             ai_report = self.ai_analyst.analyse(
