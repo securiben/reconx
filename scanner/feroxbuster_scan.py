@@ -137,120 +137,112 @@ class FeroxbusterScanner:
         self.stats.targets_scanned = len(targets)
 
         tmpdir = tempfile.mkdtemp(prefix="reconx_ferox_")
-        input_file = os.path.join(tmpdir, "targets.txt")
-        raw_output = os.path.join(tmpdir, "ferox_raw.txt")
 
         os.makedirs(output_dir, exist_ok=True)
         output_file = routed_path(output_dir, "feroxbuster_results.txt")
 
         try:
-            with open(input_file, "w", encoding="utf-8") as f:
-                for t in targets:
-                    f.write(t.strip() + "\n")
-
-            cmd = [
-                self.feroxbuster_path,
-                "--stdin",
-                "-w", self.wordlist,
-                "--output", raw_output,
-                "--quiet",
-                "--no-state",
-                "--silent",
-                "--depth", "3",
-                "--threads", "50",
-                "--timeout", "7",
-                "--auto-tune",
-            ]
-
-            timeout_secs = max(900, len(targets) * 180)
-
-            with open(input_file, "r", encoding="utf-8") as stdin_f:
-                proc = subprocess.Popen(
-                    cmd,
-                    stdin=stdin_f,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-
-            # ── Live spinner progress ──
-            spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
-            spinner_idx = [0]
-            finding_count = [0]
-            bar_width = 30
+            seen: set = set()
             num_targets = len(targets)
             scan_label = f"feroxbuster fuzz: \033[92m{num_targets}\033[0m targets"
+            bar_width = 30
+            spinner_chars = "\u280b\u2819\u2839\u2838\u283c\u2834\u2826\u2827\u2807\u280f"
+            spinner_idx = [0]
+            finding_count = [0]
 
-            def _draw():
+            def _draw(done: bool = False):
                 si = spinner_chars[spinner_idx[0] % len(spinner_chars)]
                 spinner_idx[0] += 1
-                bar = "\033[92m━\033[0m" * bar_width
+                bar = "\033[92m\u2501\033[0m" * bar_width
+                icon = "\033[92m[\u2713]\033[0m" if done else f"\033[96m[{si}]\033[0m"
                 sys.stdout.write(
-                    f"\r\033[96m[{si}]\033[0m {scan_label} [{bar}] "
+                    f"\r{icon} {scan_label} [{bar}] "
                     f"\033[92m{finding_count[0]}\033[0m urls\033[K"
                 )
                 sys.stdout.flush()
 
             _draw()
-            try:
-                while proc.poll() is None:
-                    time.sleep(0.15)
-                    if os.path.isfile(raw_output):
-                        try:
-                            cnt = 0
-                            with open(raw_output, "r", encoding="utf-8", errors="replace") as rf:
-                                for ln in rf:
-                                    ln = ln.strip()
-                                    if ln and not ln.startswith("#"):
-                                        cnt += 1
-                            finding_count[0] = cnt
-                        except Exception:
-                            pass
-                    _draw()
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
 
-            # Final count
-            if os.path.isfile(raw_output):
+            # Run feroxbuster -u URL for each target
+            for i, target in enumerate(targets):
+                target_output = os.path.join(tmpdir, f"ferox_{i}.txt")
+
+                cmd = [
+                    self.feroxbuster_path,
+                    "-u", target,
+                    "-w", self.wordlist,
+                    "--depth", "3",
+                    "--threads", "50",
+                    "--timeout", "7",
+                    "--no-state",
+                    "-q",
+                ]
+
+                # Print the command for the first target so user can see what runs
+                if i == 0:
+                    sys.stdout.write("\n")
+                    cmd_display = " ".join(cmd[:6]) + " ..."
+                    print(f"\033[90m    cmd: {cmd_display}\033[0m")
+                    _draw()
+
                 try:
-                    cnt = 0
-                    with open(raw_output, "r", encoding="utf-8", errors="replace") as rf:
-                        for ln in rf:
-                            if ln.strip() and not ln.startswith("#"):
-                                cnt += 1
-                    finding_count[0] = cnt
+                    with open(target_output, "w", encoding="utf-8") as out_f:
+                        proc = subprocess.Popen(
+                            cmd,
+                            stdout=out_f,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    timeout_secs = max(300, 180)
+                    elapsed = 0.0
+                    while proc.poll() is None and elapsed < timeout_secs:
+                        time.sleep(0.2)
+                        elapsed += 0.2
+                        # Count lines in output so far
+                        if os.path.isfile(target_output):
+                            try:
+                                with open(target_output, "r", encoding="utf-8", errors="replace") as rf:
+                                    cnt = sum(
+                                        1 for ln in rf
+                                        if ln.strip() and not ln.startswith("#")
+                                        and ("http://" in ln or "https://" in ln)
+                                    )
+                                finding_count[0] = len(seen) + cnt
+                            except Exception:
+                                pass
+                        _draw()
+                    if proc.poll() is None:
+                        proc.kill()
+                        proc.wait()
                 except Exception:
                     pass
 
-            # Final status
-            bar = "\033[92m━\033[0m" * bar_width
-            sys.stdout.write(
-                f"\r\033[92m[✓]\033[0m {scan_label} [{bar}] "
-                f"\033[92m{finding_count[0]}\033[0m urls\033[K\n"
-            )
+                # Parse this target's output
+                if os.path.isfile(target_output):
+                    try:
+                        with open(target_output, "r", encoding="utf-8", errors="replace") as f:
+                            for line in f:
+                                line = line.strip()
+                                if not line or line.startswith("#"):
+                                    continue
+                                parts = line.split()
+                                url = None
+                                for part in reversed(parts):
+                                    if part.startswith("http://") or part.startswith("https://"):
+                                        url = part
+                                        break
+                                if url and url not in seen:
+                                    seen.add(url)
+                                    self.results.append(url)
+                        finding_count[0] = len(seen)
+                    except Exception:
+                        pass
+
+            # Final status line
+            _draw(done=True)
+            sys.stdout.write("\n")
             sys.stdout.flush()
 
-            # Parse results from feroxbuster output
-            # feroxbuster text format: "200      GET      10l       40w     312c http://example.com/path"
-            seen = set()
-            if os.path.isfile(raw_output) and os.path.getsize(raw_output) > 0:
-                with open(raw_output, "r", encoding="utf-8", errors="replace") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            continue
-                        # Extract URL from feroxbuster output (last whitespace-separated token)
-                        parts = line.split()
-                        url = None
-                        for part in reversed(parts):
-                            if part.startswith("http://") or part.startswith("https://"):
-                                url = part
-                                break
-                        if url and url not in seen:
-                            seen.add(url)
-                            self.results.append(url)
-
-            # Write cleaned results to output file (only if non-empty)
+            # Write aggregated results (only if non-empty)
             if self.results:
                 with open(output_file, "w", encoding="utf-8") as f:
                     for r in self.results:
