@@ -454,6 +454,7 @@ class NucleiScanner:
                 # "-rl", "150",
                 # "-timeout", "10",
                 # "-retries", "2",
+                "-s", "critical,high,medium,low,info",
                 "-etags", "application-dos",
                 "-je", jsonl_file,         # JSONL export for structured parsing
             ]
@@ -475,8 +476,9 @@ class NucleiScanner:
             )
             if preview:
                 print(f"\033[90m    {preview}\033[0m")
+            cmd_display = " ".join(cmd).replace(input_file, "targets.txt").replace(jsonl_file, "output.jsonl")
             print(
-                f"\033[90m    cmd: nuclei -l targets.txt -bs 25 -c 25 -rl 150 -timeout 10 -retries 2\033[0m"
+                f"\033[90m    cmd: {cmd_display}\033[0m"
             )
 
             # Run nuclei with live findings log
