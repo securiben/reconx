@@ -89,7 +89,7 @@ class FileExporter:
         self._export_vnc(domain_dir, result)
         self._export_smb_brute(domain_dir, result)
         self._export_smbclient(domain_dir, result)
-        self._export_dirsearch(domain_dir, result)
+        self._export_feroxbuster(domain_dir, result)
         self._export_snmp_login(domain_dir, result)
         self._export_snmp_enum(domain_dir, result)
         self._export_ssh_login(domain_dir, result)
@@ -1687,6 +1687,10 @@ class FileExporter:
         domain = result.target_domain
 
         # ── wpscan_summary.txt ── Human-readable summary ─────────────
+        # Skip writing if no vulnerabilities were found across all targets
+        if wpscan_stats.get('total_vulns', 0) == 0:
+            return
+
         filepath = os.path.join(outdir, "wpscan_summary.txt")
         lines = [f"# ReconX - WPScan Results for {domain}"]
         lines.append(f"# Targets scanned: {wpscan_stats.get('targets_scanned', 0)}")
@@ -1803,34 +1807,34 @@ class FileExporter:
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 
-    def _export_dirsearch(self, outdir: str, result: ScanResult):
-        """Export dirsearch directory brute-force results."""
-        dirsearch_stats = getattr(result, 'dirsearch_stats', {})
-        dirsearch_results = getattr(result, 'dirsearch_results', [])
-        if not getattr(result, 'dirsearch_available', False) or not dirsearch_results:
+    def _export_feroxbuster(self, outdir: str, result: ScanResult):
+        """Export feroxbuster directory brute-force results."""
+        feroxbuster_stats = getattr(result, 'feroxbuster_stats', {})
+        feroxbuster_results = getattr(result, 'feroxbuster_results', [])
+        if not getattr(result, 'feroxbuster_available', False) or not feroxbuster_results:
             return
 
         domain = result.target_domain
 
-        # ── dirsearch_summary.txt ─────────────────────────────────────
-        filepath = os.path.join(outdir, "dirsearch_summary.txt")
-        lines = [f"# ReconX - Dirsearch Directory Discovery for {domain}"]
-        lines.append(f"# Total findings: {dirsearch_stats.get('total_findings', 0)}")
-        lines.append(f"# Targets scanned: {dirsearch_stats.get('targets_scanned', 0)}")
-        lines.append(f"# Scan time: {dirsearch_stats.get('scan_time', 0.0):.1f}s")
+        # ── feroxbuster_summary.txt ───────────────────────────────────
+        filepath = os.path.join(outdir, "feroxbuster_summary.txt")
+        lines = [f"# ReconX - Feroxbuster Directory Discovery for {domain}"]
+        lines.append(f"# Total findings: {feroxbuster_stats.get('total_findings', 0)}")
+        lines.append(f"# Targets scanned: {feroxbuster_stats.get('targets_scanned', 0)}")
+        lines.append(f"# Scan time: {feroxbuster_stats.get('scan_time', 0.0):.1f}s")
         lines.append("")
-        lines.append(f"── Results ({len(dirsearch_results)}) ──")
-        for r in dirsearch_results:
+        lines.append(f"── Results ({len(feroxbuster_results)}) ──")
+        for r in feroxbuster_results:
             lines.append(f"  {r}")
         self._write(filepath, "\n".join(lines) + "\n")
 
-        # ── dirsearch_summary.json ────────────────────────────────────
-        filepath_json = os.path.join(outdir, "dirsearch_summary.json")
+        # ── feroxbuster_summary.json ──────────────────────────────────
+        filepath_json = os.path.join(outdir, "feroxbuster_summary.json")
         json_data = {
             "domain": domain,
-            "stats": dirsearch_stats,
-            "total_findings": len(dirsearch_results),
-            "results": dirsearch_results,
+            "stats": feroxbuster_stats,
+            "total_findings": len(feroxbuster_results),
+            "results": feroxbuster_results,
         }
         self._write(filepath_json, json.dumps(json_data, indent=2, ensure_ascii=False) + "\n")
 

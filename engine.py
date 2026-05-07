@@ -12,6 +12,7 @@ import random
 import signal
 import subprocess
 import threading
+import io
 from typing import Dict, List, Optional
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -36,7 +37,7 @@ from .scanner import (
     TakeoverScanner, TechProfiler, HttpxProbe,
     NmapScanner, NucleiScanner, Enum4linuxScanner, CMEScanner,
     MSFSMBBruteScanner, RDPBruteScanner, VNCBruteScanner, SMBBruteScanner, WPScanner, SMBClientScanner,
-    KatanaScanner, DirsearchScanner, SNMPLoginScanner, SNMPEnumScanner,
+    KatanaScanner, FeroxbusterScanner, SNMPLoginScanner, SNMPEnumScanner,
     SSHLoginScanner,
     MongoDBLoginScanner,
     FTPLoginScanner,
@@ -48,6 +49,53 @@ from .output.terminal import TerminalRenderer
 from .output.json_export import JSONExporter
 from .output.file_export import FileExporter
 from .utils import collapse_subdomains, is_interesting_subdomain, sanitize_hostname
+
+
+# ─── TeeWriter: capture ANSI-colored stdout to file ──────────────────────────
+
+class _TeeWriter(io.TextIOBase):
+    """
+    Wraps sys.stdout to simultaneously write to a log file.
+    Preserves ANSI color codes in the file so `cat file` shows colors.
+    """
+
+    def __init__(self, original: io.TextIOBase, filepath: str):
+        self._orig = original
+        self._file = open(filepath, "w", encoding="utf-8", errors="replace", buffering=1)
+
+    def write(self, data: str) -> int:
+        self._orig.write(data)
+        self._file.write(data)
+        return len(data)
+
+    def flush(self):
+        self._orig.flush()
+        try:
+            self._file.flush()
+        except Exception:
+            pass
+
+    def fileno(self):
+        return self._orig.fileno()
+
+    @property
+    def encoding(self):
+        return getattr(self._orig, 'encoding', 'utf-8')
+
+    @property
+    def errors(self):
+        return getattr(self._orig, 'errors', 'replace')
+
+    def isatty(self):
+        return self._orig.isatty()
+
+    def close_log(self):
+        """Flush and close the log file, restore original stdout."""
+        try:
+            self._file.flush()
+            self._file.close()
+        except Exception:
+            pass
 
 
 class ReconEngine:
@@ -93,7 +141,7 @@ class ReconEngine:
         self.wpscan_scanner = WPScanner(config.scanner)
         self.smbclient_scanner = SMBClientScanner(config.scanner)
         self.katana_scanner = KatanaScanner(config.scanner)
-        self.dirsearch_scanner = DirsearchScanner(config.scanner)
+        self.feroxbuster_scanner = FeroxbusterScanner(config.scanner)
         self.snmp_login_scanner = SNMPLoginScanner(config.scanner)
         self.snmp_enum_scanner = SNMPEnumScanner(config.scanner)
         self.ssh_login_scanner = SSHLoginScanner(config.scanner)
@@ -214,8 +262,8 @@ class ReconEngine:
              "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest"),
             ("katana",      self.katana_scanner.available,
              "go install github.com/projectdiscovery/katana/cmd/katana@latest"),
-            ("dirsearch",   self.dirsearch_scanner.available,
-             "pip install dirsearch"),
+            ("feroxbuster", self.feroxbuster_scanner.available,
+             "apt install feroxbuster  |  cargo install feroxbuster"),
             ("wpscan",      self.wpscan_scanner.available,
              "gem install wpscan"),
             ("msfconsole",  self.msf_scanner.available,
@@ -365,6 +413,12 @@ class ReconEngine:
             except Exception:
                 pass
 
+        if line_count == 0 and os.path.isfile(katana_httpx_file):
+            try:
+                os.remove(katana_httpx_file)
+            except Exception:
+                pass
+
         sys.stdout.write(
             f"\r\033[92m[✓]\033[0m {scan_label} [{bar}] "
             f"\033[92m{line_count}\033[0m urls\033[K\n"
@@ -480,8 +534,8 @@ class ReconEngine:
                 fe._export_smbclient(d, r)
             elif phase == "katana":
                 fe._export_katana(d, r)
-            elif phase == "dirsearch":
-                fe._export_dirsearch(d, r)
+            elif phase == "feroxbuster":
+                fe._export_feroxbuster(d, r)
             elif phase == "snmp_login":
                 fe._export_snmp_login(d, r)
             elif phase == "snmp_enum":
@@ -512,6 +566,21 @@ class ReconEngine:
         """
         start_time = time.time()
         domain = self.config.target_domain
+
+        # ── Setup colored terminal history log ────────────────────────────
+        log_dir = self._target_output_dir(domain)
+        log_path = os.path.join(log_dir, "terminal_output.txt")
+        _tee = _TeeWriter(sys.stdout, log_path)
+        sys.stdout = _tee
+
+        try:
+            return self._run_inner(start_time, domain)
+        finally:
+            sys.stdout = _tee._orig
+            _tee.close_log()
+
+    def _run_inner(self, start_time: float, domain: str) -> ScanResult:
+        """Internal pipeline executor (called from run())."""
 
         # ── Preflight: tool inventory ──────────────────────────────────────
         self._print_tool_inventory()
@@ -955,6 +1024,9 @@ class ReconEngine:
                             f"\033[91m[!]\033[0m {finding.service}:{finding.ip}:{finding.port} "
                             f"{finding.check} \033[90m({finding.severity})\033[0m"
                         )
+                        cmd = self._suggest_misconfig_command(finding)
+                        if cmd:
+                            print(f"\033[90m    \u2514\u2500 test: {cmd}\033[0m")
                         shown += 1
                         if shown >= 10:
                             break
@@ -963,6 +1035,208 @@ class ReconEngine:
                 print()
             elif service_results is None:
                 print(f"\033[93m[!]\033[0m service-misconfig: skipped by user\n")
+
+        # ── Nuclei vulnerability scanning (domain mode) ───────────────────
+        if not self.nuclei_scanner.available:
+            print(f"\033[93m[!]\033[0m nuclei not found \u2013 attempting auto-install...")
+            self.nuclei_scanner.ensure_available()
+
+        if self.nuclei_scanner.available and not self._phase_done("nuclei"):
+            nuclei_targets: list = []
+            seen: set = set()
+
+            if hasattr(self.result, 'subdomains') and self.result.subdomains:
+                for sub in self.result.subdomains:
+                    if sub.is_alive:
+                        target = sub.http_url.rstrip("/") if sub.http_url else sub.hostname
+                        if target not in seen:
+                            nuclei_targets.append(target)
+                            seen.add(target)
+
+            if not nuclei_targets:
+                for sub in subdomain_objects:
+                    if sub.is_alive and sub.hostname not in seen:
+                        nuclei_targets.append(sub.hostname)
+                        seen.add(sub.hostname)
+                if not nuclei_targets:
+                    for sub in subdomain_objects:
+                        if sub.hostname not in seen:
+                            nuclei_targets.append(sub.hostname)
+                            seen.add(sub.hostname)
+
+            if self.result.nmap_available and self.result.nmap_results:
+                HTTP_PORTS_D = {80, 443, 8080, 8443, 8000, 8888, 8081, 8082, 3000, 5000, 9090, 9443, 3333, 5555}
+                for ip, host_result in self.result.nmap_results.items():
+                    if ip not in seen:
+                        nuclei_targets.append(ip)
+                        seen.add(ip)
+                    if hasattr(host_result, 'ports'):
+                        for port_obj in host_result.ports:
+                            if port_obj.state == "open":
+                                pnum = port_obj.port
+                                if pnum in HTTP_PORTS_D or 'http' in (getattr(port_obj, 'service', '') or '').lower():
+                                    scheme = "https" if pnum in {443, 8443, 9443} else "http"
+                                    t = f"{scheme}://{ip}:{pnum}"
+                                else:
+                                    t = f"{ip}:{pnum}"
+                                if t not in seen:
+                                    nuclei_targets.append(t)
+                                    seen.add(t)
+
+            if nuclei_targets:
+                nuclei_output_dir = self._ensure_output_dir()
+                os.makedirs(nuclei_output_dir, exist_ok=True)
+                try:
+                    nuclei_results = self.nuclei_scanner.scan(nuclei_targets, output_dir=nuclei_output_dir)
+                except KeyboardInterrupt:
+                    nuclei_results = None
+                    print("\n\033[93m[!]\033[0m nuclei: interrupted by user\n")
+
+                if nuclei_results is not None:
+                    nuclei_stats = self.nuclei_scanner.stats
+                    self.result.nuclei_results = nuclei_results
+                    self.result.nuclei_stats = nuclei_stats.to_dict()
+                    self.result.nuclei_available = True
+                    total = nuclei_stats.total_findings
+                    if total > 0:
+                        sev_parts = []
+                        if nuclei_stats.critical > 0: sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
+                        if nuclei_stats.high    > 0: sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
+                        if nuclei_stats.medium  > 0: sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
+                        if nuclei_stats.low     > 0: sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
+                        if nuclei_stats.info    > 0: sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
+                        print(f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | {' | '.join(sev_parts)} \033[90m({nuclei_stats.scan_time:.1f}s)\033[0m")
+                    else:
+                        print(f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m on {nuclei_stats.hosts_scanned} hosts \033[90m({nuclei_stats.scan_time:.1f}s)\033[0m")
+                    print()
+                    self._save_phase("nuclei")
+                else:
+                    print(f"\033[93m[!]\033[0m nuclei: skipped by user\n")
+        else:
+            print(f"\033[91m[\u2717]\033[0m nuclei auto-install failed \u2013 skipping vulnerability scan")
+            print(f"\033[90m    Manual install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n")
+
+        # ── WPScan WordPress scanning (domain mode) ──────────────────────
+        if self.wpscan_scanner.available and not self.wpscan_scanner.api_token:
+            print("\033[93m[!]\033[0m wpscan: \033[93mWPSCAN_API_TOKEN not set in .env\033[0m \u2013 skipping")
+            print("\033[90m    Get a free token at: https://wpscan.com/api\033[0m\n")
+        elif (self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results
+                and not self._phase_done("wpscan")):
+            from .scanner.wpscan import WPScanner as _WPS
+            wp_targets = _WPS.detect_wordpress_targets(self.result.nuclei_results)
+            if wp_targets:
+                wpscan_output_dir = self._ensure_output_dir()
+                os.makedirs(wpscan_output_dir, exist_ok=True)
+                wpscan_results = self._safe_scan("wpscan", self.wpscan_scanner.scan, sorted(wp_targets), output_dir=wpscan_output_dir)
+                if wpscan_results is not None:
+                    wpscan_stats = self.wpscan_scanner.stats
+                    self.result.wpscan_results = wpscan_results
+                    self.result.wpscan_stats = wpscan_stats.to_dict()
+                    self.result.wpscan_available = True
+                    self._save_phase("wpscan")
+                    total_vulns = wpscan_stats.total_vulns
+                    if total_vulns > 0:
+                        print(f"\033[92m[+]\033[0m wpscan: \033[92m{total_vulns} vulnerability/ies\033[0m on \033[96m{wpscan_stats.targets_scanned}\033[0m WordPress target(s) \033[90m({wpscan_stats.scan_time:.1f}s)\033[0m")
+                    else:
+                        print(f"\033[92m[+]\033[0m wpscan: \033[37m0 vulnerabilities\033[0m on {wpscan_stats.targets_scanned} WordPress target(s) \033[90m({wpscan_stats.scan_time:.1f}s)\033[0m")
+                    print()
+                else:
+                    print(f"\033[93m[!]\033[0m wpscan: skipped by user\n")
+            else:
+                print(f"\033[90m[\u00b7]\033[0m wpscan: no WordPress targets detected by nuclei\n")
+        elif not self.wpscan_scanner.available and self.result.nuclei_available:
+            print(f"\033[93m[!]\033[0m wpscan not found \u2013 skipping WordPress scan")
+            print(f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n")
+
+        # ── Katana web crawling (domain mode) ───────────────────────────
+        if not self.katana_scanner.available:
+            print(f"\033[93m[!]\033[0m katana not found \u2013 attempting auto-install...")
+            self.katana_scanner.ensure_available()
+
+        if self.katana_scanner.available and not self._phase_done("katana"):
+            from .scanner.katana_scan import KatanaScanner as _KAT
+            katana_targets: set = set()
+            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
+                katana_targets |= _KAT.get_http_targets_from_httpx(self.result.httpx_results)
+            if self.result.nmap_available and self.result.nmap_results:
+                katana_targets |= _KAT.get_http_targets_from_nmap(self.result.nmap_results)
+            if hasattr(self.result, 'subdomains') and self.result.subdomains:
+                for sub in self.result.subdomains:
+                    if sub.is_alive:
+                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
+                        katana_targets.add(f"{scheme}://{sub.hostname}")
+            if katana_targets:
+                katana_output_dir = self._ensure_output_dir()
+                os.makedirs(katana_output_dir, exist_ok=True)
+                katana_results = self._safe_scan("katana", self.katana_scanner.scan, sorted(katana_targets), output_dir=katana_output_dir)
+                if katana_results is not None:
+                    katana_stats = self.katana_scanner.stats
+                    self.result.katana_results = katana_results
+                    self.result.katana_stats = katana_stats.to_dict()
+                    self.result.katana_available = True
+                    self._save_phase("katana")
+                    total_urls = katana_stats.total_urls
+                    if total_urls > 0:
+                        parts = [f"\033[92m{total_urls} URLs\033[0m"]
+                        if katana_stats.js_files    > 0: parts.append(f"\033[96m{katana_stats.js_files} JS\033[0m")
+                        if katana_stats.api_endpoints > 0: parts.append(f"\033[93m{katana_stats.api_endpoints} API\033[0m")
+                        print(f"\033[92m[+]\033[0m katana: {' | '.join(parts)} from \033[96m{katana_stats.targets_crawled}\033[0m target(s) \033[90m({katana_stats.scan_time:.1f}s)\033[0m")
+                    else:
+                        print(f"\033[92m[+]\033[0m katana: \033[37m0 URLs\033[0m from {katana_stats.targets_crawled} target(s) \033[90m({katana_stats.scan_time:.1f}s)\033[0m")
+                    print()
+                    if total_urls > 0 and self.httpx_probe.available:
+                        katana_urls_file = os.path.join(katana_output_dir, "txt", "katana_urls.txt")
+                        if os.path.isfile(katana_urls_file):
+                            katana_httpx_file = os.path.join(katana_output_dir, "txt", "katana_httpx.txt")
+                            try:
+                                lc = self._run_katana_httpx_enrichment(katana_urls_file, katana_httpx_file, katana_stats.targets_crawled, total_urls)
+                                if lc and lc > 0:
+                                    print(f"\033[92m[+]\033[0m katana+httpx: \033[92m{lc} alive URLs\033[0m saved to \033[96mkatana_httpx.txt\033[0m")
+                                elif lc == 0:
+                                    print(f"\033[37m[-]\033[0m katana+httpx: no alive URLs")
+                                print()
+                            except Exception:
+                                pass
+                else:
+                    print(f"\033[93m[!]\033[0m katana: skipped by user\n")
+            else:
+                print(f"\033[90m[\u00b7]\033[0m katana: no HTTP/HTTPS targets found\n")
+        elif not self.katana_scanner.available:
+            print(f"\033[91m[\u2717]\033[0m katana auto-install failed \u2013 skipping web crawling")
+            print(f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n")
+
+        # ── Feroxbuster directory brute-force (domain mode) ───────────────
+        if self.feroxbuster_scanner.available and not self._phase_done("feroxbuster"):
+            from .scanner.katana_scan import KatanaScanner as _KAT_D
+            feroxbuster_targets: set = set()
+            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
+                feroxbuster_targets |= _KAT_D.get_http_targets_from_httpx(self.result.httpx_results)
+            if self.result.nmap_available and self.result.nmap_results:
+                feroxbuster_targets |= _KAT_D.get_http_targets_from_nmap(self.result.nmap_results)
+            if hasattr(self.result, 'subdomains') and self.result.subdomains:
+                for sub in self.result.subdomains:
+                    if sub.is_alive:
+                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
+                        feroxbuster_targets.add(f"{scheme}://{sub.hostname}")
+            if feroxbuster_targets:
+                feroxbuster_output_dir = self._ensure_output_dir()
+                os.makedirs(feroxbuster_output_dir, exist_ok=True)
+                feroxbuster_results = self._safe_scan("feroxbuster", self.feroxbuster_scanner.scan, sorted(feroxbuster_targets), output_dir=feroxbuster_output_dir)
+                if feroxbuster_results is not None:
+                    feroxbuster_stats = self.feroxbuster_scanner.stats
+                    self.result.feroxbuster_results = feroxbuster_results
+                    self.result.feroxbuster_stats = feroxbuster_stats.to_dict()
+                    self.result.feroxbuster_available = True
+                    self._save_phase("feroxbuster")
+                    total = feroxbuster_stats.total_findings
+                    print(f"\033[92m[+]\033[0m feroxbuster: \033[92m{total} finding(s)\033[0m from \033[96m{feroxbuster_stats.targets_scanned}\033[0m target(s) \033[90m({feroxbuster_stats.scan_time:.1f}s)\033[0m\n")
+                else:
+                    print(f"\033[93m[!]\033[0m feroxbuster: skipped by user\n")
+            else:
+                print(f"\033[90m[\u00b7]\033[0m feroxbuster: no HTTP/HTTPS targets found\n")
+        elif not self.feroxbuster_scanner.available:
+            print(f"\033[93m[!]\033[0m feroxbuster not found \u2013 skipping directory brute-force")
+            print(f"\033[90m    Install: apt install feroxbuster | or: cargo install feroxbuster\033[0m\n")
 
         # ── Phase 9c-1: Enum4linux SMB/Windows enumeration ───────────────────
         if (self.enum4linux_scanner.available and self.result.nmap_available and self.result.nmap_results
@@ -1979,353 +2253,6 @@ class ReconEngine:
             print(
                 f"\033[90m    Install: pip install netexec\033[0m\n"
             )
-
-        # ── Phase 5d: Nuclei vulnerability scanning (last) ───────────────
-        # Attempt auto-install if nuclei is not available
-        if not self.nuclei_scanner.available:
-            print(
-                f"\033[93m[!]\033[0m nuclei not found \u2013 attempting auto-install..."
-            )
-            self.nuclei_scanner.ensure_available()
-
-        if self.nuclei_scanner.available and not self._phase_done("nuclei"):
-            # Collect targets for nuclei:
-            #   - subdomain (bare hostname or httpx URL)
-            #   - ip address (bare IP)
-            #   - ip:port (all open ports from nmap)
-            nuclei_targets: list = []
-            seen: set = set()
-
-            # Subdomains: use httpx URL if available, else bare hostname
-            if hasattr(self.result, 'subdomains') and self.result.subdomains:
-                for sub in self.result.subdomains:
-                    if sub.is_alive:
-                        if sub.http_url:
-                            target = sub.http_url.rstrip("/")
-                        else:
-                            target = sub.hostname
-                        if target not in seen:
-                            nuclei_targets.append(target)
-                            seen.add(target)
-
-            # Fallback: bare hostnames if nothing from httpx
-            if not nuclei_targets:
-                for sub in subdomain_objects:
-                    if sub.is_alive and sub.hostname not in seen:
-                        nuclei_targets.append(sub.hostname)
-                        seen.add(sub.hostname)
-                if not nuclei_targets:
-                    for sub in subdomain_objects:
-                        if sub.hostname not in seen:
-                            nuclei_targets.append(sub.hostname)
-                            seen.add(sub.hostname)
-
-            # Add ALL open ip:port from nmap results
-            if self.result.nmap_available and self.result.nmap_results:
-                HTTP_PORTS_D = {80, 443, 8080, 8443, 8000, 8888, 8081, 8082, 3000, 5000, 9090, 9443, 3333, 5555}
-                for ip, host_result in self.result.nmap_results.items():
-                    # Add bare IP
-                    if ip not in seen:
-                        nuclei_targets.append(ip)
-                        seen.add(ip)
-                    # Add ip:port for every open port
-                    if hasattr(host_result, 'ports'):
-                        for port_obj in host_result.ports:
-                            if port_obj.state == "open":
-                                pnum = port_obj.port
-                                if pnum in HTTP_PORTS_D or 'http' in (getattr(port_obj, 'service', '') or '').lower():
-                                    scheme = "https" if pnum in {443, 8443, 9443} else "http"
-                                    http_target = f"{scheme}://{ip}:{pnum}"
-                                    if http_target not in seen:
-                                        nuclei_targets.append(http_target)
-                                        seen.add(http_target)
-                                else:
-                                    target = f"{ip}:{pnum}"
-                                    if target not in seen:
-                                        nuclei_targets.append(target)
-                                        seen.add(target)
-
-            if nuclei_targets:
-                nuclei_output_dir = self._ensure_output_dir()
-                os.makedirs(nuclei_output_dir, exist_ok=True)
-
-                try:
-                    nuclei_results = self.nuclei_scanner.scan(
-                        nuclei_targets, output_dir=nuclei_output_dir,
-                    )
-                except KeyboardInterrupt:
-                    nuclei_results = None
-                    print("\n\033[93m[!]\033[0m nuclei: interrupted by user\n")
-
-                if nuclei_results is not None:
-                    nuclei_stats = self.nuclei_scanner.stats
-
-                    self.result.nuclei_results = nuclei_results
-                    self.result.nuclei_stats = nuclei_stats.to_dict()
-                    self.result.nuclei_available = True
-
-                    # Print nuclei summary
-                    total = nuclei_stats.total_findings
-                    if total > 0:
-                        sev_parts = []
-                        if nuclei_stats.critical > 0:
-                            sev_parts.append(f"\033[1;91m{nuclei_stats.critical} critical\033[0m")
-                        if nuclei_stats.high > 0:
-                            sev_parts.append(f"\033[91m{nuclei_stats.high} high\033[0m")
-                        if nuclei_stats.medium > 0:
-                            sev_parts.append(f"\033[93m{nuclei_stats.medium} medium\033[0m")
-                        if nuclei_stats.low > 0:
-                            sev_parts.append(f"\033[36m{nuclei_stats.low} low\033[0m")
-                        if nuclei_stats.info > 0:
-                            sev_parts.append(f"\033[37m{nuclei_stats.info} info\033[0m")
-                        print(
-                            f"\033[92m[+]\033[0m nuclei: \033[92m{total} finding(s)\033[0m | "
-                            f"{' | '.join(sev_parts)} "
-                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m nuclei: \033[37m0 findings\033[0m "
-                            f"on {nuclei_stats.hosts_scanned} hosts "
-                            f"\033[90m({nuclei_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    print()
-                    self._save_phase("nuclei")
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m nuclei: skipped by user\n"
-                    )
-        else:
-            print(
-                f"\033[91m[✗]\033[0m nuclei auto-install failed \u2013 skipping vulnerability scan"
-            )
-            print(
-                f"\033[90m    Manual install: go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\033[0m\n"
-            )
-
-        # ── Phase 5c: WPScan WordPress scanning ──────────────────────────
-        if self.wpscan_scanner.available and not self.wpscan_scanner.api_token:
-            print(
-                "\033[93m[!]\033[0m wpscan: \033[93mWPSCAN_API_TOKEN not set in .env\033[0m \u2013 skipping"
-            )
-            print(
-                "\033[90m    Get a free token at: https://wpscan.com/api\033[0m\n"
-            )
-        elif (self.wpscan_scanner.available and self.result.nuclei_available and self.result.nuclei_results
-                and not self._phase_done("wpscan")):
-            from .scanner.wpscan import WPScanner as _WPS
-
-            # Detect WordPress targets from nuclei results
-            wp_targets = _WPS.detect_wordpress_targets(self.result.nuclei_results)
-
-            if wp_targets:
-                wpscan_output_dir = self._ensure_output_dir()
-                os.makedirs(wpscan_output_dir, exist_ok=True)
-
-                wpscan_results = self._safe_scan(
-                    "wpscan", self.wpscan_scanner.scan,
-                    sorted(wp_targets), output_dir=wpscan_output_dir,
-                )
-
-                if wpscan_results is not None:
-                    wpscan_stats = self.wpscan_scanner.stats
-
-                    self.result.wpscan_results = wpscan_results
-                    self.result.wpscan_stats = wpscan_stats.to_dict()
-                    self.result.wpscan_available = True
-                    self._save_phase("wpscan")
-
-                    total_vulns = wpscan_stats.total_vulns
-                    if total_vulns > 0:
-                        print(
-                            f"\033[92m[+]\033[0m wpscan: \033[92m{total_vulns} vulnerability/ies\033[0m "
-                            f"on \033[96m{wpscan_stats.targets_scanned}\033[0m WordPress target(s) "
-                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m wpscan: \033[37m0 vulnerabilities\033[0m "
-                            f"on {wpscan_stats.targets_scanned} WordPress target(s) "
-                            f"\033[90m({wpscan_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    print()
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m wpscan: skipped by user\n"
-                    )
-            else:
-                print(
-                    f"\033[90m[·]\033[0m wpscan: no WordPress targets detected by nuclei\n"
-                )
-        elif not self.wpscan_scanner.available and self.result.nuclei_available:
-            print(
-                f"\033[93m[!]\033[0m wpscan not found – skipping WordPress scan"
-            )
-            print(
-                f"\033[90m    Install: gem install wpscan | or: https://github.com/wpscanteam/wpscan\033[0m\n"
-            )
-
-        # ── Katana web crawling (domain mode) ─────────────────────────────
-        # Attempt auto-install if katana is not available
-        if not self.katana_scanner.available:
-            print(
-                f"\033[93m[!]\033[0m katana not found \u2013 attempting auto-install..."
-            )
-            self.katana_scanner.ensure_available()
-
-        if self.katana_scanner.available and not self._phase_done("katana"):
-            from .scanner.katana_scan import KatanaScanner as _KAT
-            katana_targets: set = set()
-
-            # Gather HTTP/HTTPS targets from httpx results
-            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
-                katana_targets |= _KAT.get_http_targets_from_httpx(self.result.httpx_results)
-
-            # Also gather from nmap HTTP/HTTPS services
-            if self.result.nmap_available and self.result.nmap_results:
-                katana_targets |= _KAT.get_http_targets_from_nmap(self.result.nmap_results)
-
-            # Add alive subdomains as targets (domain mode)
-            if hasattr(self.result, 'subdomains') and self.result.subdomains:
-                for sub in self.result.subdomains:
-                    if sub.is_alive:
-                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
-                        katana_targets.add(f"{scheme}://{sub.hostname}")
-
-            if katana_targets:
-                katana_output_dir = self._ensure_output_dir()
-                os.makedirs(katana_output_dir, exist_ok=True)
-
-                katana_results = self._safe_scan(
-                    "katana", self.katana_scanner.scan,
-                    sorted(katana_targets), output_dir=katana_output_dir,
-                )
-
-                if katana_results is not None:
-                    katana_stats = self.katana_scanner.stats
-
-                    self.result.katana_results = katana_results
-                    self.result.katana_stats = katana_stats.to_dict()
-                    self.result.katana_available = True
-                    self._save_phase("katana")
-
-                    total_urls = katana_stats.total_urls
-                    if total_urls > 0:
-                        parts = [f"\033[92m{total_urls} URLs\033[0m"]
-                        if katana_stats.js_files > 0:
-                            parts.append(f"\033[96m{katana_stats.js_files} JS\033[0m")
-                        if katana_stats.api_endpoints > 0:
-                            parts.append(f"\033[93m{katana_stats.api_endpoints} API\033[0m")
-                        print(
-                            f"\033[92m[+]\033[0m katana: {' | '.join(parts)} "
-                            f"from \033[96m{katana_stats.targets_crawled}\033[0m target(s) "
-                            f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    else:
-                        print(
-                            f"\033[92m[+]\033[0m katana: \033[37m0 URLs\033[0m "
-                            f"from {katana_stats.targets_crawled} target(s) "
-                            f"\033[90m({katana_stats.scan_time:.1f}s)\033[0m"
-                        )
-                    print()
-
-                    # Run httpx on katana URLs for enriched output
-                    if total_urls > 0 and self.httpx_probe.available:
-                        katana_urls_file = os.path.join(katana_output_dir, "txt", "katana_urls.txt")
-                        if os.path.isfile(katana_urls_file):
-                            katana_httpx_file = os.path.join(katana_output_dir, "txt", "katana_httpx.txt")
-                            try:
-                                line_count = self._run_katana_httpx_enrichment(
-                                    katana_urls_file,
-                                    katana_httpx_file,
-                                    katana_stats.targets_crawled,
-                                    total_urls,
-                                )
-                                if line_count is None:
-                                    print()
-                                elif line_count > 0:
-                                    print(
-                                        f"\033[92m[+]\033[0m katana+httpx: "
-                                        f"\033[92m{line_count} alive URLs\033[0m "
-                                        f"saved to \033[96mkatana_httpx.txt\033[0m"
-                                    )
-                                else:
-                                    print(
-                                        f"\033[37m[-]\033[0m katana+httpx: no alive URLs"
-                                    )
-                                print()
-                            except Exception:
-                                pass
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m katana: skipped by user\n"
-                    )
-            else:
-                print(
-                    f"\033[90m[\u00b7]\033[0m katana: no HTTP/HTTPS targets found\n"
-                )
-        elif not self.katana_scanner.available:
-            print(
-                f"\033[91m[✗]\033[0m katana auto-install failed \u2013 skipping web crawling"
-            )
-            print(
-                f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
-            )
-
-        # ── Dirsearch directory brute-force (domain mode) ────────────────
-        if self.dirsearch_scanner.available and not self._phase_done("dirsearch"):
-            from .scanner.katana_scan import KatanaScanner as _KAT_D
-            dirsearch_targets: set = set()
-
-            if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
-                dirsearch_targets |= _KAT_D.get_http_targets_from_httpx(self.result.httpx_results)
-            if self.result.nmap_available and self.result.nmap_results:
-                dirsearch_targets |= _KAT_D.get_http_targets_from_nmap(self.result.nmap_results)
-            if hasattr(self.result, 'subdomains') and self.result.subdomains:
-                for sub in self.result.subdomains:
-                    if sub.is_alive:
-                        scheme = getattr(sub, 'http_scheme', 'https') or 'https'
-                        dirsearch_targets.add(f"{scheme}://{sub.hostname}")
-
-            if dirsearch_targets:
-                dirsearch_output_dir = self._ensure_output_dir()
-                os.makedirs(dirsearch_output_dir, exist_ok=True)
-
-                dirsearch_results = self._safe_scan(
-                    "dirsearch", self.dirsearch_scanner.scan,
-                    sorted(dirsearch_targets), output_dir=dirsearch_output_dir,
-                )
-
-                if dirsearch_results is not None:
-                    dirsearch_stats = self.dirsearch_scanner.stats
-                    self.result.dirsearch_results = dirsearch_results
-                    self.result.dirsearch_stats = dirsearch_stats.to_dict()
-                    self.result.dirsearch_available = True
-                    self._save_phase("dirsearch")
-
-                    total = dirsearch_stats.total_findings
-                    print(
-                        f"\033[92m[+]\033[0m dirsearch: "
-                        f"\033[92m{total} finding(s)\033[0m "
-                        f"from \033[96m{dirsearch_stats.targets_scanned}\033[0m target(s) "
-                        f"\033[90m({dirsearch_stats.scan_time:.1f}s)\033[0m\n"
-                    )
-                else:
-                    print(
-                        f"\033[93m[!]\033[0m dirsearch: skipped by user\n"
-                    )
-            else:
-                print(
-                    f"\033[90m[\u00b7]\033[0m dirsearch: no HTTP/HTTPS targets found\n"
-                )
-        elif not self.dirsearch_scanner.available:
-            print(
-                f"\033[93m[!]\033[0m dirsearch not found \u2013 skipping directory brute-force"
-            )
-            print(
-                f"\033[90m    Install: pip3 install dirsearch | or: apt install dirsearch\033[0m\n"
-            )
-
         # ── Phase 10: Statistics ───────────────────────────────────────────
         self.result.flagged_interesting = sum(
             1 for s in subdomain_objects if s.interesting
@@ -3655,49 +3582,49 @@ class ReconEngine:
                 f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
             )
 
-        # ── Dirsearch directory brute-force (direct mode) ────────────────
-        if (self.dirsearch_scanner.available and self.result.nmap_available and self.result.nmap_results
-                and not self._phase_done("dirsearch")):
+        # ── Feroxbuster directory brute-force (direct mode) ────────────────
+        if (self.feroxbuster_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("feroxbuster")):
             from .scanner.katana_scan import KatanaScanner as _KAT2_D
-            dirsearch_targets = _KAT2_D.get_http_targets_from_nmap(self.result.nmap_results)
+            feroxbuster_targets = _KAT2_D.get_http_targets_from_nmap(self.result.nmap_results)
 
-            if dirsearch_targets:
-                dirsearch_output_dir = self._target_output_dir(label.replace("/", "_"))
-                os.makedirs(dirsearch_output_dir, exist_ok=True)
+            if feroxbuster_targets:
+                feroxbuster_output_dir = self._target_output_dir(label.replace("/", "_"))
+                os.makedirs(feroxbuster_output_dir, exist_ok=True)
 
-                dirsearch_results = self._safe_scan(
-                    "dirsearch", self.dirsearch_scanner.scan,
-                    sorted(dirsearch_targets), output_dir=dirsearch_output_dir,
+                feroxbuster_results = self._safe_scan(
+                    "feroxbuster", self.feroxbuster_scanner.scan,
+                    sorted(feroxbuster_targets), output_dir=feroxbuster_output_dir,
                 )
 
-                if dirsearch_results is not None:
-                    dirsearch_stats = self.dirsearch_scanner.stats
-                    self.result.dirsearch_results = dirsearch_results
-                    self.result.dirsearch_stats = dirsearch_stats.to_dict()
-                    self.result.dirsearch_available = True
-                    self._save_phase("dirsearch")
+                if feroxbuster_results is not None:
+                    feroxbuster_stats = self.feroxbuster_scanner.stats
+                    self.result.feroxbuster_results = feroxbuster_results
+                    self.result.feroxbuster_stats = feroxbuster_stats.to_dict()
+                    self.result.feroxbuster_available = True
+                    self._save_phase("feroxbuster")
 
-                    total = dirsearch_stats.total_findings
+                    total = feroxbuster_stats.total_findings
                     print(
-                        f"\033[92m[+]\033[0m dirsearch: "
+                        f"\033[92m[+]\033[0m feroxbuster: "
                         f"\033[92m{total} finding(s)\033[0m "
-                        f"from \033[96m{dirsearch_stats.targets_scanned}\033[0m target(s) "
-                        f"\033[90m({dirsearch_stats.scan_time:.1f}s)\033[0m\n"
+                        f"from \033[96m{feroxbuster_stats.targets_scanned}\033[0m target(s) "
+                        f"\033[90m({feroxbuster_stats.scan_time:.1f}s)\033[0m\n"
                     )
                 else:
                     print(
-                        f"\033[93m[!]\033[0m dirsearch: skipped by user\n"
+                        f"\033[93m[!]\033[0m feroxbuster: skipped by user\n"
                     )
             else:
                 print(
-                    f"\033[90m[\u00b7]\033[0m dirsearch: no HTTP/HTTPS services found\n"
+                    f"\033[90m[\u00b7]\033[0m feroxbuster: no HTTP/HTTPS services found\n"
                 )
-        elif not self.dirsearch_scanner.available and self.result.nmap_available:
+        elif not self.feroxbuster_scanner.available and self.result.nmap_available:
             print(
-                f"\033[93m[!]\033[0m dirsearch not found \u2013 skipping directory brute-force"
+                f"\033[93m[!]\033[0m feroxbuster not found \u2013 skipping directory brute-force"
             )
             print(
-                f"\033[90m    Install: pip3 install dirsearch | or: apt install dirsearch\033[0m\n"
+                f"\033[90m    Install: apt install feroxbuster | or: cargo install feroxbuster\033[0m\n"
             )
 
         # ── Statistics & Output ────────────────────────────────────────────
@@ -3971,6 +3898,177 @@ class ReconEngine:
 
         return self.result
 
+    @staticmethod
+    def _suggest_misconfig_command(finding) -> str:
+        """
+        Return a suggested CLI command to manually verify a service misconfiguration finding.
+        """
+        svc  = (finding.service or "").lower()
+        chk  = (finding.check  or "").lower()
+        ip   = finding.ip
+        port = finding.port
+
+        # SMTP
+        if svc == "smtp":
+            if "tls" in chk or "starttls" in chk:
+                return f"openssl s_client -starttls smtp -connect {ip}:{port}"
+            if "relay" in chk or "open relay" in chk:
+                return f"swaks --to test@example.com --from attacker@evil.com --server {ip}:{port}"
+            if "vrfy" in chk or "expn" in chk:
+                return f"nc {ip} {port}  # then: VRFY root"
+            if "auth" in chk or "plain" in chk or "login" in chk:
+                return f"openssl s_client -starttls smtp -connect {ip}:{port}  # check AUTH mechs"
+            return f"nc {ip} {port}"
+
+        # POP3
+        if svc == "pop3":
+            if "encrypt" in chk or "tls" in chk:
+                return f"openssl s_client -connect {ip}:{port}  # or use port 995"
+            if "plaintext" in chk or "auth" in chk:
+                return f"nc {ip} {port}  # then: USER test PASS test"
+            if "disclosure" in chk or "banner" in chk:
+                return f"nc {ip} {port}  # read server banner"
+            return f"nc {ip} {port}"
+
+        # IMAP
+        if svc == "imap":
+            if "encrypt" in chk or "tls" in chk:
+                return f"openssl s_client -connect {ip}:{port}  # or use port 993"
+            if "plaintext" in chk or "auth" in chk:
+                return f"nc {ip} {port}  # then: a1 LOGIN user pass"
+            if "disclosure" in chk or "banner" in chk:
+                return f"nc {ip} {port}  # read server banner"
+            return f"nc {ip} {port}"
+
+        # MongoDB
+        if svc == "mongodb":
+            if "no auth" in chk or "unauth" in chk:
+                return f"mongosh {ip}:{port} --eval 'db.adminCommand({{listDatabases:1}})'"
+            return f"mongosh {ip}:{port}"
+
+        # Redis
+        if svc == "redis":
+            if "no auth" in chk or "unauth" in chk:
+                return f"redis-cli -h {ip} -p {port} INFO server"
+            return f"redis-cli -h {ip} -p {port}"
+
+        # Elasticsearch
+        if svc == "elasticsearch":
+            return f"curl -sk http://{ip}:{port}/_cat/indices"
+
+        # Docker
+        if svc == "docker":
+            return f"curl -sk http://{ip}:{port}/v1.41/containers/json"
+
+        # etcd
+        if svc == "etcd":
+            return f"curl -sk http://{ip}:{port}/v3/kv/range  # list etcd keys"
+
+        # Kubernetes
+        if svc == "kubernetes":
+            if "10250" in str(port) or "kubelet" in chk:
+                return f"curl -sk https://{ip}:{port}/pods"
+            return f"curl -sk https://{ip}:{port}/api/v1/namespaces"
+
+        # Memcached
+        if svc == "memcached":
+            return f"echo 'stats' | nc {ip} {port}"
+
+        # LDAP
+        if svc == "ldap":
+            if "anonymous" in chk or "null" in chk:
+                return f"ldapsearch -x -H ldap://{ip}:{port} -b '' -s base"
+            return f"ldapsearch -x -H ldap://{ip}:{port} -b ''"
+
+        # FTP
+        if svc == "ftp":
+            if "anonymous" in chk:
+                return f"ftp {ip} {port}  # login: anonymous / anonymous"
+            return f"ftp {ip} {port}"
+
+        # VNC
+        if svc == "vnc":
+            if "no auth" in chk or "none" in chk:
+                return f"vncviewer {ip}:{port}  # no password"
+            return f"vncviewer {ip}:{port}"
+
+        # RDP
+        if svc == "rdp":
+            if "nla" in chk or "encrypt" in chk:
+                return f"nmap -p {port} --script rdp-enum-encryption {ip}"
+            return f"xfreerdp /v:{ip}:{port} /u:guest"
+
+        # PostgreSQL
+        if svc == "postgresql":
+            if "no auth" in chk or "trust" in chk:
+                return f"psql -h {ip} -p {port} -U postgres"
+            return f"psql -h {ip} -p {port} -U postgres"
+
+        # MSSQL
+        if svc == "mssql":
+            return f"nmap -p {port} --script ms-sql-info,ms-sql-empty-password {ip}"
+
+        # Jenkins
+        if svc == "jenkins":
+            if "unauth" in chk or "no auth" in chk:
+                return f"curl -sk http://{ip}:{port}/api/json?pretty=true"
+            return f"curl -sk http://{ip}:{port}/"
+
+        # Grafana
+        if svc == "grafana":
+            return f"curl -sk http://{ip}:{port}/api/health"
+
+        # Tomcat
+        if svc == "tomcat":
+            if "manager" in chk or "default cred" in chk:
+                return f"curl -sk http://{ip}:{port}/manager/html  # try admin:admin"
+            return f"curl -sk http://{ip}:{port}/"
+
+        # WebDAV
+        if svc == "webdav":
+            return f"curl -sk -X OPTIONS http://{ip}:{port}/ -v"
+
+        # WinRM
+        if svc == "winrm":
+            return f"evil-winrm -i {ip} -P {port} -u Administrator -p ''"
+
+        # NFS
+        if svc == "nfs":
+            return f"showmount -e {ip}  # list NFS exports"
+
+        # Kafka
+        if svc == "kafka":
+            return f"kcat -b {ip}:{port} -L  # list topics"
+
+        # RabbitMQ
+        if svc == "rabbitmq":
+            return f"curl -sk http://{ip}:15672/api/overview -u guest:guest"
+
+        # TFTP
+        if svc == "tftp":
+            return f"tftp {ip} {port}  # then: get /etc/passwd"
+
+        # NTP
+        if svc == "ntp":
+            if "monlist" in chk:
+                return f"ntpdc -c monlist {ip}"
+            return f"ntpq -p {ip}"
+
+        # Kerberos
+        if svc == "kerberos":
+            if "enum" in chk or "user" in chk:
+                return f"kerbrute userenum -d DOMAIN wordlist.txt --dc {ip}"
+            return f"nmap -p {port} --script krb5-enum-users {ip}"
+
+        # NetBIOS / SMB
+        if svc in ("netbios", "smb"):
+            if "null" in chk or "anonymous" in chk:
+                return f"smbclient -L //{ip} -N -p {port}"
+            return f"smbclient -L //{ip} -p {port}"
+
+        # Fallback: nmap service probe
+        return f"nmap -sV -p {port} --script=banner {ip}"
+
     def _output(self):
         """Render results to terminal and optionally export to JSON."""
         # Terminal output
@@ -3985,6 +4083,10 @@ class ReconEngine:
         export_dir = self.file_exporter.export(self.result)
         if export_dir:
             print(f"\n  \033[38;5;75m📁 Results exported to: \033[1m{export_dir}\033[0m")
+            # Notify about the colored terminal history log
+            domain = self.result.target_domain
+            log_path = os.path.join(export_dir, "terminal_output.txt")
+            print(f"  \033[38;5;75m📋 Terminal history:    \033[1m{log_path}\033[0m")
 
     def _reconcile_infra_from_httpx(self, subdomains):
         """

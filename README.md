@@ -27,7 +27,7 @@ ReconX mengintegrasikan **13 external tools** ke dalam satu alur kerja otomatis:
 | 3 | **httpx** | HTTP probing — status code, title, tech, CDN, favicon | ProjectDiscovery |
 | 4 | **Nuclei** | Template-based vulnerability scanning | Severity: critical, high, medium, low |
 | 5 | **Katana** | Web crawling — endpoint & parameter discovery | ProjectDiscovery |
-| 6 | **Dirsearch** | Directory & file brute-forcing | Wordlist-based |
+| 6 | **Feroxbuster** | Directory & file brute-forcing | Wordlist-based |
 | 7 | **WPScan** | WordPress vulnerability scanner | Theme, plugin, user enum + WPVulnDB API |
 | 8 | **enum4linux** | SMB/Windows enumeration | Shares, users, groups, null sessions, OS info |
 | 9 | **NetExec** (CrackMapExec) | Multi-protocol enumeration | SMB, SSH, RDP, MSSQL, WinRM — signing, guest, NULL |
@@ -96,7 +96,7 @@ ReconX mengintegrasikan **13 external tools** ke dalam satu alur kerja otomatis:
 | **Fast Port Discovery** | Naabu | Optional pre-scan (`--naabu`) — discovers open ports first, then nmap only scans hosts with open ports |
 | **Vuln Scan** | Nuclei | Template-based vulnerability scanning (critical/high/medium/low severity) |
 | **Web Crawl** | Katana | ProjectDiscovery web crawler — endpoint & parameter discovery |
-| **Dir Brute** | Dirsearch | Directory/file brute-forcing with wordlists |
+| **Dir Brute** | Feroxbuster | Directory/file brute-forcing with wordlists |
 | **WordPress** | WPScan | Theme, plugin, user enumeration + API-powered vulnerability detection |
 
 ### SMB & Windows
@@ -140,7 +140,7 @@ ReconX mengintegrasikan **13 external tools** ke dalam satu alur kerja otomatis:
 - **Kali Linux** (VM, bare-metal, or WSL)
 - Python 3.10+
 - External tools (auto-installed if missing):
-  `nmap` `naabu` `httpx` `nuclei` `katana` `dirsearch` `enum4linux` `crackmapexec`/`netexec` `msfconsole` `crowbar` `hydra` `wpscan` `smbclient`
+  `nmap` `naabu` `httpx` `nuclei` `katana` `feroxbuster` `enum4linux` `crackmapexec`/`netexec` `msfconsole` `crowbar` `hydra` `wpscan` `smbclient`
 
 ### Install
 
@@ -250,7 +250,7 @@ reconx/
 │   ├── naabu_scan.py              # Naabu fast port scanner (pre-scan for nmap)
 │   ├── nuclei_scan.py             # ProjectDiscovery Nuclei vuln scanner
 │   ├── katana_scan.py             # ProjectDiscovery Katana web crawler
-│   ├── dirsearch_scan.py          # Dirsearch directory brute-forcer
+│   ├── feroxbuster_scan.py        # Feroxbuster directory brute-forcer
 │   ├── wpscan.py                  # WPScan WordPress scanner
 │   ├── enum4linux_scan.py         # Enum4linux SMB/Windows enumeration
 │   ├── cme_scan.py                # NetExec/CrackMapExec protocol enumeration
@@ -299,7 +299,7 @@ When the input is a domain name, the engine runs a multi-phase pipeline:
 | 8 | **Tech Profile** | Technology stack detection on alive subdomains (15+ signatures) |
 | 9 | **Nmap** | Port & service scanning (`-sCV --top-ports 1000`, optional `--script`) |
 | 9a | **Naabu** | Optional fast port discovery pre-scan (with `--naabu` flag) |
-| 10 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Dirsearch, WPScan |
+| 10 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Feroxbuster, WPScan |
 | 11 | **Brute-Force** | MSF SMB, RDP, VNC, SMB, SSH, FTP, PostgreSQL, MongoDB, SNMP brute-force |
 | 12 | **Statistics** | Compute final stats (timing, counts, DB stats) |
 | 13 | **Output** | Terminal rendering + JSON export + per-domain file export |
@@ -311,7 +311,7 @@ When the input is an IP address, CIDR range, or file of IPs, subdomain enumerati
 | Phase | Name | Description |
 |-------|------|-------------|
 | 1 | **Nmap** | Port & service scanning on all target IPs |
-| 2 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Dirsearch, WPScan |
+| 2 | **Post-Nmap** | Enum4linux, CME, SMBClient, Nuclei, Katana, Feroxbuster, WPScan |
 | 3 | **Brute-Force** | All login brute-force modules based on discovered open ports |
 | 4 | **Output** | Terminal rendering + JSON export + per-target file export |
 
@@ -355,7 +355,7 @@ Each scan creates a domain/target folder with categorized output files:
 │
 ├── nuclei_scan.txt              # Nuclei vulnerability findings
 ├── katana_results.txt           # Katana crawl results
-├── dirsearch_results.txt        # Dirsearch findings
+├── feroxbuster_results.txt      # Feroxbuster findings
 ├── wpscan_results.txt           # WPScan WordPress findings
 │
 ├── enum4linux_summary.txt       # Enum4linux summary

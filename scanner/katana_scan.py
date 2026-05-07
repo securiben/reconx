@@ -328,6 +328,11 @@ class KatanaScanner:
             # Parse results
             if os.path.isfile(output_file) and os.path.getsize(output_file) > 0:
                 self._parse_results(output_file)
+            elif os.path.isfile(output_file):
+                try:
+                    os.remove(output_file)
+                except Exception:
+                    pass
 
         except FileNotFoundError:
             self.available = False

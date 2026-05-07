@@ -349,6 +349,7 @@ class NucleiScanner:
 
     def _filter_text_output_file(self, filepath: str):
         """Remove excluded findings from nuclei plain-text output file."""
+        _ansi_re = re.compile(r'\033\[[0-9;]*m')
         try:
             if not os.path.isfile(filepath):
                 return
@@ -357,8 +358,9 @@ class NucleiScanner:
             changed = False
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
-                    line_lower = line.lower()
-                    if any(keyword in line_lower for keyword in EXCLUDED_TEMPLATE_KEYWORDS):
+                    # Strip ANSI codes only for keyword matching; keep original line
+                    line_plain = _ansi_re.sub('', line).lower()
+                    if any(keyword in line_plain for keyword in EXCLUDED_TEMPLATE_KEYWORDS):
                         changed = True
                         continue
                     filtered_lines.append(line)
@@ -452,9 +454,7 @@ class NucleiScanner:
                 # "-rl", "150",
                 # "-timeout", "10",
                 # "-retries", "2",
-                "-s", "critical,high,medium,low",
                 "-etags", "application-dos",
-                "-o", txt_output,
                 "-je", jsonl_file,         # JSONL export for structured parsing
             ]
 
@@ -471,7 +471,7 @@ class NucleiScanner:
                 preview += f", ... (+{len(normalized_targets) - 5} more)"
             print(
                 f"\033[96m[*]\033[0m nuclei targets: \033[92m{len(normalized_targets)}\033[0m | "
-                f"severity=critical,high,medium,low"
+                f"severity=all"
             )
             if preview:
                 print(f"\033[90m    {preview}\033[0m")
@@ -500,6 +500,8 @@ class NucleiScanner:
                 r'\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)'
             )
             findings = [0]
+            found_lines = []   # colored finding lines collected from stdout
+            ansi_re = re.compile(r'\033\[[0-9;]*m')
             lock = threading.Lock()
             bar_width = 30
             spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -544,11 +546,13 @@ class NucleiScanner:
                         line, buf = buf.split("\n", 1)
                         m = finding_re.search(line)
                         if m:
-                            tmpl = m.group(1)
+                            # Strip ANSI codes from captured group for exclusion check
+                            tmpl = ansi_re.sub('', m.group(1))
                             if self._is_excluded_finding(template_id=tmpl, template_name=tmpl):
                                 continue
                             with lock:
                                 findings[0] += 1
+                                found_lines.append(line.strip())  # keep ANSI for file
                                 # Print raw nuclei output (original format)
                                 sys.stdout.write(f"\r\033[K")
                                 sys.stdout.write(f"    {line.strip()}\n")
@@ -565,6 +569,14 @@ class NucleiScanner:
                     _draw_status()
 
             reader_t.join(timeout=5)
+
+            # Write colored findings to file — skip entirely if no findings
+            if found_lines:
+                try:
+                    with open(txt_output, "w", encoding="utf-8") as _f:
+                        _f.write("\n".join(found_lines) + "\n")
+                except Exception:
+                    pass
 
             # Final state
             f_count = findings[0]
@@ -691,17 +703,19 @@ class NucleiScanner:
 
     def _parse_text_output(self, filepath: str):
         """
-        Parse nuclei plain-text output (-o file) as fallback.
+        Parse nuclei plain-text output as fallback.
         Nuclei format: [template-id] [protocol] [severity] host [extra...]
+        File may contain ANSI color codes; strip them before parsing.
         """
         import re
+        _ansi_re = re.compile(r'\033\[[0-9;]*m')
         pattern = re.compile(
             r'\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+(\S+)'
         )
         try:
             with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
-                    line = line.strip()
+                    line = _ansi_re.sub('', line).strip()
                     if not line:
                         continue
                     m = pattern.search(line)

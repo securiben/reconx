@@ -379,10 +379,10 @@ class ScanResult:
     katana_stats: Dict = field(default_factory=dict)
     katana_available: bool = False
 
-    # Dirsearch directory brute-force
-    dirsearch_results: List = field(default_factory=list)
-    dirsearch_stats: Dict = field(default_factory=dict)
-    dirsearch_available: bool = False
+    # Feroxbuster directory brute-force
+    feroxbuster_results: List = field(default_factory=list)
+    feroxbuster_stats: Dict = field(default_factory=dict)
+    feroxbuster_available: bool = False
 
     # SNMP login (msfconsole)
     snmp_login_results: Dict = field(default_factory=dict)

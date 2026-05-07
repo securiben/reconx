@@ -358,11 +358,11 @@ def install_metasploit() -> bool:
     )
 
 
-def install_dirsearch() -> bool:
-    """Install dirsearch directory brute-force tool."""
-    if _run("sudo apt-get install -y dirsearch", label="dirsearch (apt)"):
+def install_feroxbuster() -> bool:
+    """Install feroxbuster directory brute-force tool."""
+    if _run("sudo apt-get install -y feroxbuster", label="feroxbuster (apt)"):
         return True
-    return _run("pip3 install dirsearch", label="dirsearch (pip3)")
+    return _run("cargo install feroxbuster", label="feroxbuster (cargo)")
 
 
 # ─── Unified auto-install dispatcher ─────────────────────────────────────────
@@ -382,7 +382,7 @@ TOOL_INSTALLERS = {
     "cme": install_crackmapexec,
     "wpscan": install_wpscan,
     "msfconsole": install_metasploit,
-    "dirsearch": install_dirsearch,
+    "feroxbuster": install_feroxbuster,
 }
 
 
