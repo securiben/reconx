@@ -3437,16 +3437,16 @@ class ReconEngine:
             elif service_results is None:
                 print(f"\033[93m[!]\033[0m service-misconfig: skipped by user\n")
 
-        # ── Nuclei vulnerability scanning (direct mode) ──────────────────
+        # ── Nuclei vulnerability scanning (direct mode) ──────────────────  # DISABLED
         # Attempt auto-install if nuclei is not available
-        if not self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results:
+        if False and not self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results:  # DISABLED
             print(
                 f"\033[93m[!]\033[0m nuclei not found \u2013 attempting auto-install..."
             )
             self.nuclei_scanner.ensure_available()
 
-        if (self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results
-                and not self._phase_done("nuclei")):
+        if False and (self.nuclei_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("nuclei")):  # DISABLED
             # Build targets: bare IP + http://ip:port for HTTP + ip:port for non-HTTP
             HTTP_PORTS = {80, 443, 8080, 8443, 8000, 8888, 8081, 8082, 3000, 5000, 9090, 9443, 3333, 5555}
             nuclei_targets: list = []
@@ -3698,9 +3698,9 @@ class ReconEngine:
                 f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n"
             )
 
-        # ── Feroxbuster directory brute-force (direct mode) ────────────────
-        if (self.feroxbuster_scanner.available and self.result.nmap_available and self.result.nmap_results
-                and not self._phase_done("feroxbuster")):
+        # ── Feroxbuster directory brute-force (direct mode) ────────────────  # DISABLED
+        if False and (self.feroxbuster_scanner.available and self.result.nmap_available and self.result.nmap_results
+                and not self._phase_done("feroxbuster")):  # DISABLED
             from .scanner.katana_scan import KatanaScanner as _KAT2_D
             feroxbuster_targets = _KAT2_D.get_http_targets_from_nmap(self.result.nmap_results)
 
