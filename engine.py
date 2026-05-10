@@ -1036,12 +1036,12 @@ class ReconEngine:
             elif service_results is None:
                 print(f"\033[93m[!]\033[0m service-misconfig: skipped by user\n")
 
-        # ── Nuclei vulnerability scanning (domain mode) ───────────────────
-        if not self.nuclei_scanner.available:
+        # ── Nuclei vulnerability scanning (domain mode) ───────────────────  # DISABLED
+        if False and not self.nuclei_scanner.available:  # DISABLED
             print(f"\033[93m[!]\033[0m nuclei not found \u2013 attempting auto-install...")
             self.nuclei_scanner.ensure_available()
 
-        if self.nuclei_scanner.available and not self._phase_done("nuclei"):
+        if False and self.nuclei_scanner.available and not self._phase_done("nuclei"):  # DISABLED
             nuclei_targets: list = []
             seen: set = set()
 
@@ -1206,7 +1206,7 @@ class ReconEngine:
             print(f"\033[90m    Manual install: go install github.com/projectdiscovery/katana/cmd/katana@latest\033[0m\n")
 
         # ── Feroxbuster directory brute-force (domain mode) ───────────────
-        if self.feroxbuster_scanner.available and not self._phase_done("feroxbuster"):
+        if False and self.feroxbuster_scanner.available and not self._phase_done("feroxbuster"):  # DISABLED
             from .scanner.katana_scan import KatanaScanner as _KAT_D
             feroxbuster_targets: set = set()
             if hasattr(self.result, 'httpx_results') and self.result.httpx_results:
